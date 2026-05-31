@@ -1,0 +1,142 @@
+export type JsonObject = Record<string, unknown>;
+
+export type Player = {
+  id: number;
+  nickname: string;
+  level: number;
+  comment: string;
+  tutorialProgress: number;
+  options: PlayerOptions;
+  flagshipPosition: number;
+  combinedFleet: number;
+  portBgmId: number;
+};
+
+export type PlayerOptions = {
+  bgmFlag: number;
+  voiceFlag: number;
+  seFlag: number;
+  volBgm: number;
+  volSe: number;
+  volVoice: number;
+};
+
+export type Materials = {
+  fuel: number;
+  ammo: number;
+  steel: number;
+  bauxite: number;
+  buildKit: number;
+  repairKit: number;
+  devmat: number;
+  screw: number;
+};
+
+export type Ship = {
+  id: number;
+  masterId: number;
+  level: number;
+  exp: number;
+  hp: number;
+  maxHp: number;
+  condition: number;
+  fuel: number;
+  maxFuel: number;
+  ammo: number;
+  maxAmmo: number;
+  locked: number;
+  slotIds: number[];
+  exSlotId: number;
+  stats: JsonObject;
+};
+
+export type SlotItem = {
+  id: number;
+  masterId: number;
+  level: number;
+  proficiency: number;
+  locked: number;
+};
+
+export type Deck = {
+  id: number;
+  name: string;
+  missionState: MissionState;
+  shipIds: number[];
+};
+
+export type MissionState = {
+  state: number;
+  missionId: number;
+  completeTime: number;
+};
+
+export type RepairDock = {
+  id: number;
+  shipId: number;
+  completeTime: number;
+  state: number;
+};
+
+export type BuildDock = {
+  id: number;
+  recipe: JsonObject;
+  resultMasterId: number;
+  completeTime: number;
+  state: number;
+};
+
+export type Quest = {
+  id: number;
+  active: number;
+  progress: number;
+  completed: number;
+};
+
+export type FurnitureState = {
+  owned: number[];
+  set: {
+    api_floor: number;
+    api_wall: number;
+    api_window: number;
+    api_chest: number;
+    api_desk: number;
+    api_object: number;
+  };
+  coins: number;
+};
+
+export type MapState = {
+  id: number;
+  areaId: number;
+  mapNo: number;
+  unlocked: number;
+  cleared: number;
+  gauge: number;
+};
+
+export type SortieSession = {
+  id: number;
+  deckId: number;
+  areaId: number;
+  mapNo: number;
+  node: number;
+  seed: number;
+  state: JsonObject;
+};
+
+export type SaveState = {
+  player: Player;
+  materials: Materials;
+  ships: Ship[];
+  slotItems: SlotItem[];
+  decks: Deck[];
+  repairDocks: RepairDock[];
+  buildDocks: BuildDock[];
+  quests: Quest[];
+  furniture: FurnitureState;
+  maps: MapState[];
+  sortieSession: SortieSession | null;
+};
+
+export type MaterialDelta = Partial<Record<keyof Materials, number>>;
