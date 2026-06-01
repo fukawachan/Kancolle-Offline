@@ -505,28 +505,25 @@ function str(value: unknown, fallback: string) {
 }
 
 function toOptionSetting(options: SaveState["player"]["options"]) {
-  const voiceFlag = 0;
-  const volVoice = 0;
-
   return {
     api_bgm_flag: options.bgmFlag,
     api_se_flag: options.seFlag,
-    api_voice_flag: voiceFlag,
+    api_voice_flag: options.voiceFlag,
     api_vol_bgm: options.volBgm,
     api_vol_se: options.volSe,
-    api_vol_voice: volVoice,
+    api_vol_voice: options.volVoice,
     api_volume_setting: {
       api_bgm: options.volBgm,
       api_se: options.volSe,
-      api_voice: volVoice,
+      api_voice: options.volVoice,
       api_be_left: 1,
       api_duty: 1,
       api_bgm_flag: options.bgmFlag,
       api_se_flag: options.seFlag,
-      api_voice_flag: voiceFlag,
+      api_voice_flag: options.voiceFlag,
       api_vol_bgm: options.volBgm,
       api_vol_se: options.volSe,
-      api_vol_voice: volVoice
+      api_vol_voice: options.volVoice
     },
     api_state: 0,
     api_skin_id: 101,
