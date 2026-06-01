@@ -43,7 +43,8 @@ describe("local kcsapi endpoints", () => {
     const options = await post("api_start2/get_option_setting");
 
     expect(start2.statusCode).toBe(200);
-    expect(start2.json().api_data).toMatchObject({
+    const start2Data = start2.json().api_data;
+    expect(start2Data).toMatchObject({
       api_mst_ship: expect.any(Array),
       api_mst_slotitem: expect.any(Array),
       api_mst_stype: expect.any(Array),
@@ -62,21 +63,22 @@ describe("local kcsapi endpoints", () => {
       api_mst_equip_limit_exslot: expect.any(Object),
       api_mst_shipgraph: expect.any(Array)
     });
-    expect(start2.json().api_data.api_mst_ship.length).toBeGreaterThan(3);
-    expect(start2.json().api_data.api_mst_shipgraph).toHaveLength(start2.json().api_data.api_mst_ship.length);
-    expect(start2.json().api_data.api_mst_shipgraph.find((ship: any) => ship.api_id === 6)).toMatchObject({
+    expect(start2Data.api_mst_ship.length).toBeGreaterThan(800);
+    expect(start2Data.api_mst_slotitem.length).toBeGreaterThan(500);
+    expect(start2Data.api_mst_shipgraph).toHaveLength(start2Data.api_mst_ship.length);
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 6)).toMatchObject({
       api_filename: "kksiqffpclxh",
       api_version: expect.arrayContaining(["28"])
     });
-    expect(start2.json().api_data.api_mst_furnituregraph).toEqual(
+    expect(start2Data.api_mst_furnituregraph).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ api_id: 1, api_no: 1, api_filename: "8807" }),
         expect.objectContaining({ api_id: 6, api_no: 6, api_filename: "8280" })
       ])
     );
-    expect(start2.json().api_data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
-    expect(start2.json().api_data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(1);
-    expect(start2.json().api_data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
+    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
+    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(1);
+    expect(start2Data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
       api_voice_flag: 1,
@@ -94,6 +96,35 @@ describe("local kcsapi endpoints", () => {
         api_vol_voice: 80
       }
     });
+  });
+
+  it("serves cache-backed ship and equipment picture book pages", async () => {
+    const firstShips = (await post("api_get_member/picture_book", { api_type: 1, api_no: 1 })).json().api_data;
+    const laterShips = (await post("api_get_member/picture_book", { api_type: 1, api_no: 11 })).json().api_data;
+    const firstSlots = (await post("api_get_member/picture_book", { api_type: 2, api_no: 1 })).json().api_data;
+
+    expect(firstShips.api_list).toHaveLength(10);
+    expect(firstShips.api_list[0]).toMatchObject({
+      api_index_no: 1,
+      api_table_id: [expect.any(Number)],
+      api_state: [[1, 1, 0]],
+      api_q_voice_info: []
+    });
+    expect(firstShips.api_list[0].api_houg).toEqual(expect.any(Number));
+    expect(firstShips.api_list[0].api_taik).toEqual(expect.any(Number));
+
+    expect(laterShips.api_list).toHaveLength(10);
+    expect(laterShips.api_list[0].api_index_no).toBe(11);
+    expect(laterShips.api_list[0].api_table_id).toEqual([expect.any(Number)]);
+
+    expect(firstSlots.api_list).toHaveLength(10);
+    expect(firstSlots.api_list[0]).toMatchObject({
+      api_index_no: 1,
+      api_table_id: [expect.any(Number)],
+      api_type: expect.arrayContaining([expect.any(Number)])
+    });
+    expect(firstSlots.api_list[0].api_houg).toEqual(expect.any(Number));
+    expect(firstSlots.api_list[0].api_info).toEqual(expect.any(String));
   });
 
   it("provides use item masters needed for the client material counters", async () => {

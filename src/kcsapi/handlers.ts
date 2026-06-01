@@ -2,6 +2,14 @@ import { appendFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { FastifyRequest } from "fastify";
+import {
+  buildShipMasters,
+  buildSlotEquipTypes,
+  buildSlotMasters,
+  shipPictureBookPage,
+  slotPictureBookPage,
+  type ShipMaster
+} from "../master/catalog.js";
 import { masterData } from "../master/data.js";
 import type { ResourceManifest } from "../resources/types.js";
 import type { StateStore } from "../state/store.js";
@@ -91,7 +99,7 @@ register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {
 register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
 register("api_get_member/payitem", () => apiOk([]));
 register("api_get_member/record", (_input, context) => apiOk({ api_member_id: 1, api_nickname: context.stateStore.getSave().player.nickname, api_level: 1 }));
-register("api_get_member/picture_book", () => apiOk({ api_list: [] }));
+register("api_get_member/picture_book", (input, context) => apiOk({ api_list: pictureBookList(input, context.resourceManifest) }));
 register("api_get_member/practice", () => apiOk({ api_list: [] }));
 register("api_get_member/sortie_conditions", () => apiOk({ api_sortie_conditions: [], api_mission_conditions: [] }));
 register("api_get_member/chart_additional_info", () => apiOk({}));
@@ -368,34 +376,56 @@ async function recordUnknown(input: HandlerInput, context: HandlerContext) {
 }
 
 function masterDataWithResources(resourceManifest: ResourceManifest) {
+  const ships = buildShipMasters(resourceManifest);
+  const slotItems = buildSlotMasters(resourceManifest);
   return {
     ...masterData,
-    api_mst_shipgraph: shipGraph(resourceManifest),
+    api_mst_ship: ships,
+    api_mst_slotitem: slotItems,
+    api_mst_slotitem_equiptype: buildSlotEquipTypes(slotItems),
+    api_mst_shipgraph: shipGraph(resourceManifest, ships),
     api_mst_furnituregraph: furnitureGraph(resourceManifest),
     api_mst_bgm: bgmMaster(resourceManifest)
   };
 }
 
-function shipGraph(resourceManifest: ResourceManifest) {
-  return masterData.api_mst_ship.map((ship) => ({
-    api_id: ship.api_id,
-    api_sortno: ship.api_sortno,
-    api_filename: resourceManifest.ship.full.get(ship.api_id)?.filename || String(ship.api_id),
-    api_version: Array(5).fill(resourceManifest.ship.full.get(ship.api_id)?.version || "1"),
-    api_boko_n: [0, 0],
-    api_boko_d: [0, 0],
-    api_kaisyu_n: [0, 0],
-    api_kaisyu_d: [0, 0],
-    api_kaizo_n: [0, 0],
-    api_kaizo_d: [0, 0],
-    api_map_n: [0, 0],
-    api_map_d: [0, 0],
-    api_ensyuf_n: [0, 0],
-    api_ensyuf_d: [0, 0],
-    api_ensyue_n: [0, 0],
-    api_weda: [0, 0],
-    api_wedb: [0, 0]
-  }));
+function shipGraph(resourceManifest: ResourceManifest, ships: ShipMaster[]) {
+  return ships.map((ship) => {
+    const file =
+      resourceManifest.ship.full.get(ship.api_id) ||
+      resourceManifest.ship.card.get(ship.api_id) ||
+      resourceManifest.ship.albumStatus.get(ship.api_id) ||
+      resourceManifest.ship.banner.get(ship.api_id);
+
+    return {
+      api_id: ship.api_id,
+      api_sortno: ship.api_sortno,
+      api_filename: file?.filename || file?.frame || String(ship.api_id),
+      api_version: Array(5).fill(file?.version || "1"),
+      api_boko_n: [0, 0],
+      api_boko_d: [0, 0],
+      api_kaisyu_n: [0, 0],
+      api_kaisyu_d: [0, 0],
+      api_kaizo_n: [0, 0],
+      api_kaizo_d: [0, 0],
+      api_map_n: [0, 0],
+      api_map_d: [0, 0],
+      api_ensyuf_n: [0, 0],
+      api_ensyuf_d: [0, 0],
+      api_ensyue_n: [0, 0],
+      api_weda: [0, 0],
+      api_wedb: [0, 0]
+    };
+  });
+}
+
+function pictureBookList(input: HandlerInput, resourceManifest: ResourceManifest) {
+  const type = num(input.body.api_type ?? input.query.api_type, 1);
+  const startNo = num(input.body.api_no ?? input.query.api_no, 1);
+
+  if (type === 1) return shipPictureBookPage(resourceManifest, startNo);
+  if (type === 2) return slotPictureBookPage(resourceManifest, startNo);
+  return [];
 }
 
 function furnitureGraph(resourceManifest: ResourceManifest) {

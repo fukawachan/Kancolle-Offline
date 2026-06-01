@@ -11,6 +11,7 @@ export async function createResourceManifest(cacheDir: string): Promise<Resource
 
   for (const [pathname, meta] of Object.entries(index)) {
     addShipResource(manifest, resolvedCacheDir, pathname, meta);
+    addSlotResource(manifest, resolvedCacheDir, pathname, meta);
     addFurnitureResource(manifest, resolvedCacheDir, pathname, meta);
     addBgmResource(manifest, resolvedCacheDir, pathname, meta);
   }
@@ -24,6 +25,18 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     const resource = manifest.ship.full.get(Number(ship[1]));
     if (resource && (resource.frame === ship[2] || !ship[2])) return resource;
     return resource;
+  }
+
+  const shipAlbum = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card)\/(\d{4})_(\d{4})\.png$/i);
+  if (shipAlbum) {
+    const collection = shipCollection(manifest, shipAlbum[1]);
+    return collection?.get(Number(shipAlbum[2]));
+  }
+
+  const slot = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
+  if (slot) {
+    const collection = slotCollection(manifest, slot[1]);
+    return collection?.get(Number(slot[2]));
   }
 
   const furniture = pathname.match(/^\/kcs2\/resources\/furniture\/normal\/(\d{3})_\d{4}\.png$/i);
@@ -44,7 +57,16 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
 function emptyManifest(): ResourceManifest {
   return {
     ship: {
+      albumStatus: new Map(),
+      banner: new Map(),
+      card: new Map(),
       full: new Map()
+    },
+    slot: {
+      card: new Map(),
+      cardThumbnail: new Map(),
+      itemOn: new Map(),
+      itemUp: new Map()
     },
     furniture: {
       normal: new Map(),
@@ -82,18 +104,75 @@ async function listFiles(cacheDir: string, dir = cacheDir): Promise<string[]> {
 }
 
 function addShipResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
-  const match = pathname.match(/^\/kcs2\/resources\/ship\/full\/(\d{4})_(\d{4})_([a-z]+)\.png$/i);
-  if (!match) return;
+  const full = pathname.match(/^\/kcs2\/resources\/ship\/full\/(\d{4})_(\d{4})_([a-z]+)\.png$/i);
+  if (full) {
+    manifest.ship.full.set(
+      Number(full[1]),
+      resource(cacheDir, pathname, meta, {
+        id: Number(full[1]),
+        frame: full[2],
+        extension: "png",
+        filename: full[3]
+      })
+    );
+    return;
+  }
 
-  manifest.ship.full.set(
-    Number(match[1]),
+  const image = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card)\/(\d{4})_(\d{4})\.png$/i);
+  if (!image) return;
+
+  const collection = shipCollection(manifest, image[1]);
+  collection?.set(
+    Number(image[2]),
     resource(cacheDir, pathname, meta, {
-      id: Number(match[1]),
-      frame: match[2],
-      extension: "png",
-      filename: match[3]
+      id: Number(image[2]),
+      frame: image[3],
+      extension: "png"
     })
   );
+}
+
+function addSlotResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
+  const match = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
+  if (!match) return;
+
+  const collection = slotCollection(manifest, match[1]);
+  collection?.set(
+    Number(match[2]),
+    resource(cacheDir, pathname, meta, {
+      id: Number(match[2]),
+      frame: match[3],
+      extension: "png"
+    })
+  );
+}
+
+function shipCollection(manifest: ResourceManifest, rawKind: string) {
+  switch (rawKind.toLowerCase()) {
+    case "album_status":
+      return manifest.ship.albumStatus;
+    case "banner":
+      return manifest.ship.banner;
+    case "card":
+      return manifest.ship.card;
+    default:
+      return undefined;
+  }
+}
+
+function slotCollection(manifest: ResourceManifest, rawKind: string) {
+  switch (rawKind.toLowerCase()) {
+    case "card":
+      return manifest.slot.card;
+    case "card_t":
+      return manifest.slot.cardThumbnail;
+    case "item_on":
+      return manifest.slot.itemOn;
+    case "item_up":
+      return manifest.slot.itemUp;
+    default:
+      return undefined;
+  }
 }
 
 function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
