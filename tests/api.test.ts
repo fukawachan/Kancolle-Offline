@@ -76,6 +76,7 @@ describe("local kcsapi endpoints", () => {
     );
     expect(start2.json().api_data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
     expect(start2.json().api_data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(1);
+    expect(start2.json().api_data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
       api_voice_flag: 0,
@@ -102,6 +103,7 @@ describe("local kcsapi endpoints", () => {
     const deck = await post("api_get_member/deck");
     const material = await post("api_get_member/material");
     const requireInfo = await post("api_get_member/require_info");
+    const useitem = await post("api_get_member/useitem");
 
     expect(port.json().api_data).toMatchObject({
       api_basic: { api_nickname: "Local Admiral" },
@@ -132,6 +134,18 @@ describe("local kcsapi endpoints", () => {
       api_useitem: expect.any(Array),
       api_furniture: expect.any(Array)
     });
+    expect(requireInfo.json().api_data.api_useitem).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_id: 54, api_count: 0 }),
+        expect.objectContaining({ api_id: 59, api_count: 0 })
+      ])
+    );
+    expect(useitem.json().api_data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_id: 54, api_count: 0 }),
+        expect.objectContaining({ api_id: 59, api_count: 0 })
+      ])
+    );
   });
 
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
@@ -154,6 +168,50 @@ describe("local kcsapi endpoints", () => {
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_slot[0]).toBe(1);
     expect(quests.api_list.find((quest: any) => quest.api_no === 101).api_state).toBe(2);
     expect(furniture.api_set).toMatchObject({ api_floor: 1, api_wall: 2, api_window: 3 });
+  });
+
+  it("matches organize scene get_member payload shapes expected by the client", async () => {
+    const presetDeck = (await post("api_get_member/preset_deck")).json().api_data;
+    const unsetSlot = (await post("api_get_member/unsetslot")).json().api_data;
+    const ship3 = (await post("api_get_member/ship3", { api_shipid: 1, api_sort_key: 1, api_sort_order: 1 })).json().api_data;
+    const singleDeck = (await post("api_get_member/ship_deck", { api_deck_rid: "1" })).json().api_data;
+    const multipleDecks = (await post("api_get_member/ship_deck", { api_deck_rid: "1,2" })).json().api_data;
+    const defaultDecks = (await post("api_get_member/ship_deck")).json().api_data;
+    const invalidDecks = (await post("api_get_member/ship_deck", { api_deck_rid: "999,abc" })).json().api_data;
+
+    expect(presetDeck).toMatchObject({ api_max_num: 0 });
+    expect(presetDeck.api_deck).toEqual({});
+    expect(Array.isArray(presetDeck.api_deck)).toBe(false);
+
+    expect(Object.keys(unsetSlot).sort()).toEqual(["api_slottype1", "api_slottype14"]);
+    expect(unsetSlot.api_slottype1).toEqual([1, 2, 3]);
+    expect(unsetSlot.api_slottype14).toEqual([4]);
+    expect(ship3.api_slot_data).toEqual(unsetSlot);
+
+    expect(singleDeck.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1]);
+    expect(singleDeck.api_ship_data.map((ship: any) => ship.api_id).sort()).toEqual([1, 2]);
+    expect(multipleDecks.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1, 2]);
+    expect(defaultDecks.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1, 2, 3, 4]);
+    expect(invalidDecks).toEqual({ api_deck_data: [], api_ship_data: [] });
+  });
+
+  it("keeps deck membership unique and fixed-width when changing organize slots", async () => {
+    const extraShip = store.createShip(7);
+
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: 1 });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: extraShip.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: -1 });
+
+    const decks = (await post("api_get_member/deck")).json().api_data;
+    const firstDeck = decks.find((deck: any) => deck.api_id === 1);
+    const secondDeck = decks.find((deck: any) => deck.api_id === 2);
+    const allAssignedShips = decks.flatMap((deck: any) => deck.api_ship).filter((id: number) => id > 0);
+
+    expect(firstDeck.api_ship).toHaveLength(6);
+    expect(secondDeck.api_ship).toEqual([1, -1, -1, -1, -1, -1]);
+    expect(firstDeck.api_ship).not.toContain(1);
+    expect(firstDeck.api_ship).toContain(2);
+    expect(new Set(allAssignedShips).size).toBe(allAssignedShips.length);
   });
 
   it("supports docks, arsenal, expeditions, items, and a deterministic first sortie loop", async () => {
@@ -207,6 +265,7 @@ describe("local kcsapi endpoints", () => {
       "api_get_member/mission",
       "api_get_member/preset_deck",
       "api_get_member/preset_slot",
+      "api_get_member/ship_deck",
       "api_get_member/payitem",
       "api_get_member/record",
       "api_get_member/picture_book",
