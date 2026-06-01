@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import type { ResponseFormat } from "../kcsapi/envelope.js";
 import { serializeApiResponse } from "../kcsapi/envelope.js";
 import { handleKcsApi, requestToHandlerInput } from "../kcsapi/handlers.js";
+import { createResourceManifest, readMappedResource } from "../resources/manifest.js";
 import { renderBootstrap } from "./bootstrap.js";
 import type { StateStore } from "../state/store.js";
 
@@ -20,6 +21,7 @@ export type BuildAppOptions = {
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   await assertCacheDir(options.cacheDir);
+  const resourceManifest = await createResourceManifest(options.cacheDir);
 
   const app = Fastify({ logger: false, bodyLimit: 10 * 1024 * 1024 });
   await app.register(formbody);
@@ -36,6 +38,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.get("/kcs2/index.php", async (request, reply) => {
     return reply.type("text/html; charset=utf-8").send(renderBootstrap(request.query as Record<string, unknown>));
+  });
+
+  app.get("/favicon.ico", async (_request, reply) => {
+    return reply.code(204).send();
   });
 
   app.get("/local-vendor/pixi.min.js", async (_request, reply) => {
@@ -88,7 +94,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     const input = requestToHandlerInput(request);
     const payload = await handleKcsApi(input, {
       stateStore: options.stateStore,
-      unknownLogPath: options.unknownLogPath
+      unknownLogPath: options.unknownLogPath,
+      resourceManifest
     });
     return sendApi(reply, payload);
   });
@@ -105,6 +112,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   app.setNotFoundHandler(async (request, reply) => {
+    const mappedFallback = await readMappedResource(decodeURIComponent(new URL(request.url, "http://local").pathname), resourceManifest);
+    if (mappedFallback) {
+      const contentType = contentTypeFor(mappedFallback.filePath);
+      return reply
+        .type(contentType || "application/octet-stream")
+        .header("cache-control", "public, max-age=3600")
+        .send(await readFile(mappedFallback.filePath));
+    }
+
     const pngFallback = await readPngFallback(options.cacheDir, request.url);
     if (pngFallback) {
       return reply

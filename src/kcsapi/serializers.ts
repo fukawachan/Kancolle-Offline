@@ -1,4 +1,5 @@
 import { masterData } from "../master/data.js";
+import type { ResourceManifest } from "../resources/types.js";
 import type {
   BuildDock,
   Deck,
@@ -12,7 +13,7 @@ import type {
   SlotItem
 } from "../state/types.js";
 
-export function toBasic(player: Player, furniture?: FurnitureState) {
+export function toBasic(player: Player, furniture?: FurnitureState, resourceManifest?: ResourceManifest) {
   return {
     api_member_id: player.id,
     api_nickname: player.nickname,
@@ -30,7 +31,7 @@ export function toBasic(player: Player, furniture?: FurnitureState) {
     api_max_kagu: 200,
     api_playtime: 0,
     api_tutorial: player.tutorialProgress,
-    api_furniture: toBasicFurniture(furniture),
+    api_furniture: toBasicFurniture(furniture, resourceManifest),
     api_count_deck: 4,
     api_count_kdock: 4,
     api_count_ndock: 4,
@@ -179,31 +180,31 @@ export function toQuestList(quests: Quest[]) {
   };
 }
 
-export function toFurniture(furniture: FurnitureState) {
+export function toFurniture(furniture: FurnitureState, resourceManifest?: ResourceManifest) {
   return {
     api_list: furniture.owned.map((id) => ({ api_id: id, api_furniture_no: id, api_furniture_type: (id - 1) % 6 })),
-    api_set: furniture.set,
+    api_set: normalizeFurnitureSet(furniture.set, resourceManifest),
     api_fcoin: furniture.coins
   };
 }
 
-export function toPort(save: SaveState) {
+export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
   return {
     api_material: toMaterials(save.materials),
     api_deck_port: save.decks.map(toDeck),
     api_ndock: save.repairDocks.map(toRepairDock),
     api_ship: save.ships.map(toShip),
-    api_basic: toBasic(save.player, save.furniture),
+    api_basic: toBasic(save.player, save.furniture, resourceManifest),
     api_log: [],
-    api_p_bgm_id: save.player.portBgmId,
+    api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),
     api_parallel_quest_count: save.quests.filter((quest) => quest.active).length,
     api_combined_flag: save.player.combinedFleet
   };
 }
 
-export function toRequireInfo(save: SaveState) {
+export function toRequireInfo(save: SaveState, resourceManifest?: ResourceManifest) {
   return {
-    api_basic: toBasic(save.player, save.furniture),
+    api_basic: toBasic(save.player, save.furniture, resourceManifest),
     api_extra_supply: [0, 0],
     api_oss_setting: {
       api_oss_items: [0, 0, 0, 0],
@@ -214,20 +215,42 @@ export function toRequireInfo(save: SaveState) {
     api_unsetslot: toUnsetSlot(save),
     api_kdock: save.buildDocks.map(toBuildDock),
     api_useitem: toUseItems(save.materials),
-    api_furniture: toFurniture(save.furniture).api_list
+    api_furniture: toFurniture(save.furniture, resourceManifest).api_list
   };
 }
 
-function toBasicFurniture(furniture?: FurnitureState) {
-  const set = furniture?.set;
+function toBasicFurniture(furniture?: FurnitureState, resourceManifest?: ResourceManifest) {
+  const set = normalizeFurnitureSet(furniture?.set, resourceManifest);
   return [
-    set?.api_floor ?? 1,
-    set?.api_wall ?? 2,
-    set?.api_window ?? 3,
-    set?.api_object ?? 6,
-    set?.api_chest ?? 4,
-    set?.api_desk ?? 5
+    set.api_floor,
+    set.api_wall,
+    set.api_window,
+    set.api_object,
+    set.api_chest,
+    set.api_desk
   ];
+}
+
+function normalizeFurnitureSet(set?: Partial<FurnitureState["set"]>, resourceManifest?: ResourceManifest) {
+  const normalized = {
+    api_floor: set?.api_floor ?? 1,
+    api_wall: set?.api_wall ?? 2,
+    api_window: set?.api_window ?? 3,
+    api_chest: set?.api_chest ?? 4,
+    api_desk: set?.api_desk ?? 5,
+    api_object: set?.api_object ?? 0
+  };
+
+  if (resourceManifest && normalized.api_object > 0 && !resourceManifest.furniture.normal.has(normalized.api_object)) {
+    normalized.api_object = 0;
+  }
+
+  return normalized;
+}
+
+export function normalizePortBgmId(portBgmId: number, resourceManifest?: ResourceManifest) {
+  if (!resourceManifest) return portBgmId;
+  return resourceManifest.bgm.port.has(portBgmId) ? portBgmId : resourceManifest.bgm.port.has(0) ? 0 : portBgmId;
 }
 
 export function toUseItems(materials: Materials) {

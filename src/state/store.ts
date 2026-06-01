@@ -388,7 +388,7 @@ function seed(db: Database.Database) {
 
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO players (id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, 1, ?, 100, ?, 0, 0, 1)"
+      "INSERT INTO players (id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, 1, ?, 100, ?, 0, 0, 0)"
     ).run("Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
     db.prepare(
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5)"
@@ -430,7 +430,7 @@ function seed(db: Database.Database) {
 
     db.prepare("INSERT INTO furniture (id, owned_json, set_json, coins) VALUES (1, ?, ?, 200)").run(
       JSON.stringify([1, 2, 3, 4, 5, 6]),
-      JSON.stringify({ api_floor: 1, api_wall: 2, api_window: 3, api_chest: 4, api_desk: 5, api_object: 6 })
+      JSON.stringify({ api_floor: 1, api_wall: 2, api_window: 3, api_chest: 4, api_desk: 5, api_object: 0 })
     );
 
     db.prepare("INSERT INTO maps (id, area_id, map_no, unlocked, cleared, gauge) VALUES (1, 1, 1, 1, 0, 0)").run();

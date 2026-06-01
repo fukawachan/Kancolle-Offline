@@ -114,6 +114,30 @@ describe("local Fastify server", () => {
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
+  it("maps legacy or stale client resource names to cached local resources", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const ship = await app.inject({ method: "GET", url: "/kcs2/resources/ship/full/0006_7134_6.png" });
+    const furniture = await app.inject({ method: "GET", url: "/kcs2/resources/furniture/normal/006_9845.png" });
+    const bgm = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/port/001_9913.mp3" });
+    const favicon = await app.inject({ method: "GET", url: "/favicon.ico" });
+
+    expect(ship.statusCode).toBe(200);
+    expect(ship.headers["content-type"]).toContain("image/png");
+    expect(ship.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+    expect(furniture.statusCode).toBe(200);
+    expect(furniture.headers["content-type"]).toContain("image/png");
+    expect(furniture.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+    expect(bgm.statusCode).toBe(200);
+    expect(bgm.headers["content-type"]).toContain("audio/mpeg");
+    expect(bgm.body.slice(0, 3)).toBe("ID3");
+    expect(favicon.statusCode).toBe(204);
+  });
+
   it("implements launcher world selection and login token endpoints", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

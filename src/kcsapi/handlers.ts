@@ -3,10 +3,12 @@ import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { FastifyRequest } from "fastify";
 import { masterData } from "../master/data.js";
+import type { ResourceManifest } from "../resources/types.js";
 import type { StateStore } from "../state/store.js";
 import type { SaveState } from "../state/types.js";
 import { apiError, apiOk, parseApiPayload } from "./envelope.js";
 import {
+  normalizePortBgmId,
   toBasic,
   toBuildDock,
   toDeck,
@@ -26,6 +28,7 @@ import {
 export type HandlerContext = {
   stateStore: StateStore;
   unknownLogPath: string;
+  resourceManifest: ResourceManifest;
 };
 
 export type HandlerInput = {
@@ -39,19 +42,19 @@ type KcsHandler = (input: HandlerInput, context: HandlerContext) => unknown | Pr
 
 const handlers = new Map<string, KcsHandler>();
 
-register("api_start2/getData", () => apiOk({ ...masterData, api_mst_shipgraph: shipGraph() }));
+register("api_start2/getData", (_input, context) => apiOk(masterDataWithResources(context.resourceManifest)));
 register("api_start2/get_option_setting", (_input, context) => {
   const options = context.stateStore.getSave().player.options;
   return apiOk(toOptionSetting(options));
 });
 
-register("api_port/port", (_input, context) => apiOk(toPort(context.stateStore.getSave())));
+register("api_port/port", (_input, context) => apiOk(toPort(context.stateStore.getSave(), context.resourceManifest)));
 register("api_port/airCorpsCondRecoveryWithTimer", () => apiOk({ api_recovery: [] }));
 
-register("api_get_member/require_info", (_input, context) => apiOk(toRequireInfo(context.stateStore.getSave())));
+register("api_get_member/require_info", (_input, context) => apiOk(toRequireInfo(context.stateStore.getSave(), context.resourceManifest)));
 register("api_get_member/basic", (_input, context) => {
   const save = context.stateStore.getSave();
-  return apiOk(toBasic(save.player, save.furniture));
+  return apiOk(toBasic(save.player, save.furniture, context.resourceManifest));
 });
 register("api_get_member/material", (_input, context) => apiOk(toMaterials(context.stateStore.getSave().materials)));
 register("api_get_member/deck", (_input, context) => apiOk(context.stateStore.getSave().decks.map(toDeck)));
@@ -66,7 +69,7 @@ register("api_get_member/ship3", (_input, context) => {
 register("api_get_member/slot_item", (_input, context) => apiOk(context.stateStore.getSave().slotItems.map(toSlotItem)));
 register("api_get_member/unsetslot", (_input, context) => apiOk(toUnsetSlot(context.stateStore.getSave())));
 register("api_get_member/useitem", (_input, context) => apiOk(toUseItems(context.stateStore.getSave().materials)));
-register("api_get_member/furniture", (_input, context) => apiOk(toFurniture(context.stateStore.getSave().furniture)));
+register("api_get_member/furniture", (_input, context) => apiOk(toFurniture(context.stateStore.getSave().furniture, context.resourceManifest)));
 register("api_get_member/kdock", (_input, context) => apiOk(context.stateStore.getSave().buildDocks.map(toBuildDock)));
 register("api_get_member/ndock", (_input, context) => apiOk(context.stateStore.getSave().repairDocks.map(toRepairDock)));
 register("api_get_member/questlist", (_input, context) => apiOk(toQuestList(context.stateStore.getSave().quests)));
@@ -83,7 +86,7 @@ register("api_get_member/chart_additional_info", () => apiOk({}));
 
 register("api_req_init/nickname", (input, context) => {
   const player = context.stateStore.updateNickname(str(input.body.api_nickname ?? input.body.api_name, "Local Admiral"));
-  return apiOk(toBasic(player, context.stateStore.getSave().furniture));
+  return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
 });
 register("api_req_init/firstship", (input, context) => {
   const masterId = num(input.body.api_ship_id, 6);
@@ -93,12 +96,12 @@ register("api_req_init/firstship", (input, context) => {
 });
 register("api_req_member/updatecomment", (input, context) => {
   const player = context.stateStore.updateComment(str(input.body.api_cmt, ""));
-  return apiOk(toBasic(player, context.stateStore.getSave().furniture));
+  return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
 });
 register("api_req_member/updatedeckname", (input, context) => apiOk(toDeck(context.stateStore.renameDeck(num(input.body.api_id, 1), str(input.body.api_name, "Fleet"))!)));
 register("api_req_member/update_tutorial_progress", (input, context) => {
   const player = context.stateStore.updateTutorialProgress(num(input.body.api_progress, 100));
-  return apiOk(toBasic(player, context.stateStore.getSave().furniture));
+  return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
 });
 register("api_req_member/set_option_setting", (input, context) => {
   const options = context.stateStore.updateOptions({
@@ -182,12 +185,14 @@ register("api_req_furniture/change", (input, context) => {
     api_desk: num(input.body.api_desk_id, 5),
     api_object: num(input.body.api_object_id, 6)
   };
-  return apiOk(toFurniture(context.stateStore.updateFurnitureSet(patch)));
+  return apiOk(toFurniture(context.stateStore.updateFurnitureSet(patch), context.resourceManifest));
 });
-register("api_req_furniture/buy", (input, context) => apiOk(toFurniture(context.stateStore.buyFurniture(num(input.body.api_id, 1)))));
-register("api_req_furniture/music_list", () => apiOk({ api_list: masterData.api_mst_bgm }));
-register("api_req_furniture/music_play", () => apiOk({ api_id: 1 }));
-register("api_req_furniture/set_portbgm", (input, context) => apiOk({ api_p_bgm_id: context.stateStore.setPortBgm(num(input.body.api_id, 1)) }));
+register("api_req_furniture/buy", (input, context) => apiOk(toFurniture(context.stateStore.buyFurniture(num(input.body.api_id, 1)), context.resourceManifest)));
+register("api_req_furniture/music_list", (_input, context) => apiOk({ api_list: bgmMaster(context.resourceManifest) }));
+register("api_req_furniture/music_play", () => apiOk({ api_id: 0 }));
+register("api_req_furniture/set_portbgm", (input, context) =>
+  apiOk({ api_p_bgm_id: context.stateStore.setPortBgm(normalizePortBgmId(num(input.body.api_id, 0), context.resourceManifest)) })
+);
 register("api_req_furniture/radio_play", () => apiOk({ api_id: 0 }));
 
 register("api_req_nyukyo/start", (input, context) => apiOk({ api_ndock_id: context.stateStore.startRepair(num(input.body.api_ship_id, 1), num(input.body.api_highspeed, 0) === 1)?.id ?? 1 }));
@@ -263,7 +268,7 @@ register("api_req_sortie/battleresult", (_input, context) => {
 });
 register("api_req_sortie/goback_port", (_input, context) => {
   context.stateStore.clearSortie();
-  return apiOk(toPort(context.stateStore.getSave()));
+  return apiOk(toPort(context.stateStore.getSave(), context.resourceManifest));
 });
 register("api_req_map/anchorage_repair", () => apiOk({ api_repair_flag: 0 }));
 register("api_req_map/select_eventmap_rank", () => apiOk({ api_select_rank: 0 }));
@@ -343,12 +348,21 @@ async function recordUnknown(input: HandlerInput, context: HandlerContext) {
   );
 }
 
-function shipGraph() {
+function masterDataWithResources(resourceManifest: ResourceManifest) {
+  return {
+    ...masterData,
+    api_mst_shipgraph: shipGraph(resourceManifest),
+    api_mst_furnituregraph: furnitureGraph(resourceManifest),
+    api_mst_bgm: bgmMaster(resourceManifest)
+  };
+}
+
+function shipGraph(resourceManifest: ResourceManifest) {
   return masterData.api_mst_ship.map((ship) => ({
     api_id: ship.api_id,
     api_sortno: ship.api_sortno,
-    api_filename: String(ship.api_id),
-    api_version: ["1", "1", "1", "1", "1"],
+    api_filename: resourceManifest.ship.full.get(ship.api_id)?.filename || String(ship.api_id),
+    api_version: Array(5).fill(resourceManifest.ship.full.get(ship.api_id)?.version || "1"),
     api_boko_n: [0, 0],
     api_boko_d: [0, 0],
     api_kaisyu_n: [0, 0],
@@ -363,6 +377,43 @@ function shipGraph() {
     api_weda: [0, 0],
     api_wedb: [0, 0]
   }));
+}
+
+function furnitureGraph(resourceManifest: ResourceManifest) {
+  const ids = new Set<number>([
+    ...resourceManifest.furniture.normal.keys(),
+    ...resourceManifest.furniture.movable.keys(),
+    ...resourceManifest.furniture.scripts.keys(),
+    ...resourceManifest.furniture.thumbnail.keys()
+  ]);
+
+  return [...ids]
+    .sort((a, b) => a - b)
+    .map((id) => {
+      const master = masterData.api_mst_furniture.find((item) => item.api_no === id || item.api_id === id);
+      const file =
+        resourceManifest.furniture.normal.get(id) ||
+        resourceManifest.furniture.scripts.get(id) ||
+        resourceManifest.furniture.movable.get(id) ||
+        resourceManifest.furniture.thumbnail.get(id);
+      return {
+        api_id: id,
+        api_no: id,
+        api_type: master?.api_type ?? Math.max(0, (id - 1) % 6),
+        api_filename: file?.frame ?? String(id),
+        api_version: file?.version ?? "1"
+      };
+    });
+}
+
+function bgmMaster(resourceManifest: ResourceManifest) {
+  return [...resourceManifest.bgm.port.values()]
+    .sort((a, b) => a.id - b.id)
+    .map((bgm) => ({
+      api_id: bgm.id,
+      api_name: bgm.id === 0 ? "母港" : `Local Port BGM ${String(bgm.id).padStart(3, "0")}`,
+      api_rarity: 1
+    }));
 }
 
 function recipeDelta(body: Record<string, unknown>) {

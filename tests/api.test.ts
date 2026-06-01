@@ -63,6 +63,18 @@ describe("local kcsapi endpoints", () => {
     });
     expect(start2.json().api_data.api_mst_ship.length).toBeGreaterThan(3);
     expect(start2.json().api_data.api_mst_shipgraph).toHaveLength(start2.json().api_data.api_mst_ship.length);
+    expect(start2.json().api_data.api_mst_shipgraph.find((ship: any) => ship.api_id === 6)).toMatchObject({
+      api_filename: "kksiqffpclxh",
+      api_version: expect.arrayContaining(["28"])
+    });
+    expect(start2.json().api_data.api_mst_furnituregraph).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_id: 1, api_no: 1, api_filename: "8807" }),
+        expect.objectContaining({ api_id: 6, api_no: 6, api_filename: "8280" })
+      ])
+    );
+    expect(start2.json().api_data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
+    expect(start2.json().api_data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(1);
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
       api_voice_flag: 0,
@@ -94,13 +106,14 @@ describe("local kcsapi endpoints", () => {
       api_basic: { api_nickname: "Local Admiral" },
       api_ship: expect.any(Array),
       api_deck_port: expect.any(Array),
-      api_material: expect.any(Array)
+      api_material: expect.any(Array),
+      api_p_bgm_id: 0
     });
     expect(basic.json().api_data).toMatchObject({
       api_nickname: "Local Admiral",
       api_firstflag: 1,
       api_tutorial_progress: 100,
-      api_furniture: [1, 2, 3, 6, 4, 5]
+      api_furniture: [1, 2, 3, 0, 4, 5]
     });
     expect(ships.json().api_data.length).toBeGreaterThan(0);
     expect(deck.json().api_data).toHaveLength(4);
