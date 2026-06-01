@@ -46,6 +46,29 @@ describe("local Fastify server", () => {
     expect(response.body).toContain("id=\"game_frame\"");
   });
 
+  it("serves the local launcher and single-world registration page", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const launcher = await app.inject({ method: "GET", url: "/" });
+    const world = await app.inject({ method: "GET", url: "/kcs2/world.html?viewer_id=local-viewer" });
+
+    expect(launcher.statusCode).toBe(200);
+    expect(launcher.headers["content-type"]).toContain("text/html");
+    expect(launcher.body).toContain("Kancolle Local Launcher");
+    expect(launcher.body).toContain("api_world/get_id");
+    expect(launcher.body).toContain("kcs2/world.html");
+    expect(launcher.body).toContain("api_root=/kcsapi&voice_root=/kcs/sound&");
+    expect(world.statusCode).toBe(200);
+    expect(world.headers["content-type"]).toContain("text/html");
+    expect(world.body).toContain("幌筵泊地");
+    expect(world.body).toContain("/kcs2/resources/world/15p_ver_com_t.png");
+    expect(world.body).toContain("api_world/register");
+  });
+
   it("serves local vendor runtimes before the cached client bundle", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
@@ -114,26 +137,47 @@ describe("local Fastify server", () => {
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
-  it("implements launcher world selection and login token endpoints", async () => {
+  it("requires single-account world registration before issuing login tokens", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
       unknownLogPath: path.join(tempDir, "unknown.jsonl")
     });
 
-    const world = await app.inject({
+    const worldBefore = await app.inject({
       method: "GET",
       url: "/kcsapi/api_world/get_id/local-viewer/1/123"
     });
-    const login = await app.inject({
+    const loginBefore = await app.inject({
+      method: "GET",
+      url: "/kcsapi/api_auth_member/dmmlogin/local-viewer/1/123"
+    });
+    const register = await app.inject({
+      method: "POST",
+      url: "/kcsapi/api_world/register/local-viewer/15/123"
+    });
+    const worldAfter = await app.inject({
+      method: "GET",
+      url: "/kcsapi/api_world/get_id/local-viewer/1/123"
+    });
+    const loginAfter = await app.inject({
       method: "GET",
       url: "/kcsapi/api_auth_member/dmmlogin/local-viewer/1/123"
     });
 
-    expect(world.statusCode).toBe(200);
-    expect(world.json().api_data).toEqual({ api_world_id: 1 });
-    expect(login.statusCode).toBe(200);
-    expect(login.json()).toMatchObject({
+    expect(worldBefore.statusCode).toBe(200);
+    expect(worldBefore.json().api_data).toEqual({ api_world_id: 0 });
+    expect(loginBefore.statusCode).toBe(200);
+    expect(loginBefore.json()).toMatchObject({
+      api_result: 403,
+      api_data: {}
+    });
+    expect(loginBefore.json()).not.toHaveProperty("api_token");
+    expect(register.statusCode).toBe(200);
+    expect(register.json().api_data).toEqual({ api_world_id: 15 });
+    expect(worldAfter.json().api_data).toEqual({ api_world_id: 15 });
+    expect(loginAfter.statusCode).toBe(200);
+    expect(loginAfter.json()).toMatchObject({
       api_result: 1,
       api_token: expect.stringContaining("local-viewer"),
       api_starttime: expect.any(Number)
@@ -141,6 +185,7 @@ describe("local Fastify server", () => {
   });
 
   it("can serialize kcsapi responses with the svdata prefix expected by the cached client", async () => {
+    store.registerAccount(15);
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
@@ -169,6 +214,7 @@ describe("local Fastify server", () => {
   });
 
   it("records unknown kcsapi calls and returns a clear local envelope", async () => {
+    store.registerAccount(15);
     const unknownLogPath = path.join(tempDir, "unknown.jsonl");
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

@@ -20,11 +20,20 @@ describe("SQLite state store", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("creates and seeds a reusable local save", () => {
-    const save = store.getSave();
+  it("starts without a registered local account", () => {
+    expect(store.hasAccount()).toBe(false);
+    expect(store.getWorldId()).toBe(0);
+    expect(() => store.getSave()).toThrow(/not been registered/i);
+  });
 
+  it("registers the single local account and seeds a reusable local save", () => {
+    const save = store.registerAccount(15);
+
+    expect(store.hasAccount()).toBe(true);
+    expect(store.getWorldId()).toBe(15);
     expect(save.player).toMatchObject({
       id: 1,
+      worldId: 15,
       nickname: "Local Admiral",
       level: expect.any(Number)
     });
@@ -35,6 +44,7 @@ describe("SQLite state store", () => {
   });
 
   it("persists mutations across store instances", () => {
+    store.registerAccount(15);
     store.updateComment("persistent local save");
     store.renameDeck(1, "Persisted Fleet");
     store.close();
@@ -42,11 +52,14 @@ describe("SQLite state store", () => {
     store = createStateStore({ databasePath });
     const save = store.getSave();
 
+    expect(store.hasAccount()).toBe(true);
+    expect(store.getWorldId()).toBe(15);
     expect(save.player.comment).toBe("persistent local save");
     expect(save.decks[0].name).toBe("Persisted Fleet");
   });
 
   it("applies material and inventory changes atomically", () => {
+    store.registerAccount(15);
     const before = store.getSave();
 
     const created = store.createSlotItem(2);
