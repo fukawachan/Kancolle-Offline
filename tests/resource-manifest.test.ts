@@ -13,6 +13,22 @@ describe("cached resource manifest", () => {
       pathname: "/kcs2/resources/ship/full/0006_7134_kksiqffpclxh.png",
       version: "28"
     });
+    expect(manifest.ship.albumStatus.get(6)).toMatchObject({
+      id: 6,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/ship\/album_status\/0006_\d{4}\.png$/)
+    });
+    expect(manifest.ship.card.get(6)).toMatchObject({
+      id: 6,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/ship\/card\/0006_\d{4}\.png$/)
+    });
+    expect(manifest.slot.card.get(1)).toMatchObject({
+      id: 1,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/card\/0001_\d{4}\.png$/)
+    });
+    expect(manifest.slot.itemOn.get(1)).toMatchObject({
+      id: 1,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/item_on\/0001_\d{4}\.png$/)
+    });
     expect(manifest.furniture.normal.get(1)).toMatchObject({
       id: 1,
       frame: "8807",
