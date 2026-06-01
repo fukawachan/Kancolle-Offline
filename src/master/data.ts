@@ -55,6 +55,10 @@ export const masterData = {
   ],
   api_mst_furnituregraph: [],
   api_mst_useitem: [
+    { api_id: 31, api_usetype: 0, api_category: 0, api_name: "燃料", api_description: ["艦隊運用に必要な資源です。"] },
+    { api_id: 32, api_usetype: 0, api_category: 0, api_name: "弾薬", api_description: ["戦闘や補給に必要な資源です。"] },
+    { api_id: 33, api_usetype: 0, api_category: 0, api_name: "鋼材", api_description: ["建造や修理に必要な資源です。"] },
+    { api_id: 34, api_usetype: 0, api_category: 0, api_name: "ボーキサイト", api_description: ["航空機の運用に必要な資源です。"] },
     { api_id: 1, api_usetype: 2, api_category: 1, api_name: "Instant Repair", api_description: ["Repairs one ship instantly."] },
     { api_id: 2, api_usetype: 2, api_category: 1, api_name: "Instant Build", api_description: ["Completes one build instantly."] },
     { api_id: 3, api_usetype: 2, api_category: 1, api_name: "Dev Material", api_description: ["Used for crafting."] },

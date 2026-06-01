@@ -79,24 +79,36 @@ describe("local kcsapi endpoints", () => {
     expect(start2.json().api_data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
-      api_voice_flag: 0,
+      api_voice_flag: 1,
       api_skin_id: 101,
       api_vol_bgm: expect.any(Number),
-      api_vol_voice: 0,
+      api_vol_voice: 80,
       api_volume_setting: {
         api_bgm: expect.any(Number),
         api_se: expect.any(Number),
-        api_voice: 0,
+        api_voice: 80,
         api_be_left: expect.any(Number),
         api_duty: expect.any(Number),
         api_vol_bgm: expect.any(Number),
-        api_voice_flag: 0,
-        api_vol_voice: 0
+        api_voice_flag: 1,
+        api_vol_voice: 80
       }
     });
   });
 
+  it("provides use item masters needed for the client material counters", async () => {
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    const useitemById = new Map(start2.api_mst_useitem.map((item: any) => [item.api_id, item]));
+
+    expect([...useitemById.keys()]).toEqual(expect.arrayContaining([31, 32, 33, 34]));
+    expect(useitemById.get(31)).toMatchObject({ api_id: 31, api_usetype: 0, api_category: 0, api_name: "燃料" });
+    expect(useitemById.get(32)).toMatchObject({ api_id: 32, api_usetype: 0, api_category: 0, api_name: "弾薬" });
+    expect(useitemById.get(33)).toMatchObject({ api_id: 33, api_usetype: 0, api_category: 0, api_name: "鋼材" });
+    expect(useitemById.get(34)).toMatchObject({ api_id: 34, api_usetype: 0, api_category: 0, api_name: "ボーキサイト" });
+  });
+
   it("returns port aggregate and core get_member resources from the same persisted save", async () => {
+    const start2 = await post("api_start2/getData");
     const port = await post("api_port/port");
     const basic = await post("api_get_member/basic");
     const ships = await post("api_get_member/ship2");
@@ -112,6 +124,17 @@ describe("local kcsapi endpoints", () => {
       api_material: expect.any(Array),
       api_p_bgm_id: 0
     });
+    const materialMasterIds = new Set(start2.json().api_data.api_mst_useitem.map((item: any) => item.api_id));
+    const clientMaterialIds = [-1, 31, 32, 33, 34];
+    const portMaterials = port.json().api_data.api_material.slice(0, 4);
+    expect(portMaterials).toEqual([
+      { api_member_id: 1, api_id: 1, api_value: 1000 },
+      { api_member_id: 1, api_id: 2, api_value: 1000 },
+      { api_member_id: 1, api_id: 3, api_value: 1000 },
+      { api_member_id: 1, api_id: 4, api_value: 1000 }
+    ]);
+    expect(portMaterials.map((item: any) => clientMaterialIds[item.api_id])).toEqual([31, 32, 33, 34]);
+    expect(portMaterials.every((item: any) => materialMasterIds.has(clientMaterialIds[item.api_id]))).toBe(true);
     expect(basic.json().api_data).toMatchObject({
       api_nickname: "Local Admiral",
       api_firstflag: 1,
@@ -121,6 +144,7 @@ describe("local kcsapi endpoints", () => {
     expect(ships.json().api_data.length).toBeGreaterThan(0);
     expect(deck.json().api_data).toHaveLength(4);
     expect(material.json().api_data).toHaveLength(8);
+    expect(material.json().api_data[0]).toMatchObject({ api_id: 1, api_value: 1000 });
     expect(requireInfo.json().api_data).toMatchObject({
       api_basic: expect.any(Object),
       api_extra_supply: expect.any(Array),
@@ -146,6 +170,18 @@ describe("local kcsapi endpoints", () => {
         expect.objectContaining({ api_id: 59, api_count: 0 })
       ])
     );
+  });
+
+  it("returns numeric material arrays for action responses read by index in the client", async () => {
+    const charge = (await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3 })).json().api_data;
+    const craft = (await post("api_req_kousyou/createitem", { api_item1: 10, api_item2: 10, api_item3: 10, api_item4: 10 })).json().api_data;
+    const destroyItem = (await post("api_req_kousyou/destroyitem2", { api_slotitem_ids: "2" })).json().api_data;
+    const destroyShip = (await post("api_req_kousyou/destroyship", { api_ship_id: "2" })).json().api_data;
+
+    expect(charge.api_material).toEqual([980, 980, 1000, 1000, 10, 10, 50, 5]);
+    expect(craft.api_material).toEqual([970, 970, 990, 990, 10, 10, 49, 5]);
+    expect(destroyItem.api_get_material).toEqual([1, 1, 2, 0]);
+    expect(destroyShip.api_material).toEqual([972, 972, 994, 990, 10, 10, 49, 5]);
   });
 
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
