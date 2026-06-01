@@ -36,16 +36,21 @@ const defaultOptions: PlayerOptions = {
   volVoice: 80
 };
 
+export const LOCAL_WORLD_ID = 15;
+const SCHEMA_VERSION = 2;
+
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
   const db = new Database(options.databasePath);
   db.pragma("journal_mode = WAL");
   migrate(db);
-  seed(db);
 
   return {
     db,
     close: () => db.close(),
+    hasAccount: () => hasAccount(db),
+    getWorldId: () => getWorldId(db),
+    registerAccount: (worldId: number) => registerAccount(db, worldId),
     getSave: () => getSave(db),
     updateNickname: (nickname: string) => {
       db.prepare("UPDATE players SET nickname = ? WHERE id = 1").run(nickname || "Local Admiral");
@@ -284,9 +289,53 @@ export function createStateStore(options: StateStoreOptions) {
 }
 
 function migrate(db: Database.Database) {
+  const currentVersion = schemaVersion(db);
+  if (currentVersion !== SCHEMA_VERSION) {
+    resetSchema(db);
+    return;
+  }
+
+  createSchema(db);
+}
+
+function schemaVersion(db: Database.Database) {
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta'").get() as Row | undefined;
+  if (!table) return 0;
+  try {
+    const row = db.prepare("SELECT version FROM schema_meta LIMIT 1").get() as Row | undefined;
+    return row ? Number(row.version) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function resetSchema(db: Database.Database) {
   db.exec(`
+    DROP TABLE IF EXISTS sortie_sessions;
+    DROP TABLE IF EXISTS maps;
+    DROP TABLE IF EXISTS furniture;
+    DROP TABLE IF EXISTS quests;
+    DROP TABLE IF EXISTS build_docks;
+    DROP TABLE IF EXISTS repair_docks;
+    DROP TABLE IF EXISTS decks;
+    DROP TABLE IF EXISTS slot_items;
+    DROP TABLE IF EXISTS ships;
+    DROP TABLE IF EXISTS materials;
+    DROP TABLE IF EXISTS players;
+    DROP TABLE IF EXISTS schema_meta;
+  `);
+  createSchema(db);
+  db.prepare("INSERT INTO schema_meta (version) VALUES (?)").run(SCHEMA_VERSION);
+}
+
+function createSchema(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_meta (
+      version INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS players (
       id INTEGER PRIMARY KEY,
+      world_id INTEGER NOT NULL,
       nickname TEXT NOT NULL,
       level INTEGER NOT NULL,
       comment TEXT NOT NULL,
@@ -382,14 +431,26 @@ function migrate(db: Database.Database) {
   `);
 }
 
-function seed(db: Database.Database) {
+function hasAccount(db: Database.Database) {
   const playerCount = (db.prepare("SELECT COUNT(*) AS count FROM players").get() as { count: number }).count;
-  if (playerCount > 0) return;
+  return playerCount > 0;
+}
+
+function getWorldId(db: Database.Database) {
+  const row = db.prepare("SELECT world_id FROM players WHERE id = 1").get() as Row | undefined;
+  return row ? Number(row.world_id) : 0;
+}
+
+function registerAccount(db: Database.Database, worldId: number): SaveState {
+  if (worldId !== LOCAL_WORLD_ID) {
+    throw new Error(`Unsupported local world id: ${worldId}`);
+  }
+  if (hasAccount(db)) return getSave(db);
 
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO players (id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, 1, ?, 100, ?, 0, 0, 0)"
-    ).run("Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
+      "INSERT INTO players (id, world_id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, ?, 100, ?, 0, 0, 1)"
+    ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
     db.prepare(
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5)"
     ).run();
@@ -436,11 +497,17 @@ function seed(db: Database.Database) {
     db.prepare("INSERT INTO maps (id, area_id, map_no, unlocked, cleared, gauge) VALUES (1, 1, 1, 1, 0, 0)").run();
   });
   tx();
+  return getSave(db);
 }
 
 function getSave(db: Database.Database): SaveState {
+  const player = db.prepare("SELECT * FROM players WHERE id = 1").get() as Row | undefined;
+  if (!player) {
+    throw new Error("Local Kancolle account has not been registered. Select a world first.");
+  }
+
   return {
-    player: mapPlayer(db.prepare("SELECT * FROM players WHERE id = 1").get() as Row),
+    player: mapPlayer(player),
     materials: mapMaterials(db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row),
     ships: (db.prepare("SELECT * FROM ships ORDER BY id").all() as Row[]).map(mapShip),
     slotItems: (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem),
@@ -457,6 +524,7 @@ function getSave(db: Database.Database): SaveState {
 function mapPlayer(row: Row): Player {
   return {
     id: Number(row.id),
+    worldId: Number(row.world_id),
     nickname: String(row.nickname),
     level: Number(row.level),
     comment: String(row.comment),

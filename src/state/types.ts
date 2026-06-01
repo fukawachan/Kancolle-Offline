@@ -2,6 +2,7 @@ export type JsonObject = Record<string, unknown>;
 
 export type Player = {
   id: number;
+  worldId: number;
   nickname: string;
   level: number;
   comment: string;

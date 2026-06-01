@@ -6,10 +6,12 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResponseFormat } from "../kcsapi/envelope.js";
-import { serializeApiResponse } from "../kcsapi/envelope.js";
+import { apiError, apiOk, serializeApiResponse } from "../kcsapi/envelope.js";
 import { handleKcsApi, requestToHandlerInput } from "../kcsapi/handlers.js";
 import { createResourceManifest, readMappedResource } from "../resources/manifest.js";
 import { renderBootstrap } from "./bootstrap.js";
+import { renderLauncher, renderWorldPage } from "./launcher.js";
+import { LOCAL_WORLD_ID } from "../state/store.js";
 import type { StateStore } from "../state/store.js";
 
 export type BuildAppOptions = {
@@ -33,15 +35,15 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   };
 
   app.get("/", async (_request, reply) => {
-    return reply.redirect("/kcs2/index.php?api_root=/kcsapi&voice_root=/kcs/sound&api_token=local-token&api_starttime=0");
+    return reply.type("text/html; charset=utf-8").send(renderLauncher());
   });
 
   app.get("/kcs2/index.php", async (request, reply) => {
     return reply.type("text/html; charset=utf-8").send(renderBootstrap(request.query as Record<string, unknown>));
   });
 
-  app.get("/favicon.ico", async (_request, reply) => {
-    return reply.code(204).send();
+  app.get("/kcs2/world.html", async (request, reply) => {
+    return reply.type("text/html; charset=utf-8").send(renderWorldPage(request.query as Record<string, unknown>));
   });
 
   app.get("/local-vendor/pixi.min.js", async (_request, reply) => {
@@ -73,15 +75,24 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   app.get("/kcsapi/api_world/get_id/:viewerId/:server/:timestamp", async (_request, reply) => {
-    return sendApi(reply, {
-      api_result: 1,
-      api_result_msg: "成功",
-      api_data: { api_world_id: 1 }
-    });
+    return sendApi(reply, apiOk({ api_world_id: options.stateStore.getWorldId() }));
+  });
+
+  app.post("/kcsapi/api_world/register/:viewerId/:worldId/:timestamp", async (request, reply) => {
+    const { worldId } = request.params as { worldId: string };
+    const selectedWorldId = Number(worldId);
+    if (selectedWorldId !== LOCAL_WORLD_ID) {
+      return sendApi(reply, apiError(`Unsupported local world id: ${worldId}`, 400));
+    }
+    options.stateStore.registerAccount(selectedWorldId);
+    return sendApi(reply, apiOk({ api_world_id: selectedWorldId }));
   });
 
   app.get("/kcsapi/api_auth_member/dmmlogin/:viewerId/:server/:timestamp", async (request, reply) => {
     const { viewerId } = request.params as { viewerId: string };
+    if (!options.stateStore.hasAccount()) {
+      return sendApi(reply, apiError("Local Kancolle account has not been registered. Select a world first.", 403));
+    }
     return sendApi(reply, {
       api_result: 1,
       api_result_msg: "成功",
@@ -91,6 +102,9 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   app.all("/kcsapi/*", async (request, reply) => {
+    if (!options.stateStore.hasAccount()) {
+      return sendApi(reply, apiError("Local Kancolle account has not been registered. Select a world first.", 403));
+    }
     const input = requestToHandlerInput(request);
     const payload = await handleKcsApi(input, {
       stateStore: options.stateStore,

@@ -13,6 +13,7 @@ describe("local kcsapi endpoints", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-api-"));
     store = createStateStore({ databasePath: path.join(tempDir, "save.sqlite") });
+    store.registerAccount(15);
     app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
