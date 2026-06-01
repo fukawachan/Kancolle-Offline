@@ -423,6 +423,7 @@ function bgmMaster(resourceManifest: ResourceManifest) {
     .map((bgm) => ({
       api_id: bgm.id,
       api_name: bgm.id === 0 ? "母港" : `Local Port BGM ${String(bgm.id).padStart(3, "0")}`,
+      api_filename: bgm.frame,
       api_rarity: 1
     }));
 }

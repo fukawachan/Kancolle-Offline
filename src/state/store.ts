@@ -476,7 +476,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
 
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO players (id, world_id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, ?, 100, ?, 0, 0, 1)"
+      "INSERT INTO players (id, world_id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, ?, 100, ?, 1, 0, 1)"
     ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
     db.prepare(
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5)"

@@ -143,6 +143,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .send(pngFallback);
     }
 
+    const voiceFallback = await readVoiceFallback(options.cacheDir, request.url);
+    if (voiceFallback) {
+      return reply
+        .type("audio/mpeg")
+        .header("cache-control", "public, max-age=3600")
+        .send(voiceFallback);
+    }
+
     return reply.code(404).send({
       error: "Not Found",
       path: request.url,
@@ -194,6 +202,23 @@ export function defaultCacheDir() {
 
 function localVendorPath(packagePath: string) {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules", packagePath);
+}
+
+async function readVoiceFallback(cacheDir: string, url: string) {
+  const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
+  const resolvedCacheDir = path.resolve(cacheDir);
+  const voiceMatch = pathname.match(/^(\/kcs2\/resources\/voice\/titlecall_[12]\/)\d{3}\.mp3$/i);
+  if (!voiceMatch) return null;
+
+  const voiceDir = path.join(resolvedCacheDir, `.${voiceMatch[1]}`);
+  try {
+    const files = (await readdir(voiceDir)).filter((f) => f.endsWith(".mp3")).sort();
+    if (!files.length) return null;
+    const fallbackPath = path.join(voiceDir, files[0]);
+    return await readFile(fallbackPath);
+  } catch {
+    return null;
+  }
 }
 
 async function readPngFallback(cacheDir: string, url: string) {

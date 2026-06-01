@@ -24,6 +24,7 @@ export function toBasic(player: Player, furniture?: FurnitureState, resourceMani
     api_rank: 1,
     api_experience: 0,
     api_fleetname: null,
+    api_flagship_position: player.flagshipPosition,
     api_comment: player.comment,
     api_comment_id: player.comment,
     api_max_chara: 300,
