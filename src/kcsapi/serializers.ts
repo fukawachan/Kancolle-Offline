@@ -258,7 +258,9 @@ export function toUseItems(materials: Materials) {
     { api_id: 1, api_count: materials.repairKit },
     { api_id: 2, api_count: materials.buildKit },
     { api_id: 3, api_count: materials.devmat },
-    { api_id: 4, api_count: materials.screw }
+    { api_id: 4, api_count: materials.screw },
+    { api_id: 54, api_count: 0 },
+    { api_id: 59, api_count: 0 }
   ];
 }
 
@@ -268,9 +270,9 @@ export function toUnsetSlot(save: SaveState) {
   for (const item of save.slotItems) {
     if (equipped.has(item.id)) continue;
     const master = masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId);
-    const type = String(master?.api_type?.[2] ?? 0);
-    groups[type] = groups[type] || [];
-    groups[type].push(item.id);
+    const key = `api_slottype${master?.api_type?.[2] ?? 0}`;
+    groups[key] = groups[key] || [];
+    groups[key].push(item.id);
   }
   return groups;
 }

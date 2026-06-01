@@ -64,7 +64,18 @@ register("api_get_member/ship2", (_input, context) => {
 });
 register("api_get_member/ship3", (_input, context) => {
   const save = context.stateStore.getSave();
-  return apiOk({ api_ship_data: save.ships.map(toShip), api_deck_data: save.decks.map(toDeck), api_slot_data: save.slotItems.map(toSlotItem) });
+  return apiOk({ api_ship_data: save.ships.map(toShip), api_deck_data: save.decks.map(toDeck), api_slot_data: toUnsetSlot(save) });
+});
+register("api_get_member/ship_deck", (input, context) => {
+  const save = context.stateStore.getSave();
+  const rawDeckIds = input.body.api_deck_rid;
+  const requestedDeckIds = csvNums(rawDeckIds, []);
+  const decks = rawDeckIds == null || rawDeckIds === "" ? save.decks : save.decks.filter((deck) => requestedDeckIds.includes(deck.id));
+  const shipIds = new Set(decks.flatMap((deck) => deck.shipIds).filter((shipId) => shipId > 0));
+  return apiOk({
+    api_deck_data: decks.map(toDeck),
+    api_ship_data: save.ships.filter((ship) => shipIds.has(ship.id)).map(toShip)
+  });
 });
 register("api_get_member/slot_item", (_input, context) => apiOk(context.stateStore.getSave().slotItems.map(toSlotItem)));
 register("api_get_member/unsetslot", (_input, context) => apiOk(toUnsetSlot(context.stateStore.getSave())));
@@ -75,7 +86,7 @@ register("api_get_member/ndock", (_input, context) => apiOk(context.stateStore.g
 register("api_get_member/questlist", (_input, context) => apiOk(toQuestList(context.stateStore.getSave().quests)));
 register("api_get_member/mapinfo", (_input, context) => apiOk(toMapInfo(context.stateStore.getSave())));
 register("api_get_member/mission", () => apiOk({ api_list: masterData.api_mst_mission, api_exec: [] }));
-register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: [] }));
+register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
 register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
 register("api_get_member/payitem", () => apiOk([]));
 register("api_get_member/record", (_input, context) => apiOk({ api_member_id: 1, api_nickname: context.stateStore.getSave().player.nickname, api_level: 1 }));

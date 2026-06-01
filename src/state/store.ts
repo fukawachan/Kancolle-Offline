@@ -87,11 +87,38 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).decks.find((deck) => deck.id === deckId);
     },
     changeDeckShip: (deckId: number, index: number, shipId: number) => {
-      const deck = getSave(db).decks.find((item) => item.id === deckId);
+      const save = getSave(db);
+      const deck = save.decks.find((item) => item.id === deckId);
       if (!deck) return null;
-      const shipIds = normalizeFixed(deck.shipIds, 6, -1);
-      shipIds[index] = shipId > 0 ? shipId : -1;
-      db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?").run(JSON.stringify(shipIds), deckId);
+      const targetIndex = Math.max(0, Math.min(5, Math.trunc(index)));
+      const nextShipId = shipId > 0 && save.ships.some((ship) => ship.id === shipId) ? shipId : -1;
+      const updatedDecks = save.decks.map((item) => {
+        const shipIds = normalizeFixed(item.shipIds, 6, -1).map((id) => (id > 0 ? id : -1));
+        if (nextShipId > 0) {
+          for (let slot = 0; slot < shipIds.length; slot += 1) {
+            if (shipIds[slot] === nextShipId) shipIds[slot] = -1;
+          }
+        }
+        if (item.id === deckId) shipIds[targetIndex] = nextShipId;
+        return { id: item.id, shipIds };
+      });
+      const seenShips = new Set<number>();
+      for (const item of updatedDecks) {
+        for (let slot = 0; slot < item.shipIds.length; slot += 1) {
+          const assignedShipId = item.shipIds[slot];
+          if (assignedShipId <= 0) continue;
+          if (seenShips.has(assignedShipId)) {
+            item.shipIds[slot] = -1;
+          } else {
+            seenShips.add(assignedShipId);
+          }
+        }
+      }
+      const update = db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?");
+      const tx = db.transaction(() => {
+        for (const item of updatedDecks) update.run(JSON.stringify(item.shipIds), item.id);
+      });
+      tx();
       return getSave(db).decks.find((item) => item.id === deckId);
     },
     toggleShipLock: (shipId: number, explicit?: number) => {

@@ -57,7 +57,10 @@ export const masterData = {
   api_mst_useitem: [
     { api_id: 1, api_usetype: 2, api_category: 1, api_name: "Instant Repair", api_description: ["Repairs one ship instantly."] },
     { api_id: 2, api_usetype: 2, api_category: 1, api_name: "Instant Build", api_description: ["Completes one build instantly."] },
-    { api_id: 3, api_usetype: 2, api_category: 1, api_name: "Dev Material", api_description: ["Used for crafting."] }
+    { api_id: 3, api_usetype: 2, api_category: 1, api_name: "Dev Material", api_description: ["Used for crafting."] },
+    { api_id: 4, api_usetype: 2, api_category: 1, api_name: "Improvement Material", api_description: ["Used for equipment improvement."] },
+    { api_id: 54, api_usetype: 4, api_category: 1, api_name: "Mamiya", api_description: ["Restores fleet morale."] },
+    { api_id: 59, api_usetype: 4, api_category: 1, api_name: "Irako", api_description: ["Restores ship morale."] }
   ],
   api_mst_payitem: [],
   api_mst_bgm: [
