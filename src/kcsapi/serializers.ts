@@ -66,6 +66,19 @@ export function toMaterials(materials: Materials) {
   ];
 }
 
+export function toMaterialValues(materials: Materials) {
+  return [
+    materials.fuel,
+    materials.ammo,
+    materials.steel,
+    materials.bauxite,
+    materials.buildKit,
+    materials.repairKit,
+    materials.devmat,
+    materials.screw
+  ];
+}
+
 export function toShip(ship: Ship) {
   const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
   const slot = [...ship.slotIds, ...Array(5).fill(-1)].slice(0, 5);
