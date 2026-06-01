@@ -94,12 +94,22 @@ export function createStateStore(options: StateStoreOptions) {
       const nextShipId = shipId > 0 && save.ships.some((ship) => ship.id === shipId) ? shipId : -1;
       const updatedDecks = save.decks.map((item) => {
         const shipIds = normalizeFixed(item.shipIds, 6, -1).map((id) => (id > 0 ? id : -1));
-        if (nextShipId > 0) {
+        if (item.id === deckId && nextShipId > 0) {
+          const srcIndex = shipIds.indexOf(nextShipId);
+          if (srcIndex >= 0 && srcIndex !== targetIndex) {
+            const displacedId = shipIds[targetIndex];
+            shipIds[targetIndex] = nextShipId;
+            shipIds[srcIndex] = displacedId > 0 ? displacedId : -1;
+          } else if (srcIndex < 0) {
+            shipIds[targetIndex] = nextShipId;
+          }
+        } else if (nextShipId > 0) {
           for (let slot = 0; slot < shipIds.length; slot += 1) {
             if (shipIds[slot] === nextShipId) shipIds[slot] = -1;
           }
+        } else if (item.id === deckId) {
+          shipIds[targetIndex] = -1;
         }
-        if (item.id === deckId) shipIds[targetIndex] = nextShipId;
         return { id: item.id, shipIds };
       });
       const seenShips = new Set<number>();
@@ -119,6 +129,14 @@ export function createStateStore(options: StateStoreOptions) {
         for (const item of updatedDecks) update.run(JSON.stringify(item.shipIds), item.id);
       });
       tx();
+      if (deckId === 1) {
+        const deck1 = updatedDecks.find((d) => d.id === 1);
+        if (deck1 && deck1.shipIds[save.player.flagshipPosition - 1] <= 0) {
+          const firstShipIdx = deck1.shipIds.findIndex((id) => id > 0);
+          const nextPosition = firstShipIdx >= 0 ? firstShipIdx + 1 : 1;
+          db.prepare("UPDATE players SET flagship_position = ? WHERE id = 1").run(nextPosition);
+        }
+      }
       return getSave(db).decks.find((item) => item.id === deckId);
     },
     toggleShipLock: (shipId: number, explicit?: number) => {
