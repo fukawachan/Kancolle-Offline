@@ -5,7 +5,9 @@ export type ShipMaster = (typeof masterData.api_mst_ship)[number];
 export type SlotMaster = (typeof masterData.api_mst_slotitem)[number];
 export type SlotEquipType = (typeof masterData.api_mst_slotitem_equiptype)[number];
 
-const PAGE_SIZE = 10;
+const PAGES_PER_BLOCK = 7;
+const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_BLOCK = PAGES_PER_BLOCK * ITEMS_PER_PAGE;
 const GENERATED_SLOT_ICON_TYPES = Array.from({ length: 59 }, (_value, index) => index + 1);
 
 export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster[] {
@@ -48,21 +50,23 @@ export function buildSlotEquipTypes(slotItems: SlotMaster[]): SlotEquipType[] {
   return [...equipTypes.values()].sort((a, b) => a.api_id - b.api_id);
 }
 
-export function shipPictureBookPage(resourceManifest: ResourceManifest, startNo: number) {
-  return page(buildShipMasters(resourceManifest), startNo).map((ship, offset) =>
-    shipPictureBookEntry(ship, normalizedStartNo(startNo) + offset)
+export function shipPictureBookPage(resourceManifest: ResourceManifest, pageNo: number) {
+  const firstIndexNo = blockFirstIndexNo(pageNo);
+  return block(buildShipMasters(resourceManifest), pageNo).map((ship, offset) =>
+    shipPictureBookEntry(ship, firstIndexNo + offset)
   );
 }
 
-export function slotPictureBookPage(resourceManifest: ResourceManifest, startNo: number) {
-  return page(buildSlotMasters(resourceManifest), startNo).map((slot, offset) =>
-    slotPictureBookEntry(slot, normalizedStartNo(startNo) + offset)
+export function slotPictureBookPage(resourceManifest: ResourceManifest, pageNo: number) {
+  const firstIndexNo = blockFirstIndexNo(pageNo);
+  return block(buildSlotMasters(resourceManifest), pageNo).map((slot, offset) =>
+    slotPictureBookEntry(slot, firstIndexNo + offset)
   );
 }
 
-function page<T>(items: T[], startNo: number) {
-  const startIndex = normalizedStartNo(startNo) - 1;
-  return items.slice(startIndex, startIndex + PAGE_SIZE);
+function block<T>(items: T[], blockNo: number) {
+  const startIndex = blockFirstIndexNo(blockNo) - 1;
+  return items.slice(startIndex, startIndex + ITEMS_PER_BLOCK);
 }
 
 function shipPictureBookEntry(ship: ShipMaster, indexNo: number) {
@@ -169,8 +173,12 @@ function generatedSlotMaster(api_id: number): SlotMaster {
   };
 }
 
-function normalizedStartNo(startNo: number) {
-  return Math.max(1, Math.trunc(startNo));
+function blockFirstIndexNo(blockNo: number) {
+  return (normalizedBlockNo(blockNo) - 1) * ITEMS_PER_BLOCK + 1;
+}
+
+function normalizedBlockNo(blockNo: number) {
+  return Math.max(1, Math.trunc(blockNo));
 }
 
 function statValue(value: number | number[]) {

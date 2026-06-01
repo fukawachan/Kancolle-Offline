@@ -100,10 +100,11 @@ describe("local kcsapi endpoints", () => {
 
   it("serves cache-backed ship and equipment picture book pages", async () => {
     const firstShips = (await post("api_get_member/picture_book", { api_type: 1, api_no: 1 })).json().api_data;
-    const laterShips = (await post("api_get_member/picture_book", { api_type: 1, api_no: 11 })).json().api_data;
+    const laterShipBlock = (await post("api_get_member/picture_book", { api_type: 1, api_no: 2 })).json().api_data;
     const firstSlots = (await post("api_get_member/picture_book", { api_type: 2, api_no: 1 })).json().api_data;
+    const laterSlotBlock = (await post("api_get_member/picture_book", { api_type: 2, api_no: 2 })).json().api_data;
 
-    expect(firstShips.api_list).toHaveLength(10);
+    expect(firstShips.api_list).toHaveLength(70);
     expect(firstShips.api_list[0]).toMatchObject({
       api_index_no: 1,
       api_table_id: [expect.any(Number)],
@@ -112,12 +113,15 @@ describe("local kcsapi endpoints", () => {
     });
     expect(firstShips.api_list[0].api_houg).toEqual(expect.any(Number));
     expect(firstShips.api_list[0].api_taik).toEqual(expect.any(Number));
+    expect(firstShips.api_list[69].api_index_no).toBe(70);
 
-    expect(laterShips.api_list).toHaveLength(10);
-    expect(laterShips.api_list[0].api_index_no).toBe(11);
-    expect(laterShips.api_list[0].api_table_id).toEqual([expect.any(Number)]);
+    expect(laterShipBlock.api_list).toHaveLength(70);
+    expect(laterShipBlock.api_list[0].api_index_no).toBe(71);
+    expect(laterShipBlock.api_list[0].api_table_id).toEqual([expect.any(Number)]);
+    expect(laterShipBlock.api_list[19].api_index_no).toBe(90);
+    expect(laterShipBlock.api_list[20].api_index_no).toBe(91);
 
-    expect(firstSlots.api_list).toHaveLength(10);
+    expect(firstSlots.api_list).toHaveLength(70);
     expect(firstSlots.api_list[0]).toMatchObject({
       api_index_no: 1,
       api_table_id: [expect.any(Number)],
@@ -125,6 +129,11 @@ describe("local kcsapi endpoints", () => {
     });
     expect(firstSlots.api_list[0].api_houg).toEqual(expect.any(Number));
     expect(firstSlots.api_list[0].api_info).toEqual(expect.any(String));
+    expect(firstSlots.api_list[69].api_index_no).toBe(70);
+
+    expect(laterSlotBlock.api_list).toHaveLength(70);
+    expect(laterSlotBlock.api_list[0].api_index_no).toBe(71);
+    expect(laterSlotBlock.api_list[20].api_index_no).toBe(91);
   });
 
   it("provides use item masters needed for the client material counters", async () => {
