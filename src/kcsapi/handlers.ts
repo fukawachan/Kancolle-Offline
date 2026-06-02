@@ -110,7 +110,7 @@ register("api_req_init/nickname", (input, context) => {
   return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
 });
 register("api_req_init/firstship", (input, context) => {
-  const masterId = num(input.body.api_ship_id, 6);
+  const masterId = num(input.body.api_ship_id, 9);
   const ship = context.stateStore.createShip(masterId);
   context.stateStore.changeDeckShip(1, 0, ship.id);
   return apiOk({ api_ship: toShip(ship), api_deck: context.stateStore.getSave().decks.map(toDeck) });
@@ -177,7 +177,7 @@ register("api_req_kaisou/powerup", (input, context) => {
   return apiOk({ api_powerup_flag: 1, api_ship: ship ? toShip(ship) : null });
 });
 register("api_req_kaisou/remodeling", (input, context) => {
-  const ship = context.stateStore.remodelShip(num(input.body.api_id, 1), num(input.body.api_aftershipid, 45));
+  const ship = context.stateStore.remodelShip(num(input.body.api_id, 1), num(input.body.api_aftershipid, 54));
   return apiOk({ api_after_ship: ship ? toShip(ship) : null });
 });
 register("api_req_kaisou/preset_slot_register", () => apiOk({ api_preset_no: 1 }));
@@ -236,7 +236,7 @@ register("api_req_kousyou/destroyitem2", (input, context) => {
 });
 register("api_req_kousyou/createship", (input, context) => {
   context.stateStore.consumeMaterials(recipeDelta(input.body));
-  const dock = context.stateStore.startBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1), input.body, num(input.body.api_item1, 30) > 99 ? 45 : 6)!;
+  const dock = context.stateStore.startBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1), input.body, num(input.body.api_item1, 30) > 99 ? 54 : 9)!;
   return apiOk({ api_result: 1, api_kdock: toBuildDock(dock), api_material: toMaterialValues(context.stateStore.getSave().materials) });
 });
 register("api_req_kousyou/createship_speedchange", (input, context) => apiOk({ api_kdock: toBuildDock(context.stateStore.speedBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1))!) }));

@@ -41,6 +41,29 @@ describe("SQLite state store", () => {
     expect(save.decks).toHaveLength(4);
     expect(save.ships.length).toBeGreaterThan(0);
     expect(save.slotItems.length).toBeGreaterThan(0);
+    expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
+  });
+
+  it("resets legacy saves that used ship master ids mismatched with cached art", () => {
+    store.registerAccount(15);
+    const legacyShipIds = [6, 7, 9, 45, 89];
+    for (let index = 0; index < legacyShipIds.length; index += 1) {
+      if (index >= 4) {
+        store.createShip(legacyShipIds[index]);
+      } else {
+        store.db.prepare("UPDATE ships SET master_id = ? WHERE id = ?").run(legacyShipIds[index], index + 1);
+      }
+    }
+    store.updateComment("legacy save should reset");
+    store.db.prepare("UPDATE schema_meta SET version = 2").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+
+    expect(store.hasAccount()).toBe(false);
+    const save = store.registerAccount(15);
+    expect(save.player.comment).toBe("Local offline save");
+    expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
   });
 
   it("persists mutations across store instances", () => {
@@ -56,6 +79,7 @@ describe("SQLite state store", () => {
     expect(store.getWorldId()).toBe(15);
     expect(save.player.comment).toBe("persistent local save");
     expect(save.decks[0].name).toBe("Persisted Fleet");
+    expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
   });
 
   it("applies material and inventory changes atomically", () => {

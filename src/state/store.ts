@@ -37,7 +37,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -276,7 +276,7 @@ export function createStateStore(options: StateStoreOptions) {
       consumeMaterials(db, { repairKit: 1 });
       return getSave(db).repairDocks.find((item) => item.id === dockId);
     },
-    startBuild: (dockId: number, recipe: JsonObject, resultMasterId = 6) => {
+    startBuild: (dockId: number, recipe: JsonObject, resultMasterId = 9) => {
       const completeTime = Date.now() + 20 * 60_000;
       db.prepare("UPDATE build_docks SET recipe_json = ?, result_master_id = ?, complete_time = ?, state = 2 WHERE id = ?").run(
         JSON.stringify(recipe),
@@ -293,7 +293,7 @@ export function createStateStore(options: StateStoreOptions) {
     },
     claimBuild: (dockId: number) => {
       const dock = getSave(db).buildDocks.find((item) => item.id === dockId);
-      const ship = createShip(db, dock?.resultMasterId || 6);
+      const ship = createShip(db, dock?.resultMasterId || 9);
       db.prepare("UPDATE build_docks SET recipe_json = '{}', result_master_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dockId);
       return ship;
     },
@@ -500,10 +500,10 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5)"
     ).run();
 
-    for (const masterId of [6, 7, 1, 2]) {
+    for (const masterId of [9, 10, 1, 2]) {
       db.prepare(
         "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, 0, ?, 0, ?, 0, ?, -1, ?)"
-      ).run(masterId, masterId === 6 ? 15 : 13, masterId === 6 ? 15 : 13, 20, 20, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
+      ).run(masterId, masterId === 9 || masterId === 10 ? 15 : 13, masterId === 9 || masterId === 10 ? 15 : 13, 20, 20, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
     }
 
     for (const masterId of [1, 1, 2, 10]) {

@@ -2,11 +2,11 @@ export const masterData = {
   api_mst_ship: [
     shipMaster(1, "Mutsuki", "睦月", 2, 13, 15, 15),
     shipMaster(2, "Kisaragi", "如月", 2, 13, 15, 15),
-    shipMaster(6, "Fubuki", "吹雪", 2, 15, 20, 20),
-    shipMaster(7, "Shirayuki", "白雪", 2, 15, 20, 20),
-    shipMaster(9, "Miyuki", "深雪", 2, 15, 20, 20),
-    shipMaster(45, "Sendai", "川内", 3, 26, 25, 25),
-    shipMaster(89, "Ise", "伊勢", 9, 74, 85, 120)
+    shipMaster(9, "Fubuki", "吹雪", 2, 15, 20, 20),
+    shipMaster(10, "Shirayuki", "白雪", 2, 15, 20, 20),
+    shipMaster(11, "Miyuki", "深雪", 2, 15, 20, 20),
+    shipMaster(54, "Sendai", "川内", 3, 26, 25, 25),
+    shipMaster(77, "Ise", "伊勢", 9, 74, 85, 120)
   ],
   api_mst_slotitem: [
     slotMaster(1, "12cm Single Gun Mount", "12cm単装砲", 1, [1, 1, 0, 0]),

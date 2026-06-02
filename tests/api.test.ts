@@ -70,6 +70,32 @@ describe("local kcsapi endpoints", () => {
       api_filename: "kksiqffpclxh",
       api_version: expect.arrayContaining(["28"])
     });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 9)).toMatchObject({
+      api_name: "吹雪",
+      api_yomi: "Fubuki"
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 10)).toMatchObject({
+      api_name: "白雪",
+      api_yomi: "Shirayuki"
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 11)).toMatchObject({
+      api_name: "深雪",
+      api_yomi: "Miyuki"
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 54)).toMatchObject({
+      api_name: "川内",
+      api_yomi: "Sendai"
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 77)).toMatchObject({
+      api_name: "伊勢",
+      api_yomi: "Ise"
+    });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 9)).toMatchObject({
+      api_filename: "gyckjmemgqoe"
+    });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 77)).toMatchObject({
+      api_filename: "skgpomqtcedb"
+    });
     expect(start2Data.api_mst_furnituregraph).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ api_id: 1, api_no: 1, api_filename: "8807" }),
@@ -167,6 +193,7 @@ describe("local kcsapi endpoints", () => {
       api_material: expect.any(Array),
       api_p_bgm_id: 0
     });
+    expect(port.json().api_data.api_ship.map((ship: any) => ship.api_ship_id)).toEqual([9, 10, 1, 2]);
     const materialMasterIds = new Set(start2.json().api_data.api_mst_useitem.map((item: any) => item.api_id));
     const clientMaterialIds = [-1, 31, 32, 33, 34];
     const portMaterials = port.json().api_data.api_material.slice(0, 4);
