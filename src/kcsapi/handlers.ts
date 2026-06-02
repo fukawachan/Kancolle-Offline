@@ -13,6 +13,7 @@ import {
 } from "../master/catalog.js";
 import { masterData } from "../master/data.js";
 import type { ResourceManifest } from "../resources/types.js";
+import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
 import type { SaveState } from "../state/types.js";
 import { validateSlotEquip } from "./equipment-rules.js";
@@ -422,24 +423,31 @@ function shipGraph(resourceManifest: ResourceManifest, ships: ShipMaster[]) {
       resourceManifest.ship.albumStatus.get(ship.api_id) ||
       resourceManifest.ship.banner.get(ship.api_id);
 
+    const offsets = shipGraphOffsets[ship.api_id];
+    const zero = [0, 0] as [number, number];
+
     return {
       api_id: ship.api_id,
       api_sortno: ship.api_sortno,
-      api_filename: file?.filename || file?.frame || String(ship.api_id),
+      api_filename: offsets?.f || file?.filename || file?.frame || String(ship.api_id),
       api_version: Array(5).fill(file?.version || "1"),
-      api_boko_n: [0, 0],
-      api_boko_d: [0, 0],
-      api_kaisyu_n: [0, 0],
-      api_kaisyu_d: [0, 0],
-      api_kaizo_n: [0, 0],
-      api_kaizo_d: [0, 0],
-      api_map_n: [0, 0],
-      api_map_d: [0, 0],
-      api_ensyuf_n: [0, 0],
-      api_ensyuf_d: [0, 0],
-      api_ensyue_n: [0, 0],
-      api_weda: [0, 0],
-      api_wedb: [0, 0]
+      api_boko_n: offsets?.bn || zero,
+      api_boko_d: offsets?.bd || zero,
+      api_kaisyu_n: offsets?.kn || zero,
+      api_kaisyu_d: offsets?.kd || zero,
+      api_kaizo_n: offsets?.zn || zero,
+      api_kaizo_d: offsets?.zd || zero,
+      api_map_n: offsets?.mn || zero,
+      api_map_d: offsets?.md || zero,
+      api_ensyuf_n: offsets?.en || zero,
+      api_ensyuf_d: offsets?.ed || zero,
+      api_ensyue_n: offsets?.ee || zero,
+      api_battle_n: offsets?.rn || zero,
+      api_battle_d: offsets?.rd || zero,
+      api_weda: offsets?.wa || zero,
+      api_wedb: offsets?.wb || zero,
+      api_pa: offsets?.pa || zero,
+      api_pab: offsets?.pb || zero
     };
   });
 }
