@@ -13,6 +13,7 @@ import { renderBootstrap } from "./bootstrap.js";
 import { renderLauncher, renderWorldPage } from "./launcher.js";
 import { LOCAL_WORLD_ID } from "../state/store.js";
 import type { StateStore } from "../state/store.js";
+import { registerDebugRoutes } from "../debug/index.js";
 
 export type BuildAppOptions = {
   cacheDir: string;
@@ -33,6 +34,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     const contentType = options.responseFormat === "svdata" ? "text/plain; charset=utf-8" : "application/json; charset=utf-8";
     return reply.header("cache-control", "no-store").type(contentType).send(serialized);
   };
+
+  registerDebugRoutes(app, options.stateStore, sendApi);
 
   app.get("/", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(renderLauncher());
