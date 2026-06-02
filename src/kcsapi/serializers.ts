@@ -79,9 +79,23 @@ export function toMaterialValues(materials: Materials) {
   ];
 }
 
-export function toShip(ship: Ship) {
+export function toShip(ship: Ship, slotItems?: SlotItem[]) {
   const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
   const slot = [...ship.slotIds, ...Array(5).fill(-1)].slice(0, 5);
+
+  const equippedMasters = resolveEquippedMasters(ship, slotItems);
+  const equipSum = (field: string) =>
+    equippedMasters.reduce((sum, sm) => sum + safeNum(sm[field as keyof typeof sm]), 0);
+
+  const kyoukaRaw = Array.isArray((ship.stats as Record<string, unknown>).api_kyouka)
+    ? (ship.stats as Record<string, unknown>).api_kyouka as number[]
+    : [0, 0, 0, 0, 0];
+  const kyouka = (i: number) => safeNum(kyoukaRaw[i]);
+
+  const kahiBase = ship.level + equipSum("api_houk");
+  const taisenBase = ship.level + equipSum("api_tais");
+  const sakutekiBase = ship.level + equipSum("api_saku");
+
   return {
     api_id: ship.id,
     api_sortno: master?.api_sortno ?? ship.masterId,
@@ -93,7 +107,7 @@ export function toShip(ship: Ship) {
     api_leng: master?.api_leng ?? 1,
     api_slot: slot,
     api_onslot: [0, 0, 0, 0, 0],
-    api_kyouka: [0, 0, 0, 0, 0],
+    api_kyouka: [kyouka(0), kyouka(1), kyouka(2), kyouka(3), kyouka(4)],
     api_backs: master?.api_backs ?? 1,
     api_fuel: ship.fuel,
     api_bull: ship.ammo,
@@ -102,20 +116,44 @@ export function toShip(ship: Ship) {
     api_ndock_item: [0, 0],
     api_srate: 0,
     api_cond: ship.condition,
-    api_karyoku: [5, 40],
-    api_raisou: [15, 70],
-    api_taiku: [5, 40],
-    api_soukou: [5, 30],
-    api_kaihi: [10, 49],
-    api_taisen: [10, 49],
-    api_sakuteki: [5, 30],
-    api_lucky: [10, 49],
+    api_karyoku: [arrVal(master?.api_houg, 0) + equipSum("api_houg") + kyouka(0), arrVal(master?.api_houg, 1) + equipSum("api_houg") + kyouka(0)],
+    api_raisou: [arrVal(master?.api_raig, 0) + equipSum("api_raig") + kyouka(1), arrVal(master?.api_raig, 1) + equipSum("api_raig") + kyouka(1)],
+    api_taiku: [arrVal(master?.api_tyku, 0) + equipSum("api_tyku") + kyouka(2), arrVal(master?.api_tyku, 1) + equipSum("api_tyku") + kyouka(2)],
+    api_soukou: [arrVal(master?.api_souk, 0) + equipSum("api_souk") + kyouka(3), arrVal(master?.api_souk, 1) + equipSum("api_souk") + kyouka(3)],
+    api_kaihi: [kahiBase, ship.level + 49 + equipSum("api_houk")],
+    api_taisen: [taisenBase, taisenBase],
+    api_sakuteki: [sakutekiBase, sakutekiBase],
+    api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4), arrVal(master?.api_luck, 1) + equipSum("api_luck") + kyouka(4)],
     api_locked: ship.locked,
     api_locked_equip: 0,
     api_sally_area: 0,
     api_sp_effect_items: [],
     api_slot_ex: ship.exSlotId
   };
+}
+
+function resolveEquippedMasters(
+  ship: Ship,
+  slotItems?: SlotItem[]
+): (typeof masterData.api_mst_slotitem)[number][] {
+  if (!slotItems || slotItems.length === 0) return [];
+  const allSlotIds = [...ship.slotIds, ship.exSlotId].filter((id) => id > 0);
+  return allSlotIds
+    .map((slotId) => {
+      const item = slotItems.find((si) => si.id === slotId);
+      return item ? masterData.api_mst_slotitem.find((m) => m.api_id === item.masterId) : undefined;
+    })
+    .filter((m): m is NonNullable<typeof m> => m != null);
+}
+
+function arrVal(arr: number | number[] | undefined, index: number): number {
+  if (Array.isArray(arr)) return safeNum(arr[index]);
+  return 0;
+}
+
+function safeNum(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export function toSlotItem(item: SlotItem) {
@@ -207,7 +245,7 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
     api_material: toMaterials(save.materials),
     api_deck_port: save.decks.map(toDeck),
     api_ndock: save.repairDocks.map(toRepairDock),
-    api_ship: save.ships.map(toShip),
+    api_ship: save.ships.map((s) => toShip(s, save.slotItems)),
     api_basic: toBasic(save.player, save.furniture, resourceManifest),
     api_log: [],
     api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),

@@ -323,6 +323,41 @@ describe("local kcsapi endpoints", () => {
     expect(ship.api_slot[0]).toBe(-1);
   });
 
+  it("computes ship stats from master base + equipment bonuses, not hardcoded placeholders", async () => {
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    const shipMasterById = new Map(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
+    const slotMasterById = new Map(start2.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
+
+    // Ship 1 is a fresh Fubuki (masterId 9) with no equipment
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const fubuki = ship2.find((ship: any) => ship.api_id === 1);
+    const fubukiMaster = shipMasterById.get(fubuki.api_ship_id);
+
+    // Verify base stats are computed from ship master, not hardcoded [5, 40]
+    expect(fubuki.api_karyoku).toEqual([fubukiMaster.api_houg[0], fubukiMaster.api_houg[1]]);
+    expect(fubuki.api_raisou).toEqual([fubukiMaster.api_raig[0], fubukiMaster.api_raig[1]]);
+    expect(fubuki.api_soukou).toEqual([fubukiMaster.api_souk[0], fubukiMaster.api_souk[1]]);
+
+    // Equip item 1 (12cm Single Gun Mount: api_houg=1, api_tyku=1, api_raig=0)
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: 1 });
+    const equipped = (await post("api_get_member/ship2")).json().api_data;
+    const fubukiEquipped = equipped.find((ship: any) => ship.api_id === 1);
+
+    // Stats should increase by equipment bonuses
+    expect(fubukiEquipped.api_karyoku[0]).toBe(fubukiMaster.api_houg[0] + 1); // +1 firepower
+    expect(fubukiEquipped.api_karyoku[1]).toBe(fubukiMaster.api_houg[1] + 1); // max also includes equip
+    expect(fubukiEquipped.api_taiku[0]).toBe(fubukiMaster.api_tyku[0] + 1);    // +1 AA
+    expect(fubukiEquipped.api_raisou[0]).toBe(fubukiMaster.api_raig[0] + 0);   // +0 torpedo
+
+    // Unequip and verify stats return to base
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: -1 });
+    const unequipped = (await post("api_get_member/ship2")).json().api_data;
+    const fubukiUnequipped = unequipped.find((ship: any) => ship.api_id === 1);
+
+    expect(fubukiUnequipped.api_karyoku).toEqual([fubukiMaster.api_houg[0], fubukiMaster.api_houg[1]]);
+    expect(fubukiUnequipped.api_slot[0]).toBe(-1);
+  });
+
   it("matches organize scene get_member payload shapes expected by the client", async () => {
     const presetDeck = (await post("api_get_member/preset_deck")).json().api_data;
     const unsetSlot = (await post("api_get_member/unsetslot")).json().api_data;

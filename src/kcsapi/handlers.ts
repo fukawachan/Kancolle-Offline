@@ -72,11 +72,11 @@ register("api_get_member/material", (_input, context) => apiOk(toMaterials(conte
 register("api_get_member/deck", (_input, context) => apiOk(context.stateStore.getSave().decks.map(toDeck)));
 register("api_get_member/ship2", (_input, context) => {
   const save = context.stateStore.getSave();
-  return apiOk(save.ships.map(toShip));
+  return apiOk(save.ships.map((s) => toShip(s, save.slotItems)));
 });
 register("api_get_member/ship3", (_input, context) => {
   const save = context.stateStore.getSave();
-  return apiOk({ api_ship_data: save.ships.map(toShip), api_deck_data: save.decks.map(toDeck), api_slot_data: toUnsetSlot(save) });
+  return apiOk({ api_ship_data: save.ships.map((s) => toShip(s, save.slotItems)), api_deck_data: save.decks.map(toDeck), api_slot_data: toUnsetSlot(save) });
 });
 register("api_get_member/ship_deck", (input, context) => {
   const save = context.stateStore.getSave();
@@ -86,7 +86,7 @@ register("api_get_member/ship_deck", (input, context) => {
   const shipIds = new Set(decks.flatMap((deck) => deck.shipIds).filter((shipId) => shipId > 0));
   return apiOk({
     api_deck_data: decks.map(toDeck),
-    api_ship_data: save.ships.filter((ship) => shipIds.has(ship.id)).map(toShip)
+    api_ship_data: save.ships.filter((ship) => shipIds.has(ship.id)).map((s) => toShip(s, save.slotItems))
   });
 });
 register("api_get_member/slot_item", (_input, context) => apiOk(context.stateStore.getSave().slotItems.map(toSlotItem)));
@@ -112,10 +112,11 @@ register("api_req_init/nickname", (input, context) => {
   return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
 });
 register("api_req_init/firstship", (input, context) => {
+  const save = context.stateStore.getSave();
   const masterId = num(input.body.api_ship_id, 9);
   const ship = context.stateStore.createShip(masterId);
   context.stateStore.changeDeckShip(1, 0, ship.id);
-  return apiOk({ api_ship: toShip(ship), api_deck: context.stateStore.getSave().decks.map(toDeck) });
+  return apiOk({ api_ship: toShip(ship, save.slotItems), api_deck: save.decks.map(toDeck) });
 });
 register("api_req_member/updatecomment", (input, context) => {
   const player = context.stateStore.updateComment(str(input.body.api_cmt, ""));
@@ -161,48 +162,60 @@ register("api_req_hensei/preset_order_change", () => apiOk({}));
 
 register("api_req_hokyu/charge", (input, context) => {
   const ships = context.stateStore.supplyShips(csvNums(input.body.api_id_items, [1]));
-  return apiOk({ api_ship: ships.map(toShip), api_material: toMaterialValues(context.stateStore.getSave().materials), api_use_bou: 0 });
+  const save = context.stateStore.getSave();
+  return apiOk({ api_ship: ships.map((s) => toShip(s, save.slotItems)), api_material: toMaterialValues(save.materials), api_use_bou: 0 });
 });
 
 register("api_req_kaisou/slotset", (input, context) => {
+  const save = context.stateStore.getSave();
   const shipId = num(input.body.api_id, 1);
   const slotIndex = Math.trunc(num(input.body.api_slot_idx, 0));
   const itemId = num(input.body.api_item_id, -1);
-  const validation = validateSlotEquip(context.stateStore.getSave(), context.resourceManifest, shipId, slotIndex, itemId, "normal");
+  const validation = validateSlotEquip(save, context.resourceManifest, shipId, slotIndex, itemId, "normal");
   if (!validation.ok) return apiError(validation.message, 400);
   const ship = context.stateStore.equipSlotItem(shipId, slotIndex, itemId);
-  return ship ? apiOk(toShip(ship)) : apiError("Unknown ship", 404);
+  return ship ? apiOk(toShip(ship, save.slotItems)) : apiError("Unknown ship", 404);
 });
 register("api_req_kaisou/slotset_ex", (input, context) => {
+  const save = context.stateStore.getSave();
   const shipId = num(input.body.api_id, 1);
   const itemId = num(input.body.api_item_id, -1);
-  const validation = validateSlotEquip(context.stateStore.getSave(), context.resourceManifest, shipId, 0, itemId, "extra");
+  const validation = validateSlotEquip(save, context.resourceManifest, shipId, 0, itemId, "extra");
   if (!validation.ok) return apiError(validation.message, 400);
   const ship = context.stateStore.equipExSlotItem(shipId, itemId);
-  return ship ? apiOk(toShip(ship)) : apiError("Unknown ship", 404);
+  return ship ? apiOk(toShip(ship, save.slotItems)) : apiError("Unknown ship", 404);
 });
-register("api_req_kaisou/unsetslot_all", (input, context) => apiOk(toShip(context.stateStore.unsetAllSlots(num(input.body.api_id ?? input.body.api_ship_id, 1))!)));
-register("api_req_kaisou/slot_exchange_index", (input, context) => apiOk(toShip(context.stateStore.exchangeSlotIndex(num(input.body.api_id, 1), num(input.body.api_slot_idx, 0), num(input.body.api_change_idx, 1))!)));
+register("api_req_kaisou/unsetslot_all", (input, context) => {
+  const save = context.stateStore.getSave();
+  return apiOk(toShip(context.stateStore.unsetAllSlots(num(input.body.api_id ?? input.body.api_ship_id, 1))!, save.slotItems));
+});
+register("api_req_kaisou/slot_exchange_index", (input, context) => {
+  const save = context.stateStore.getSave();
+  return apiOk(toShip(context.stateStore.exchangeSlotIndex(num(input.body.api_id, 1), num(input.body.api_slot_idx, 0), num(input.body.api_change_idx, 1))!, save.slotItems));
+});
 register("api_req_kaisou/slot_deprive", (input, context) => {
+  const save = context.stateStore.getSave();
   const unsetShipId = num(input.body.api_unset_ship, 1);
   const unsetIndex = Math.trunc(num(input.body.api_unset_idx, 0));
   const setShipId = num(input.body.api_set_ship, 1);
   const setIndex = Math.trunc(num(input.body.api_set_idx, 0));
   const itemId = num(input.body.api_item_id, 1);
-  const validation = validateSlotEquip(context.stateStore.getSave(), context.resourceManifest, setShipId, setIndex, itemId, "normal");
+  const validation = validateSlotEquip(save, context.resourceManifest, setShipId, setIndex, itemId, "normal");
   if (!validation.ok) return apiError(validation.message, 400);
   const unset = context.stateStore.equipSlotItem(unsetShipId, unsetIndex, -1);
   const set = context.stateStore.equipSlotItem(setShipId, setIndex, itemId);
-  return apiOk({ api_unset_ship: unset ? toShip(unset) : null, api_set_ship: set ? toShip(set) : null });
+  return apiOk({ api_unset_ship: unset ? toShip(unset, save.slotItems) : null, api_set_ship: set ? toShip(set, save.slotItems) : null });
 });
 register("api_req_kaisou/lock", (input, context) => apiOk({ api_locked: context.stateStore.lockSlotItem(num(input.body.api_slotitem_id ?? input.body.api_item_id, 1)) }));
 register("api_req_kaisou/powerup", (input, context) => {
+  const save = context.stateStore.getSave();
   const ship = context.stateStore.modernizeShip(num(input.body.api_id, 1), csvNums(input.body.api_id_items, []));
-  return apiOk({ api_powerup_flag: 1, api_ship: ship ? toShip(ship) : null });
+  return apiOk({ api_powerup_flag: 1, api_ship: ship ? toShip(ship, save.slotItems) : null });
 });
 register("api_req_kaisou/remodeling", (input, context) => {
+  const save = context.stateStore.getSave();
   const ship = context.stateStore.remodelShip(num(input.body.api_id, 1), num(input.body.api_aftershipid, 54));
-  return apiOk({ api_after_ship: ship ? toShip(ship) : null });
+  return apiOk({ api_after_ship: ship ? toShip(ship, save.slotItems) : null });
 });
 register("api_req_kaisou/preset_slot_register", () => apiOk({ api_preset_no: 1 }));
 register("api_req_kaisou/preset_slot_select", () => apiOk({ api_ship: [] }));
@@ -265,8 +278,9 @@ register("api_req_kousyou/createship", (input, context) => {
 });
 register("api_req_kousyou/createship_speedchange", (input, context) => apiOk({ api_kdock: toBuildDock(context.stateStore.speedBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1))!) }));
 register("api_req_kousyou/getship", (input, context) => {
+  const save = context.stateStore.getSave();
   const ship = context.stateStore.claimBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1));
-  return apiOk({ api_ship: toShip(ship), api_kdock: context.stateStore.getSave().buildDocks.map(toBuildDock), api_slotitem: [] });
+  return apiOk({ api_ship: toShip(ship, save.slotItems), api_kdock: save.buildDocks.map(toBuildDock), api_slotitem: [] });
 });
 register("api_req_kousyou/destroyship", (input, context) => apiOk({ api_material: toMaterialValues(context.stateStore.destroyShip(csvNums(input.body.api_ship_id, [1]))) }));
 register("api_req_kousyou/open_new_dock", () => apiOk({ api_opened: 1 }));

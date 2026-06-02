@@ -91,7 +91,7 @@ export function handleListSlotItemMasters(query: MasterListQuery) {
 
 export function handleListPlayerShips(stateStore: StateStore) {
   const save = stateStore.getSave();
-  return apiOk(save.ships.map(toShip));
+  return apiOk(save.ships.map((s) => toShip(s, save.slotItems)));
 }
 
 export function handleListPlayerSlotItems(stateStore: StateStore) {
@@ -111,8 +111,9 @@ export function handleAddShip(params: { masterId?: unknown }, stateStore: StateS
   }
 
   const ship = stateStore.createShip(masterId);
+  const save = stateStore.getSave();
   return apiOk({
-    ship: toShip(ship),
+    ship: toShip(ship, save.slotItems),
     message: `Created ship: ${master.api_name} (ID: ${master.api_id})`,
   });
 }
