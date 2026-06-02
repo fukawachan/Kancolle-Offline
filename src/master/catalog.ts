@@ -52,19 +52,8 @@ export function buildSlotEquipTypes(slotItems: SlotMaster[]): SlotEquipType[] {
 }
 
 export function buildShipTypes(slotItems: SlotMaster[]): ShipTypeMaster[] {
-  const equipTypes = Object.fromEntries(
-    [...new Set(slotItems.map((item) => Number(item.api_type[2])).filter((type) => Number.isFinite(type) && type > 0))]
-      .sort((a, b) => a - b)
-      .map((type) => [type, 1])
-  );
-
-  return masterData.api_mst_stype.map((shipType) => ({
-    ...shipType,
-    api_equip_type: {
-      ...shipType.api_equip_type,
-      ...equipTypes
-    }
-  }));
+  void slotItems;
+  return masterData.api_mst_stype.map((shipType) => ({ ...shipType, api_equip_type: { ...shipType.api_equip_type } }));
 }
 
 export function shipPictureBookPage(resourceManifest: ResourceManifest, pageNo: number) {

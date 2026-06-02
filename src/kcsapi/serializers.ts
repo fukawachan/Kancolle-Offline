@@ -97,7 +97,7 @@ export function toShip(ship: Ship) {
     api_backs: master?.api_backs ?? 1,
     api_fuel: ship.fuel,
     api_bull: ship.ammo,
-    api_slotnum: 3,
+    api_slotnum: master?.api_slot_num ?? 0,
     api_ndock_time: 0,
     api_ndock_item: [0, 0],
     api_srate: 0,

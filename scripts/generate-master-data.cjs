@@ -7,10 +7,11 @@ const path = require("path");
 
 const EQUIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/wiki/equipment.json";
 const SHIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/wiki/ship.json";
+const START2_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/api/api_start2.json";
 const CACHE_DIR = path.join(__dirname, "..", ".local", "wiki-cache");
 
 function getCachePath(url) {
-  const filename = url.includes("equipment") ? "equipment.json" : "ship.json";
+  const filename = url.includes("api_start2") ? "api_start2.json" : url.includes("equipment") ? "equipment.json" : "ship.json";
   return path.join(CACHE_DIR, filename);
 }
 
@@ -200,6 +201,10 @@ async function main() {
   const shipData = await fetch(SHIP_URL);
   console.log(`  Got ${Object.keys(shipData).length} ship entries`);
 
+  console.log("Fetching start2 equipment rule data...");
+  const start2Data = await fetch(START2_URL);
+  console.log(`  Got ${Object.keys(start2Data).length} start2 master sections`);
+
   // Map equipment
   const equipment = Object.values(equipData)
     .map(mapEquipment)
@@ -259,74 +264,12 @@ async function main() {
   const uniqueShips = [...shipById.values()].sort((a, b) => a.api_id - b.api_id);
   console.log(`  ${uniqueShips.length} unique ships after dedup`);
 
-  // Build ship types from ships
-  const shipTypes = buildShipTypes(uniqueShips);
-
-  // Build equipment types from equipment
-  const equipTypeNames = {
-    1: "Small Caliber Main Gun",
-    2: "Medium Caliber Main Gun",
-    3: "Large Caliber Main Gun",
-    4: "Secondary Gun",
-    5: "Torpedo",
-    6: "Carrier-Based Fighter",
-    7: "Carrier-Based Dive Bomber",
-    8: "Carrier-Based Torpedo Bomber",
-    9: "Carrier-Based Reconnaissance Aircraft",
-    10: "Reconnaissance Seaplane",
-    11: "Seaplane Bomber",
-    12: "Small Radar",
-    13: "Large Radar",
-    14: "Sonar",
-    15: "Depth Charge",
-    16: "Extra Armor",
-    17: "Engine",
-    18: "Anti-Aircraft Shell",
-    19: "Armor-Piercing Shell",
-    20: "VT Fuze",
-    21: "Anti-Aircraft Gun",
-    22: "Midget Submarine",
-    23: "Damage Control",
-    24: "Landing Craft",
-    25: "Autogyro",
-    26: "Anti-Submarine Patrol Aircraft",
-    27: "Bulge (Medium)",
-    28: "Bulge (Large)",
-    29: "Searchlight",
-    30: "Drum Canister",
-    31: "Repair Facility",
-    32: "Flame Thrower",
-    33: "Supply Transport Container",
-    34: "Arctic Operation Camouflage",
-    35: "Anti-Aircraft Fire Director",
-    36: "High-Angle Gun Mount",
-    37: "Anti-Aircraft Rocket Launcher",
-    38: "Large Sonar",
-    39: "Large Searchlight",
-    40: "Large Radar (II)",
-    41: "Large Searchlight (II)",
-    42: "Skilled Pilot",
-    43: "Enhanced Boiler",
-    44: "Enhanced Steam Boiler",
-    45: "Ship Repair Facility",
-    46: "Skilled Pilot (II)",
-    47: "Night Operation Aviation Personnel",
-    48: "Large Search Radar (III)",
-    49: "Naval Mine",
-  };
-
-  const equipTypes = new Map();
-  for (const e of uniqueEquipment) {
-    const typeId = e.api_type[2];
-    if (!equipTypes.has(typeId)) {
-      equipTypes.set(typeId, {
-        api_id: typeId,
-        api_name: equipTypeNames[typeId] || `Equipment Type ${typeId}`,
-        api_show_flg: 1,
-      });
-    }
-  }
-  const uniqueEquipTypes = [...equipTypes.values()].sort((a, b) => a.api_id - b.api_id);
+  const shipTypes = start2Data.api_mst_stype || buildShipTypes(uniqueShips);
+  const uniqueEquipTypes = start2Data.api_mst_slotitem_equiptype || [];
+  const equipExslot = start2Data.api_mst_equip_exslot || [];
+  const equipExslotShip = start2Data.api_mst_equip_exslot_ship || {};
+  const equipLimitExslot = start2Data.api_mst_equip_limit_exslot || {};
+  const equipShip = start2Data.api_mst_equip_ship || {};
 
   // ---- Generate TypeScript ----
   const ts = [];
@@ -373,6 +316,14 @@ async function main() {
   ts.push("];");
   ts.push("");
 
+  ts.push("// ---- Equipment Rule Masters ----");
+  ts.push("");
+  ts.push(`export const EQUIP_EXSLOT = ${JSON.stringify(equipExslot)};`);
+  ts.push(`export const EQUIP_EXSLOT_SHIP = ${JSON.stringify(equipExslotShip)};`);
+  ts.push(`export const EQUIP_LIMIT_EXSLOT = ${JSON.stringify(equipLimitExslot)};`);
+  ts.push(`export const EQUIP_SHIP = ${JSON.stringify(equipShip)};`);
+  ts.push("");
+
   // Write output
   const outPath = path.join(__dirname, "..", "src", "master", "generated-data.ts");
   fs.writeFileSync(outPath, ts.join("\n"));
@@ -381,6 +332,7 @@ async function main() {
   console.log(`  Ships: ${uniqueShips.length}`);
   console.log(`  Ship Types: ${shipTypes.length}`);
   console.log(`  Equip Types: ${uniqueEquipTypes.length}`);
+  console.log(`  Equip Ship Rules: ${Object.keys(equipShip).length}`);
 
   // Quick validation
   const expectedEquipIds = [1, 2, 3, 4, 10, 37, 46];

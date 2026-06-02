@@ -15,6 +15,7 @@ import { masterData } from "../master/data.js";
 import type { ResourceManifest } from "../resources/types.js";
 import type { StateStore } from "../state/store.js";
 import type { SaveState } from "../state/types.js";
+import { validateSlotEquip } from "./equipment-rules.js";
 import { apiError, apiOk, parseApiPayload } from "./envelope.js";
 import {
   normalizePortBgmId,
@@ -162,13 +163,35 @@ register("api_req_hokyu/charge", (input, context) => {
   return apiOk({ api_ship: ships.map(toShip), api_material: toMaterialValues(context.stateStore.getSave().materials), api_use_bou: 0 });
 });
 
-register("api_req_kaisou/slotset", (input, context) => apiOk(toShip(context.stateStore.equipSlotItem(num(input.body.api_id, 1), num(input.body.api_slot_idx, 0), num(input.body.api_item_id, -1))!)));
-register("api_req_kaisou/slotset_ex", (input, context) => apiOk(toShip(context.stateStore.equipExSlotItem(num(input.body.api_id, 1), num(input.body.api_item_id, -1))!)));
+register("api_req_kaisou/slotset", (input, context) => {
+  const shipId = num(input.body.api_id, 1);
+  const slotIndex = Math.trunc(num(input.body.api_slot_idx, 0));
+  const itemId = num(input.body.api_item_id, -1);
+  const validation = validateSlotEquip(context.stateStore.getSave(), context.resourceManifest, shipId, slotIndex, itemId, "normal");
+  if (!validation.ok) return apiError(validation.message, 400);
+  const ship = context.stateStore.equipSlotItem(shipId, slotIndex, itemId);
+  return ship ? apiOk(toShip(ship)) : apiError("Unknown ship", 404);
+});
+register("api_req_kaisou/slotset_ex", (input, context) => {
+  const shipId = num(input.body.api_id, 1);
+  const itemId = num(input.body.api_item_id, -1);
+  const validation = validateSlotEquip(context.stateStore.getSave(), context.resourceManifest, shipId, 0, itemId, "extra");
+  if (!validation.ok) return apiError(validation.message, 400);
+  const ship = context.stateStore.equipExSlotItem(shipId, itemId);
+  return ship ? apiOk(toShip(ship)) : apiError("Unknown ship", 404);
+});
 register("api_req_kaisou/unsetslot_all", (input, context) => apiOk(toShip(context.stateStore.unsetAllSlots(num(input.body.api_id ?? input.body.api_ship_id, 1))!)));
 register("api_req_kaisou/slot_exchange_index", (input, context) => apiOk(toShip(context.stateStore.exchangeSlotIndex(num(input.body.api_id, 1), num(input.body.api_slot_idx, 0), num(input.body.api_change_idx, 1))!)));
 register("api_req_kaisou/slot_deprive", (input, context) => {
-  const unset = context.stateStore.equipSlotItem(num(input.body.api_unset_ship, 1), num(input.body.api_unset_idx, 0), -1);
-  const set = context.stateStore.equipSlotItem(num(input.body.api_set_ship, 1), num(input.body.api_set_idx, 0), num(input.body.api_item_id, 1));
+  const unsetShipId = num(input.body.api_unset_ship, 1);
+  const unsetIndex = Math.trunc(num(input.body.api_unset_idx, 0));
+  const setShipId = num(input.body.api_set_ship, 1);
+  const setIndex = Math.trunc(num(input.body.api_set_idx, 0));
+  const itemId = num(input.body.api_item_id, 1);
+  const validation = validateSlotEquip(context.stateStore.getSave(), context.resourceManifest, setShipId, setIndex, itemId, "normal");
+  if (!validation.ok) return apiError(validation.message, 400);
+  const unset = context.stateStore.equipSlotItem(unsetShipId, unsetIndex, -1);
+  const set = context.stateStore.equipSlotItem(setShipId, setIndex, itemId);
   return apiOk({ api_unset_ship: unset ? toShip(unset) : null, api_set_ship: set ? toShip(set) : null });
 });
 register("api_req_kaisou/lock", (input, context) => apiOk({ api_locked: context.stateStore.lockSlotItem(num(input.body.api_slotitem_id ?? input.body.api_item_id, 1)) }));

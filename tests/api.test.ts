@@ -59,7 +59,7 @@ describe("local kcsapi endpoints", () => {
       api_mst_const: expect.any(Object),
       api_mst_slotitem_equiptype: expect.any(Array),
       api_mst_furnituregraph: expect.any(Array),
-      api_mst_equip_ship: expect.any(Array),
+      api_mst_equip_ship: expect.any(Object),
       api_mst_equip_limit_exslot: expect.any(Object),
       api_mst_shipgraph: expect.any(Array)
     });
@@ -111,6 +111,11 @@ describe("local kcsapi endpoints", () => {
     expect((slotById.get(10) as any).api_type[2]).toBe(4);  // Secondary Gun
     expect((slotById.get(37) as any).api_type[2]).toBe(21); // Anti-Aircraft Gun
     expect((slotById.get(46) as any).api_type[2]).toBe(14); // Sonar
+    const shipTypeById = new Map(start2Data.api_mst_stype.map((shipType: any) => [shipType.api_id, shipType]));
+    const destroyerEquipTypes = (shipTypeById.get(2) as any).api_equip_type;
+    expect(destroyerEquipTypes["1"]).toBe(1);
+    expect(destroyerEquipTypes["6"]).toBe(0);
+    expect(Object.keys(start2Data.api_mst_equip_ship).length).toBeGreaterThan(0);
     // Default slot items should match new account equipment
     const port = (await post("api_port/port")).json().api_data;
     const slotItemMasterIds = (await post("api_get_member/slot_item")).json().api_data
@@ -300,6 +305,16 @@ describe("local kcsapi endpoints", () => {
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_slot[0]).toBe(1);
     expect(quests.api_list.find((quest: any) => quest.api_no === 101).api_state).toBe(2);
     expect(furniture.api_set).toMatchObject({ api_floor: 1, api_wall: 2, api_window: 3 });
+  });
+
+  it("rejects equipment that the target ship cannot equip", async () => {
+    const fighter = store.createSlotItem(19);
+    const response = await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: fighter.id });
+    const port = (await post("api_port/port")).json().api_data;
+    const ship = port.api_ship.find((item: any) => item.api_id === 1);
+
+    expect(response.json()).toMatchObject({ api_result: 400 });
+    expect(ship.api_slot[0]).toBe(-1);
   });
 
   it("matches organize scene get_member payload shapes expected by the client", async () => {

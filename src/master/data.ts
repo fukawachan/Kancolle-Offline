@@ -1,4 +1,13 @@
-import { SHIPS, SLOT_ITEMS, SHIP_TYPES, EQUIP_TYPES } from "./generated-data.js";
+import {
+  EQUIP_EXSLOT,
+  EQUIP_EXSLOT_SHIP,
+  EQUIP_LIMIT_EXSLOT,
+  EQUIP_SHIP,
+  EQUIP_TYPES,
+  SHIPS,
+  SHIP_TYPES,
+  SLOT_ITEMS
+} from "./generated-data.js";
 
 export const masterData = {
   api_mst_ship: SHIPS,
@@ -61,10 +70,10 @@ export const masterData = {
   },
   api_mst_shipupgrade: [],
   api_mst_bgm_season: [],
-  api_mst_equip_exslot: [],
-  api_mst_equip_exslot_ship: {},
-  api_mst_equip_limit_exslot: {},
-  api_mst_equip_ship: [],
+  api_mst_equip_exslot: EQUIP_EXSLOT,
+  api_mst_equip_exslot_ship: EQUIP_EXSLOT_SHIP,
+  api_mst_equip_limit_exslot: EQUIP_LIMIT_EXSLOT,
+  api_mst_equip_ship: EQUIP_SHIP,
   api_mst_item_shop: { api_cabinet_1: [], api_cabinet_2: [] },
   api_mst_mapcell: [
     { api_id: 1, api_maparea_id: 1, api_mapinfo_no: 1, api_no: 1, api_color_no: 5 },
