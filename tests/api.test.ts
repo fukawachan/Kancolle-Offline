@@ -285,10 +285,10 @@ describe("local kcsapi endpoints", () => {
     const destroyItem = (await post("api_req_kousyou/destroyitem2", { api_slotitem_ids: "2" })).json().api_data;
     const destroyShip = (await post("api_req_kousyou/destroyship", { api_ship_id: "2" })).json().api_data;
 
-    expect(charge.api_material).toEqual([980, 980, 1000, 1000, 10, 10, 50, 5]);
-    expect(craft.api_material).toEqual([970, 970, 990, 990, 10, 10, 49, 5]);
+    expect(charge.api_material).toEqual([985, 980, 1000, 1000, 10, 10, 50, 5]);
+    expect(craft.api_material).toEqual([975, 970, 990, 990, 10, 10, 49, 5]);
     expect(destroyItem.api_get_material).toEqual([1, 1, 2, 0]);
-    expect(destroyShip.api_material).toEqual([972, 972, 994, 990, 10, 10, 49, 5]);
+    expect(destroyShip.api_material).toEqual([977, 972, 994, 990, 10, 10, 49, 5]);
   });
 
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
@@ -311,6 +311,20 @@ describe("local kcsapi endpoints", () => {
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_slot[0]).toBe(1);
     expect(quests.api_list.find((quest: any) => quest.api_no === 101).api_state).toBe(2);
     expect(furniture.api_set).toMatchObject({ api_floor: 1, api_wall: 2, api_window: 3 });
+  });
+
+  it("returns api_fuel_max and api_bull_max in ship data matching master values", async () => {
+    const port = (await post("api_port/port")).json().api_data;
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    const shipMasterById = new Map(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
+
+    for (const ship of port.api_ship) {
+      const master: any = shipMasterById.get(ship.api_ship_id);
+      expect(ship).toHaveProperty("api_fuel_max");
+      expect(ship).toHaveProperty("api_bull_max");
+      expect(ship.api_fuel_max).toBe(master.api_fuel_max);
+      expect(ship.api_bull_max).toBe(master.api_bull_max);
+    }
   });
 
   it("rejects equipment that the target ship cannot equip", async () => {

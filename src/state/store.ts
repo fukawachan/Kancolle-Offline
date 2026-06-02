@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
+import { masterData } from "../master/data.js";
 import type {
   BuildDock,
   Deck,
@@ -150,14 +151,17 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       let fuel = 0;
       let ammo = 0;
-      const update = db.prepare("UPDATE ships SET fuel = ?, ammo = ? WHERE id = ?");
+      const update = db.prepare("UPDATE ships SET fuel = ?, ammo = ?, max_fuel = ?, max_ammo = ? WHERE id = ?");
       const tx = db.transaction(() => {
         for (const shipId of shipIds) {
           const ship = save.ships.find((item) => item.id === shipId);
           if (!ship) continue;
-          fuel += Math.max(0, ship.maxFuel - ship.fuel);
-          ammo += Math.max(0, ship.maxAmmo - ship.ammo);
-          update.run(ship.maxFuel, ship.maxAmmo, ship.id);
+          const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
+          const targetFuel = master?.api_fuel_max ?? ship.maxFuel;
+          const targetAmmo = master?.api_bull_max ?? ship.maxAmmo;
+          fuel += Math.max(0, targetFuel - ship.fuel);
+          ammo += Math.max(0, targetAmmo - ship.ammo);
+          update.run(targetFuel, targetAmmo, targetFuel, targetAmmo, ship.id);
         }
         consumeMaterials(db, { fuel, ammo });
       });
@@ -341,6 +345,22 @@ function migrate(db: Database.Database) {
   }
 
   createSchema(db);
+  repairShipMaxValues(db);
+}
+
+function repairShipMaxValues(db: Database.Database) {
+  const ships = db.prepare("SELECT id, master_id, max_fuel, max_ammo FROM ships").all() as Row[];
+  const update = db.prepare("UPDATE ships SET max_fuel = ?, max_ammo = ? WHERE id = ?");
+  for (const row of ships) {
+    const masterId = Number(row.master_id);
+    const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
+    if (!master) continue;
+    const expectedFuel = master.api_fuel_max;
+    const expectedAmmo = master.api_bull_max;
+    if (Number(row.max_fuel) !== expectedFuel || Number(row.max_ammo) !== expectedAmmo) {
+      update.run(expectedFuel, expectedAmmo, Number(row.id));
+    }
+  }
 }
 
 function schemaVersion(db: Database.Database) {
@@ -501,9 +521,13 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
     ).run();
 
     for (const masterId of [9, 10, 1, 2]) {
+      const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
+      const maxHp = masterId === 9 || masterId === 10 ? 15 : 13;
+      const maxFuel = master?.api_fuel_max ?? 20;
+      const maxAmmo = master?.api_bull_max ?? 20;
       db.prepare(
         "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, 0, ?, 0, ?, 0, ?, -1, ?)"
-      ).run(masterId, masterId === 9 || masterId === 10 ? 15 : 13, masterId === 9 || masterId === 10 ? 15 : 13, 20, 20, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
+      ).run(masterId, maxHp, maxHp, maxFuel, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
     }
 
     for (const masterId of [1, 1, 2, 46]) {
@@ -711,10 +735,13 @@ function createSlotItem(db: Database.Database, masterId: number): SlotItem {
 }
 
 function createShip(db: Database.Database, masterId: number): Ship {
+  const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
   const maxHp = masterId === 89 ? 74 : masterId === 45 ? 26 : 15;
+  const maxFuel = master?.api_fuel_max ?? 20;
+  const maxAmmo = master?.api_bull_max ?? 20;
   const info = db.prepare(
-    "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, 0, 20, 0, 20, 0, ?, -1, '{}')"
-  ).run(masterId, maxHp, maxHp, JSON.stringify([-1, -1, -1, -1, -1]));
+    "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, 0, ?, 0, ?, 0, ?, -1, '{}')"
+  ).run(masterId, maxHp, maxHp, maxFuel, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]));
   return mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
 }
 
