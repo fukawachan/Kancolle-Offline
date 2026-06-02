@@ -96,6 +96,26 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 77)).toMatchObject({
       api_filename: "skgpomqtcedb"
     });
+    // Equipment name–ID mappings must match cached resource IDs
+    const slotById = new Map(start2Data.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
+    expect(slotById.get(1)).toMatchObject({ api_name: "12cm単装砲", api_yomi: "12cm Single Gun Mount" });
+    expect(slotById.get(2)).toMatchObject({ api_name: "12.7cm連装砲", api_yomi: "12.7cm Twin Gun Mount" });
+    expect(slotById.get(3)).toMatchObject({ api_name: "10cm連装高角砲", api_yomi: "10cm Twin High-angle Gun Mount" });
+    expect(slotById.get(4)).toMatchObject({ api_name: "14cm単装砲", api_yomi: "14cm Single Gun Mount" });
+    expect(slotById.get(10)).toMatchObject({ api_name: "12.7cm連装高角砲", api_yomi: "12.7cm Twin High-angle Gun Mount" });
+    expect(slotById.get(37)).toMatchObject({ api_name: "7.7mm機銃", api_yomi: "7.7mm Machine Gun" });
+    expect(slotById.get(46)).toMatchObject({ api_name: "九三式水中聴音機", api_yomi: "Type 93 Passive Sonar" });
+    // Equipment type IDs must be consistent
+    expect((slotById.get(1) as any).api_type[2]).toBe(1);   // Small Caliber Main Gun
+    expect((slotById.get(4) as any).api_type[2]).toBe(2);   // Medium Caliber Main Gun
+    expect((slotById.get(10) as any).api_type[2]).toBe(4);  // Secondary Gun
+    expect((slotById.get(37) as any).api_type[2]).toBe(21); // Anti-Aircraft Gun
+    expect((slotById.get(46) as any).api_type[2]).toBe(14); // Sonar
+    // Default slot items should match new account equipment
+    const port = (await post("api_port/port")).json().api_data;
+    const slotItemMasterIds = (await post("api_get_member/slot_item")).json().api_data
+      .map((item: any) => item.api_slotitem_id);
+    expect(slotItemMasterIds).toEqual([1, 1, 2, 46]);
     expect(start2Data.api_mst_furnituregraph).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ api_id: 1, api_no: 1, api_filename: "8807" }),

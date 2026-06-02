@@ -506,7 +506,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       ).run(masterId, masterId === 9 || masterId === 10 ? 15 : 13, masterId === 9 || masterId === 10 ? 15 : 13, 20, 20, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
     }
 
-    for (const masterId of [1, 1, 2, 10]) {
+    for (const masterId of [1, 1, 2, 46]) {
       db.prepare("INSERT INTO slot_items (master_id, level, proficiency, locked) VALUES (?, 0, 0, 0)").run(masterId);
     }
 
