@@ -52,4 +52,27 @@ describe("cached resource manifest", () => {
     });
     expect(manifest.bgm.port.has(1)).toBe(false);
   });
+
+  it("derives ship voice availability from cache-backed sound files", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    const fubuki = manifest.voice.byShipId.get(9);
+    expect(fubuki).toMatchObject({
+      shipId: 9,
+      key: "gyckjmemgqoe"
+    });
+    expect(fubuki?.availableVoiceNos.has(1)).toBe(true);
+    expect(fubuki?.availableVoiceNos.has(28)).toBe(true);
+    expect(fubuki?.availableVoiceNos.has(29)).toBe(false);
+    expect(fubuki?.files.has("105230")).toBe(false);
+
+    const ship179 = manifest.voice.byShipId.get(179);
+    expect(ship179).toMatchObject({
+      shipId: 179,
+      key: "qgkjswznylty"
+    });
+    expect(ship179?.availableVoiceNos.has(18)).toBe(true);
+    expect(ship179?.availableVoiceNos.has(29)).toBe(true);
+    expect(ship179?.files.has("105230")).toBe(true);
+  });
 });

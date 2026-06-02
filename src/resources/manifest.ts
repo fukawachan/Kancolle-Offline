@@ -4,6 +4,13 @@ import type { CachedResourceMeta, FileResource, ResourceManifest } from "./types
 
 type CacheIndex = Record<string, CachedResourceMeta>;
 
+const VOICE_FILE_HASHES = [
+  2475, 6547, 1471, 8691, 7847, 3595, 1767, 3311, 2507, 9651, 5321, 4473, 7117, 5947, 9489, 2669,
+  8741, 6149, 1301, 7297, 2975, 6413, 8391, 9705, 2243, 2091, 4231, 3107, 9499, 4205, 6013, 3393,
+  6401, 6985, 3683, 9447, 3287, 5181, 7587, 9353, 2135, 4947, 5405, 5223, 9457, 5767, 9265, 8191,
+  3927, 3061, 2805, 3273, 7331
+] as const;
+
 export async function createResourceManifest(cacheDir: string): Promise<ResourceManifest> {
   const resolvedCacheDir = path.resolve(cacheDir);
   const index = await readCacheIndex(resolvedCacheDir);
@@ -14,9 +21,18 @@ export async function createResourceManifest(cacheDir: string): Promise<Resource
     addSlotResource(manifest, resolvedCacheDir, pathname, meta);
     addFurnitureResource(manifest, resolvedCacheDir, pathname, meta);
     addBgmResource(manifest, resolvedCacheDir, pathname, meta);
+    addVoiceResource(manifest, pathname);
   }
 
+  attachShipVoiceResources(manifest);
+
   return manifest;
+}
+
+export function voiceFileName(shipId: number, voiceNo: number): string {
+  const hash = VOICE_FILE_HASHES[voiceNo - 1];
+  if (!hash) return String(voiceNo);
+  return String((17 * (shipId + 7) * hash) % 0x18365 + 0x186a0);
 }
 
 export function resolveMappedResource(pathname: string, manifest: ResourceManifest): FileResource | undefined {
@@ -76,6 +92,10 @@ function emptyManifest(): ResourceManifest {
     },
     bgm: {
       port: new Map()
+    },
+    voice: {
+      byShipId: new Map(),
+      byKey: new Map()
     }
   };
 }
@@ -202,6 +222,44 @@ function addBgmResource(manifest: ResourceManifest, cacheDir: string, pathname: 
       extension: "mp3"
     })
   );
+}
+
+function addVoiceResource(manifest: ResourceManifest, pathname: string) {
+  const match = pathname.match(/^\/kcs\/sound\/kc([a-z]+)\/(\d+)\.mp3$/i);
+  if (!match) return;
+
+  const key = match[1];
+  const file = match[2];
+  const voice = manifest.voice.byKey.get(key) ?? {
+    key,
+    files: new Set<string>(),
+    availableVoiceNos: new Set<number>()
+  };
+  voice.files.add(file);
+  manifest.voice.byKey.set(key, voice);
+}
+
+function attachShipVoiceResources(manifest: ResourceManifest) {
+  for (const [shipId, full] of manifest.ship.full) {
+    if (!full.filename) continue;
+
+    const voice = manifest.voice.byKey.get(full.filename);
+    if (!voice) continue;
+
+    voice.shipId = shipId;
+    voice.availableVoiceNos = availableVoiceNos(shipId, voice.files);
+    manifest.voice.byShipId.set(shipId, voice);
+  }
+}
+
+function availableVoiceNos(shipId: number, files: Set<string>) {
+  const available = new Set<number>();
+  for (let voiceNo = 1; voiceNo <= VOICE_FILE_HASHES.length; voiceNo += 1) {
+    if (files.has(voiceFileName(shipId, voiceNo))) {
+      available.add(voiceNo);
+    }
+  }
+  return available;
 }
 
 function resource(

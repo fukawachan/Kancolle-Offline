@@ -43,9 +43,22 @@ export type BgmResourceManifest = {
   port: Map<number, FileResource>;
 };
 
+export type ShipVoiceResource = {
+  shipId?: number;
+  key: string;
+  files: Set<string>;
+  availableVoiceNos: Set<number>;
+};
+
+export type VoiceResourceManifest = {
+  byShipId: Map<number, ShipVoiceResource>;
+  byKey: Map<string, ShipVoiceResource>;
+};
+
 export type ResourceManifest = {
   ship: ShipResourceManifest;
   slot: SlotResourceManifest;
   furniture: FurnitureResourceManifest;
   bgm: BgmResourceManifest;
+  voice: VoiceResourceManifest;
 };
