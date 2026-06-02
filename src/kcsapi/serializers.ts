@@ -273,6 +273,7 @@ export function toUseItems(materials: Materials) {
     { api_id: 2, api_count: materials.buildKit },
     { api_id: 3, api_count: materials.devmat },
     { api_id: 4, api_count: materials.screw },
+    { api_id: 49, api_count: 0 },
     { api_id: 54, api_count: 0 },
     { api_id: 59, api_count: 0 }
   ];
