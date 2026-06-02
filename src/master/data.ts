@@ -65,7 +65,9 @@ export const masterData = {
     { api_id: 4, api_usetype: 2, api_category: 1, api_name: "Improvement Material", api_description: ["Used for equipment improvement."] },
     { api_id: 49, api_usetype: 2, api_category: 1, api_name: "ドック開放キー", api_description: ["入渠ドックを開放するためのアイテムです。"] },
     { api_id: 54, api_usetype: 4, api_category: 1, api_name: "Mamiya", api_description: ["Restores fleet morale."] },
-    { api_id: 59, api_usetype: 4, api_category: 1, api_name: "Irako", api_description: ["Restores ship morale."] }
+    { api_id: 55, api_usetype: 2, api_category: 1, api_name: "ケッコン指輪", api_description: ["艦娘とケッコンカッコカリするための指輪です。"] },
+    { api_id: 59, api_usetype: 4, api_category: 1, api_name: "Irako", api_description: ["Restores ship morale."] },
+    { api_id: 64, api_usetype: 2, api_category: 1, api_name: "補強増設", api_description: ["艦娘のスロットを増設するためのアイテムです。"] }
   ],
   api_mst_payitem: [],
   api_mst_bgm: [

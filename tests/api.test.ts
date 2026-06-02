@@ -140,12 +140,14 @@ describe("local kcsapi endpoints", () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const useitemById = new Map(start2.api_mst_useitem.map((item: any) => [item.api_id, item]));
 
-    expect([...useitemById.keys()]).toEqual(expect.arrayContaining([31, 32, 33, 34, 49]));
+    expect([...useitemById.keys()]).toEqual(expect.arrayContaining([31, 32, 33, 34, 49, 55, 64]));
     expect(useitemById.get(31)).toMatchObject({ api_id: 31, api_usetype: 0, api_category: 0, api_name: "燃料" });
     expect(useitemById.get(32)).toMatchObject({ api_id: 32, api_usetype: 0, api_category: 0, api_name: "弾薬" });
     expect(useitemById.get(33)).toMatchObject({ api_id: 33, api_usetype: 0, api_category: 0, api_name: "鋼材" });
     expect(useitemById.get(34)).toMatchObject({ api_id: 34, api_usetype: 0, api_category: 0, api_name: "ボーキサイト" });
     expect(useitemById.get(49)).toMatchObject({ api_id: 49, api_name: "ドック開放キー", api_description: [expect.any(String)] });
+    expect(useitemById.get(55)).toMatchObject({ api_id: 55, api_name: "ケッコン指輪", api_description: [expect.any(String)] });
+    expect(useitemById.get(64)).toMatchObject({ api_id: 64, api_name: "補強増設", api_description: [expect.any(String)] });
   });
 
   it("returns port aggregate and core get_member resources from the same persisted save", async () => {
@@ -203,14 +205,18 @@ describe("local kcsapi endpoints", () => {
       expect.arrayContaining([
         expect.objectContaining({ api_id: 49, api_count: 0 }),
         expect.objectContaining({ api_id: 54, api_count: 0 }),
-        expect.objectContaining({ api_id: 59, api_count: 0 })
+        expect.objectContaining({ api_id: 55, api_count: 0 }),
+        expect.objectContaining({ api_id: 59, api_count: 0 }),
+        expect.objectContaining({ api_id: 64, api_count: 0 })
       ])
     );
     expect(useitem.json().api_data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ api_id: 49, api_count: 0 }),
         expect.objectContaining({ api_id: 54, api_count: 0 }),
-        expect.objectContaining({ api_id: 59, api_count: 0 })
+        expect.objectContaining({ api_id: 55, api_count: 0 }),
+        expect.objectContaining({ api_id: 59, api_count: 0 }),
+        expect.objectContaining({ api_id: 64, api_count: 0 })
       ])
     );
   });
