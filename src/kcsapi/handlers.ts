@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import type { FastifyRequest } from "fastify";
 import {
   buildShipMasters,
+  buildShipTypes,
   buildSlotEquipTypes,
   buildSlotMasters,
   shipPictureBookPage,
@@ -381,6 +382,7 @@ function masterDataWithResources(resourceManifest: ResourceManifest) {
   return {
     ...masterData,
     api_mst_ship: ships,
+    api_mst_stype: buildShipTypes(slotItems),
     api_mst_slotitem: slotItems,
     api_mst_slotitem_equiptype: buildSlotEquipTypes(slotItems),
     api_mst_shipgraph: shipGraph(resourceManifest, ships),

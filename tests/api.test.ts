@@ -280,6 +280,33 @@ describe("local kcsapi endpoints", () => {
     expect(invalidDecks).toEqual({ api_deck_data: [], api_ship_data: [] });
   });
 
+  it("provides equippable ship type metadata for the remodel equipment list", async () => {
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    const requireInfo = (await post("api_get_member/require_info")).json().api_data;
+    const ships = (await post("api_get_member/ship2")).json().api_data;
+
+    const shipMasterById = new Map(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
+    const shipTypeById = new Map(start2.api_mst_stype.map((shipType: any) => [shipType.api_id, shipType]));
+    const slotMasterById = new Map(start2.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
+    const slotItemById = new Map(requireInfo.api_slot_item.map((slot: any) => [slot.api_id, slot]));
+    const targetShip = ships.find((ship: any) => ship.api_id === 1);
+    const targetShipMaster: any = shipMasterById.get(targetShip.api_ship_id);
+    const targetShipType: any = shipTypeById.get(targetShipMaster.api_stype);
+    const equipType = targetShipType.api_equip_type ?? {};
+    const unsetSlotIds = Object.values(requireInfo.api_unsetslot)
+      .filter(Array.isArray)
+      .flat() as number[];
+
+    const equippableUnsetSlotIds = unsetSlotIds.filter((slotItemId) => {
+      const slotItem: any = slotItemById.get(slotItemId);
+      const slotMaster: any = slotMasterById.get(slotItem.api_slotitem_id);
+      return equipType[slotMaster.api_type[2]] === 1;
+    });
+
+    expect(unsetSlotIds.length).toBeGreaterThan(0);
+    expect(equippableUnsetSlotIds.length).toBeGreaterThan(0);
+  });
+
   it("keeps deck membership unique and fixed-width when changing organize slots", async () => {
     const extraShip = store.createShip(7);
 

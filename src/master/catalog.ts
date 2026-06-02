@@ -2,6 +2,7 @@ import { masterData } from "./data.js";
 import type { ResourceManifest } from "../resources/types.js";
 
 export type ShipMaster = (typeof masterData.api_mst_ship)[number];
+export type ShipTypeMaster = (typeof masterData.api_mst_stype)[number];
 export type SlotMaster = (typeof masterData.api_mst_slotitem)[number];
 export type SlotEquipType = (typeof masterData.api_mst_slotitem_equiptype)[number];
 
@@ -48,6 +49,22 @@ export function buildSlotEquipTypes(slotItems: SlotMaster[]): SlotEquipType[] {
   }
 
   return [...equipTypes.values()].sort((a, b) => a.api_id - b.api_id);
+}
+
+export function buildShipTypes(slotItems: SlotMaster[]): ShipTypeMaster[] {
+  const equipTypes = Object.fromEntries(
+    [...new Set(slotItems.map((item) => Number(item.api_type[2])).filter((type) => Number.isFinite(type) && type > 0))]
+      .sort((a, b) => a - b)
+      .map((type) => [type, 1])
+  );
+
+  return masterData.api_mst_stype.map((shipType) => ({
+    ...shipType,
+    api_equip_type: {
+      ...shipType.api_equip_type,
+      ...equipTypes
+    }
+  }));
 }
 
 export function shipPictureBookPage(resourceManifest: ResourceManifest, pageNo: number) {
