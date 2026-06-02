@@ -93,9 +93,15 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 9)).toMatchObject({
       api_filename: "gyckjmemgqoe"
     });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 179)).toMatchObject({
+      api_filename: "qgkjswznylty"
+    });
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 77)).toMatchObject({
       api_filename: "skgpomqtcedb"
     });
+    const shipById = new Map(start2Data.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
+    expect(((shipById.get(9) as any).api_voicef as number) & 1).toBe(0);
+    expect(((shipById.get(179) as any).api_voicef as number) & 1).toBe(1);
     // Equipment name–ID mappings must match cached resource IDs
     const slotById = new Map(start2Data.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
     expect(slotById.get(1)).toMatchObject({ api_name: "12cm単装砲", api_yomi: "12cm Single Gun Mount" });

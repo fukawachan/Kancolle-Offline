@@ -10,6 +10,12 @@ const PAGES_PER_BLOCK = 7;
 const ITEMS_PER_PAGE = 10;
 const ITEMS_PER_BLOCK = PAGES_PER_BLOCK * ITEMS_PER_PAGE;
 const GENERATED_SLOT_ICON_TYPES = Array.from({ length: 59 }, (_value, index) => index + 1);
+const VOICE_FLAG_BE_LEFT = 1;
+const VOICE_FLAG_TIME_SIGNAL = 2;
+const VOICE_FLAG_TIRED_BE_LEFT = 4;
+const BE_LEFT_VOICE_NO = 29;
+const TIME_SIGNAL_VOICE_NOS = Array.from({ length: 24 }, (_value, index) => index + 30);
+const TIRED_BE_LEFT_VOICE_FILE = "129";
 
 export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster[] {
   const baseById = new Map(masterData.api_mst_ship.map((ship) => [ship.api_id, ship] as const));
@@ -20,7 +26,9 @@ export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster
   }
   for (const id of baseById.keys()) ids.add(id);
 
-  return [...ids].sort((a, b) => a - b).map((id) => baseById.get(id) ?? generatedShipMaster(id));
+  return [...ids]
+    .sort((a, b) => a - b)
+    .map((id) => normalizeShipVoiceFlag(baseById.get(id) ?? generatedShipMaster(id), resourceManifest));
 }
 
 export function buildSlotMasters(resourceManifest: ResourceManifest): SlotMaster[] {
@@ -140,6 +148,30 @@ function generatedShipMaster(api_id: number): ShipMaster {
     api_bull_max: 0,
     api_voicef: 0
   };
+}
+
+function normalizeShipVoiceFlag(ship: ShipMaster, resourceManifest: ResourceManifest): ShipMaster {
+  const apiVoicef = Number(ship.api_voicef || 0);
+  const normalizedVoicef = apiVoicef & supportedVoiceFlags(ship.api_id, resourceManifest);
+  if (normalizedVoicef === apiVoicef) return ship;
+  return { ...ship, api_voicef: normalizedVoicef };
+}
+
+function supportedVoiceFlags(shipId: number, resourceManifest: ResourceManifest) {
+  const voice = resourceManifest.voice.byShipId.get(shipId);
+  if (!voice) return 0;
+
+  let flags = 0;
+  if (voice.availableVoiceNos.has(BE_LEFT_VOICE_NO)) {
+    flags |= VOICE_FLAG_BE_LEFT;
+  }
+  if (TIME_SIGNAL_VOICE_NOS.every((voiceNo) => voice.availableVoiceNos.has(voiceNo))) {
+    flags |= VOICE_FLAG_TIME_SIGNAL;
+  }
+  if (voice.files.has(TIRED_BE_LEFT_VOICE_FILE)) {
+    flags |= VOICE_FLAG_TIRED_BE_LEFT;
+  }
+  return flags;
 }
 
 function generatedSlotMaster(api_id: number): SlotMaster {
