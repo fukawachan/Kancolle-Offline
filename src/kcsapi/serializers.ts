@@ -13,6 +13,8 @@ import type {
   SlotItem
 } from "../state/types.js";
 
+const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
+
 export function toBasic(player: Player, furniture?: FurnitureState, resourceManifest?: ResourceManifest) {
   return {
     api_member_id: player.id,
@@ -106,7 +108,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_maxhp: ship.maxHp,
     api_leng: master?.api_leng ?? 1,
     api_slot: slot,
-    api_onslot: [0, 0, 0, 0, 0],
+    api_onslot: toOnSlot(master, slot, slotItems),
     api_kyouka: [kyouka(0), kyouka(1), kyouka(2), kyouka(3), kyouka(4)],
     api_backs: master?.api_backs ?? 1,
     api_fuel: ship.fuel,
@@ -132,6 +134,24 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_sp_effect_items: [],
     api_slot_ex: ship.exSlotId
   };
+}
+
+function toOnSlot(
+  shipMaster: (typeof masterData.api_mst_ship)[number] | undefined,
+  slot: number[],
+  slotItems?: SlotItem[]
+) {
+  const maxeq = Array.isArray(shipMaster?.api_maxeq) ? shipMaster.api_maxeq : [];
+  return slot.map((slotId, index) => {
+    if (slotId <= 0) return 0;
+    const item = slotItems?.find((si) => si.id === slotId);
+    const slotMaster = item ? masterData.api_mst_slotitem.find((m) => m.api_id === item.masterId) : undefined;
+    return slotMaster && isAircraftSlotItem(slotMaster) ? safeNum(maxeq[index]) : 0;
+  });
+}
+
+function isAircraftSlotItem(slotMaster: (typeof masterData.api_mst_slotitem)[number]) {
+  return AIRCRAFT_EQUIP_TYPE_IDS.has(safeNum(slotMaster.api_type?.[2]));
 }
 
 function resolveEquippedMasters(

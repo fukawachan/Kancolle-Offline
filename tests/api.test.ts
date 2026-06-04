@@ -337,10 +337,29 @@ describe("local kcsapi endpoints", () => {
     expect(ship.api_slot[0]).toBe(-1);
   });
 
+  it("returns aircraft onslot counts from each equipped carrier slot capacity", async () => {
+    const akagi = store.createShip(277);
+    const fighter1 = store.createSlotItem(20);
+    const fighter2 = store.createSlotItem(20);
+
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter1.id });
+    const response = await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: fighter2.id });
+    const updatedShip = response.json().api_data;
+
+    expect(updatedShip.api_ship_id).toBe(277);
+    expect(updatedShip.api_slot).toEqual([fighter1.id, -1, fighter2.id, -1, -1]);
+    expect(updatedShip.api_onslot).toEqual([20, 0, 32, 0, 0]);
+
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const persistedAkagi = ship2.find((ship: any) => ship.api_id === akagi.id);
+
+    expect(persistedAkagi.api_onslot).toEqual([20, 0, 32, 0, 0]);
+  });
+
   it("computes ship stats from master base + equipment bonuses, not hardcoded placeholders", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
-    const shipMasterById = new Map(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
-    const slotMasterById = new Map(start2.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
+    const shipMasterById = new Map<number, any>(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
+    const slotMasterById = new Map<number, any>(start2.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
 
     // Ship 1 is a fresh Fubuki (masterId 9) with no equipment
     const ship2 = (await post("api_get_member/ship2")).json().api_data;
