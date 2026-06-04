@@ -3,7 +3,11 @@ import type { SaveState, Ship, SlotItem } from "../state/types.js";
 
 export type BattleInput = {
   formation?: number;
+  deckId?: number;
+  practiceEnemyId?: number;
 };
+
+export type BattleMode = "sortie" | "practice" | "combined";
 
 type Side = 0 | 1;
 
@@ -64,17 +68,27 @@ export type BattlePayload = Record<string, any> & {
 };
 
 export type BattleRecord = {
+  mode: BattleMode;
   deckId: number;
+  escortDeckId?: number;
+  practiceEnemyId?: number;
   shipIds: number[];
+  shipMasterIds: number[];
+  escortShipIds?: number[];
+  escortShipMasterIds?: number[];
   enemyIds: number[];
   formation: [number, number, number];
   before: {
     fNowHps: number[];
     eNowHps: number[];
+    fCombinedNowHps?: number[];
+    eCombinedNowHps?: number[];
   };
   after: {
     fNowHps: number[];
     eNowHps: number[];
+    fCombinedNowHps?: number[];
+    eCombinedNowHps?: number[];
   };
   phases: {
     hougeki1: HougekiPayload;
@@ -84,17 +98,51 @@ export type BattleRecord = {
     night?: HougekiPayload;
   };
   result: BattleResultRecord;
+  settlement?: BattleSettlementRecord;
+  resultClaimed?: boolean;
 };
 
 export type BattleResultRecord = {
   rank: "S" | "A" | "B" | "C";
   mvp: number;
+  mvpCombined?: number;
   getExp: number;
   baseExp: number;
   memberExp: number;
   dropShipId: number;
   dropShipName: string;
   dropShipType: string;
+};
+
+export type FleetSettlementSlot = {
+  shipId: number;
+  gainedExp: number;
+  beforeExp: number;
+  afterExp: number;
+  afterLevel: number;
+  levelup: number[];
+};
+
+export type BattleSettlementRecord = {
+  memberLevel: number;
+  memberExp: number;
+  memberExpGain: number;
+  mvp: number;
+  mvpCombined?: number;
+  dropShipId: number;
+  main: FleetSettlementSlot[];
+  escort?: FleetSettlementSlot[];
+};
+
+export type PracticeRival = {
+  id: number;
+  name: string;
+  level: number;
+  rank: string;
+  comment: string;
+  flag: number;
+  medals: number;
+  ships: { id: number; masterId: number; level: number; star: number }[];
 };
 
 type DamageInput = {
@@ -104,6 +152,82 @@ type DamageInput = {
   ammoModifier: number;
   targetHp?: number;
 };
+
+const PRACTICE_RIVALS: PracticeRival[] = [
+  {
+    id: 1,
+    name: "Local Training Fleet",
+    level: 5,
+    rank: "少佐",
+    comment: "Offline practice opponent",
+    flag: 1,
+    medals: 0,
+    ships: [
+      { id: 101, masterId: 9, level: 3, star: 2 },
+      { id: 102, masterId: 10, level: 3, star: 2 }
+    ]
+  },
+  {
+    id: 2,
+    name: "Local Patrol Fleet",
+    level: 8,
+    rank: "中佐",
+    comment: "Steady sparring partner",
+    flag: 1,
+    medals: 0,
+    ships: [
+      { id: 201, masterId: 1, level: 5, star: 3 },
+      { id: 202, masterId: 2, level: 5, star: 3 }
+    ]
+  },
+  {
+    id: 3,
+    name: "Local Cruiser Fleet",
+    level: 12,
+    rank: "大佐",
+    comment: "Light cruiser exercises",
+    flag: 1,
+    medals: 1,
+    ships: [
+      { id: 301, masterId: 54, level: 8, star: 4 },
+      { id: 302, masterId: 9, level: 6, star: 3 }
+    ]
+  },
+  {
+    id: 4,
+    name: "Local Carrier Fleet",
+    level: 15,
+    rank: "少将",
+    comment: "Air wing drill",
+    flag: 1,
+    medals: 1,
+    ships: [
+      { id: 401, masterId: 277, level: 10, star: 5 },
+      { id: 402, masterId: 10, level: 8, star: 4 }
+    ]
+  },
+  {
+    id: 5,
+    name: "Local Battleship Fleet",
+    level: 20,
+    rank: "中将",
+    comment: "Heavy fleet exercise",
+    flag: 1,
+    medals: 2,
+    ships: [
+      { id: 501, masterId: 77, level: 12, star: 5 },
+      { id: 502, masterId: 54, level: 10, star: 4 }
+    ]
+  }
+];
+
+export function practiceRivals() {
+  return PRACTICE_RIVALS.map((rival) => ({ ...rival, ships: rival.ships.map((ship) => ({ ...ship })) }));
+}
+
+export function practiceRivalById(id: number) {
+  return practiceRivals().find((rival) => rival.id === id) ?? practiceRivals()[0];
+}
 
 export function resolveDamage(input: DamageInput) {
   const targetHp = Math.max(0, Math.trunc(input.targetHp ?? Number.MAX_SAFE_INTEGER));
@@ -132,8 +256,10 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const afterE = fixedHp(enemy);
   const result = battleResult(friendly, enemy);
   const record: BattleRecord = {
+    mode: "sortie",
     deckId: deck.id,
     shipIds: fixedShipIds(deck.shipIds),
+    shipMasterIds: fixedShipMasterIds(save, deck.shipIds),
     enemyIds: fixedEnemyIds(enemy),
     formation,
     before: { fNowHps: beforeF, eNowHps: beforeE },
@@ -153,6 +279,97 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   };
 }
 
+export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
+  const deck = save.decks.find((item) => item.id === (input.deckId ?? 1)) ?? save.decks[0];
+  const rival = practiceRivalById(input.practiceEnemyId ?? 1);
+  const formation: [number, number, number] = [battleFormation(input), 1, 1];
+  const seed = rival.id * 13007 + formation[0] * 101;
+  const rng = mulberry32(seed);
+  const friendly = friendlyUnits(save, deck.shipIds);
+  const enemy = rival.ships.map((ship, index) => practiceEnemyUnit(ship.masterId, ship.level, index + 1));
+  const beforeF = fixedHp(friendly);
+  const beforeE = fixedHp(enemy);
+
+  const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
+  const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
+  const afterF = fixedHp(friendly);
+  const afterE = fixedHp(enemy);
+  const result = battleResult(friendly, enemy, "practice");
+  const record: BattleRecord = {
+    mode: "practice",
+    deckId: deck.id,
+    practiceEnemyId: rival.id,
+    shipIds: fixedShipIds(deck.shipIds),
+    shipMasterIds: fixedShipMasterIds(save, deck.shipIds),
+    enemyIds: fixedEnemyIds(enemy),
+    formation,
+    before: { fNowHps: beforeF, eNowHps: beforeE },
+    after: { fNowHps: afterF, eNowHps: afterE },
+    phases: {
+      hougeki1,
+      hougeki2: null,
+      hougeki3: null,
+      raigeki
+    },
+    result
+  };
+
+  return {
+    payload: battlePayload(record, friendly, enemy),
+    record
+  };
+}
+
+export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
+  const deck = save.decks.find((item) => item.id === 1) ?? save.decks[0];
+  const escortDeck = save.decks.find((item) => item.id === 2) ?? save.decks[1] ?? deck;
+  const formation: [number, number, number] = [battleFormation(input), 1, 1];
+  const seed = (save.sortieSession?.seed ?? 1) + 424242 + formation[0] * 101;
+  const rng = mulberry32(seed);
+  const friendly = friendlyUnits(save, deck.shipIds);
+  const escort = friendlyUnits(save, escortDeck.shipIds);
+  const enemy = enemyUnits(save.sortieSession?.node ?? 1);
+  const enemyCombined: BattleUnit[] = [];
+  const beforeF = fixedHp(friendly);
+  const beforeEscort = fixedHp(escort);
+  const beforeE = fixedHp(enemy);
+  const beforeECombined = fixedHp(enemyCombined);
+
+  const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
+  const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
+  const afterF = fixedHp(friendly);
+  const afterEscort = fixedHp(escort);
+  const afterE = fixedHp(enemy);
+  const afterECombined = fixedHp(enemyCombined);
+  const result = battleResult(friendly, enemy, "combined");
+  result.mvpCombined = escortMvp(escort);
+  const record: BattleRecord = {
+    mode: "combined",
+    deckId: deck.id,
+    escortDeckId: escortDeck.id,
+    shipIds: fixedShipIds(deck.shipIds),
+    shipMasterIds: fixedShipMasterIds(save, deck.shipIds),
+    escortShipIds: fixedShipIds(escortDeck.shipIds),
+    escortShipMasterIds: fixedShipMasterIds(save, escortDeck.shipIds),
+    enemyIds: fixedEnemyIds(enemy),
+    formation,
+    before: { fNowHps: beforeF, eNowHps: beforeE, fCombinedNowHps: beforeEscort, eCombinedNowHps: beforeECombined },
+    after: { fNowHps: afterF, eNowHps: afterE, fCombinedNowHps: afterEscort, eCombinedNowHps: afterECombined },
+    phases: {
+      hougeki1,
+      hougeki2: null,
+      hougeki3: null,
+      raigeki
+    },
+    result
+  };
+
+  return {
+    payload: combinedBattlePayload(record, friendly, escort, enemy, enemyCombined),
+    record
+  };
+}
+
 export function createNightBattle(record: BattleRecord): { payload: Record<string, unknown>; record: BattleRecord } {
   const friendly = recordUnitsFrom(record, 0);
   const enemy = recordUnitsFrom(record, 1);
@@ -161,6 +378,7 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
   const nextRecord: BattleRecord = {
     ...record,
     after: {
+      ...record.after,
       fNowHps: fixedHp(friendly),
       eNowHps: fixedHp(enemy)
     },
@@ -168,18 +386,22 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
       ...record.phases,
       night: hougeki
     },
-    result: battleResult(friendly, enemy)
+    result: { ...battleResult(friendly, enemy, record.mode), mvpCombined: record.result.mvpCombined }
   };
+  const payload: Record<string, unknown> = {
+    api_deck_id: record.deckId,
+    api_formation: record.formation,
+    api_touch_plane: [-1, -1],
+    api_flare_pos: [-1, -1],
+    api_hougeki: hougeki,
+    api_n_support_flag: 0,
+    api_n_support_info: null
+  };
+  if (nextRecord.mode === "combined") {
+    Object.assign(payload, combinedNightFields(nextRecord));
+  }
   return {
-    payload: {
-      api_deck_id: record.deckId,
-      api_formation: record.formation,
-      api_touch_plane: [-1, -1],
-      api_flare_pos: [-1, -1],
-      api_hougeki: hougeki,
-      api_n_support_flag: 0,
-      api_n_support_info: null
-    },
+    payload,
     record: nextRecord
   };
 }
@@ -189,23 +411,57 @@ export function createNightBattlePayload(record: BattleRecord) {
 }
 
 export function battleResultPayload(record: BattleRecord) {
-  return {
+  const mainSettlement = settlementFleet(record.settlement?.main, record.shipIds);
+  const escortSettlement = settlementFleet(record.settlement?.escort, record.escortShipIds ?? []);
+  const dropShip = record.mode === "practice" || record.result.dropShipId <= 0 ? null : {
+    api_ship_id: record.result.dropShipId,
+    api_ship_type: record.result.dropShipType,
+    api_ship_name: record.result.dropShipName,
+    api_ship_getmes: "Local drop"
+  };
+  const payload: Record<string, unknown> = {
     api_ship_id: record.shipIds.filter((id) => id > 0),
     api_win_rank: record.result.rank,
     api_get_exp: record.result.getExp,
-    api_mvp: record.result.mvp,
-    api_member_lv: 1,
-    api_member_exp: record.result.memberExp,
+    api_mvp: record.settlement?.mvp ?? record.result.mvp,
+    api_member_lv: record.settlement?.memberLevel ?? 1,
+    api_member_exp: record.settlement?.memberExp ?? record.result.memberExp,
     api_get_base_exp: record.result.baseExp,
-    api_get_ship: {
-      api_ship_id: record.result.dropShipId,
-      api_ship_type: record.result.dropShipType,
-      api_ship_name: record.result.dropShipName,
-      api_ship_getmes: "Local drop"
-    },
+    api_get_ship_exp: [-1, ...mainSettlement.map((slot) => slot.gainedExp)],
+    api_get_exp_lvup: mainSettlement.map((slot) => slot.levelup),
+    api_get_ship: dropShip,
     api_get_eventflag: 0,
     api_get_exmap_rate: 0
   };
+  if (record.mode === "combined") {
+    payload.api_mvp_combined = record.settlement?.mvpCombined ?? record.result.mvpCombined ?? 1;
+    payload.api_get_ship_exp_combined = [-1, ...escortSettlement.map((slot) => slot.gainedExp)];
+    payload.api_get_exp_lvup_combined = escortSettlement.map((slot) => slot.levelup);
+  }
+  return payload;
+}
+
+function settlementFleet(settlement: FleetSettlementSlot[] | undefined, shipIds: number[]) {
+  if (settlement) return normalizeSettlement(settlement);
+  return normalizeFixed(shipIds, 6, -1).map((shipId) => ({
+    shipId,
+    gainedExp: shipId > 0 ? 0 : -1,
+    beforeExp: 0,
+    afterExp: 0,
+    afterLevel: 1,
+    levelup: shipId > 0 ? [0, 100] : [-1]
+  }));
+}
+
+function normalizeSettlement(settlement: FleetSettlementSlot[]) {
+  return normalizeFixed(settlement, 6, {
+    shipId: -1,
+    gainedExp: -1,
+    beforeExp: -1,
+    afterExp: -1,
+    afterLevel: 0,
+    levelup: [-1]
+  });
 }
 
 function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: BattleUnit[]): BattlePayload {
@@ -237,6 +493,66 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_hougeki3: record.phases.hougeki3,
     api_raigeki: record.phases.raigeki
   };
+}
+
+function combinedBattlePayload(record: BattleRecord, friendly: BattleUnit[], escort: BattleUnit[], enemy: BattleUnit[], enemyCombined: BattleUnit[]) {
+  const payload = battlePayload(record, friendly, enemy);
+  const fCombinedMaxHps = fixedMaxHp(escort);
+  const eCombinedMaxHps = fixedMaxHp(enemyCombined);
+  return {
+    ...payload,
+    api_f_nowhps_combined: record.before.fCombinedNowHps ?? fixedHp(escort),
+    api_f_maxhps_combined: fCombinedMaxHps,
+    api_e_nowhps_combined: record.before.eCombinedNowHps ?? fixedHp(enemyCombined),
+    api_e_maxhps_combined: eCombinedMaxHps,
+    api_ship_ke_combined: fixedEnemyIds(enemyCombined),
+    api_ship_lv_combined: fixedUnitValues(enemyCombined, (unit) => unit.level, 0),
+    api_fParam_combined: fixedUnitValues(escort, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
+    api_eParam_combined: fixedUnitValues(enemyCombined, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
+    api_eSlot_combined: fixedUnitValues(enemyCombined, (unit) => fixedSlotIds(unit.slots), []),
+    api_nowhps_combined: [-1, ...(record.before.fCombinedNowHps ?? fixedHp(escort)), ...(record.before.eCombinedNowHps ?? fixedHp(enemyCombined))],
+    api_maxhps_combined: [-1, ...fCombinedMaxHps, ...eCombinedMaxHps]
+  };
+}
+
+function combinedNightFields(record: BattleRecord) {
+  const fNowHps = normalizeFixed(record.after.fCombinedNowHps ?? record.before.fCombinedNowHps ?? [], 6, 0);
+  const eNowHps = normalizeFixed(record.after.eCombinedNowHps ?? record.before.eCombinedNowHps ?? [], 6, 0);
+  const fMaxHps = fixedMaxHpFromMasters(record.escortShipMasterIds ?? [], fNowHps);
+  const eMaxHps = normalizeFixed([], 6, 0);
+  return {
+    api_f_nowhps_combined: fNowHps,
+    api_f_maxhps_combined: fMaxHps,
+    api_e_nowhps_combined: eNowHps,
+    api_e_maxhps_combined: eMaxHps,
+    api_nowhps_combined: [-1, ...fNowHps, ...eNowHps],
+    api_maxhps_combined: [-1, ...fMaxHps, ...eMaxHps],
+    api_ship_ke_combined: normalizeFixed([], 6, -1),
+    api_ship_lv_combined: normalizeFixed([], 6, 0),
+    api_fParam_combined: fixedParamsFromMasters(record.escortShipMasterIds ?? []),
+    api_eParam_combined: Array.from({ length: 6 }, () => [0, 0, 0, 0]),
+    api_eSlot_combined: Array.from({ length: 6 }, () => [])
+  };
+}
+
+function fixedMaxHpFromMasters(masterIds: number[], fallbackHps: number[]) {
+  return normalizeFixed(masterIds, 6, -1).map((id, index) => {
+    if (id <= 0) return fallbackHps[index] ?? 0;
+    const master = masterData.api_mst_ship.find((item) => item.api_id === id);
+    return Math.max(fallbackHps[index] ?? 0, statValue(master?.api_taik, fallbackHps[index] ?? 1));
+  });
+}
+
+function fixedParamsFromMasters(masterIds: number[]) {
+  return normalizeFixed(masterIds, 6, -1).map((id) => {
+    const master = id > 0 ? masterData.api_mst_ship.find((item) => item.api_id === id) : undefined;
+    return [
+      statValue(master?.api_houg),
+      statValue(master?.api_raig),
+      statValue(master?.api_tyku),
+      statValue(master?.api_souk)
+    ];
+  });
 }
 
 function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: () => number, phase: "day" | "night"): HougekiPayload {
@@ -340,7 +656,7 @@ function applyDamage(target: BattleUnit, attackPower: number, ammoModifier: numb
   return damage;
 }
 
-function battleResult(friendly: BattleUnit[], enemy: BattleUnit[]): BattleResultRecord {
+function battleResult(friendly: BattleUnit[], enemy: BattleUnit[], mode: BattleMode = "sortie"): BattleResultRecord {
   const enemyTotalHp = enemy.reduce((sum, unit) => sum + unit.maxHp, 0);
   const enemyRemainingHp = enemy.reduce((sum, unit) => sum + Math.max(0, unit.hp), 0);
   const sunk = enemy.filter((unit) => unit.hp <= 0).length;
@@ -354,9 +670,9 @@ function battleResult(friendly: BattleUnit[], enemy: BattleUnit[]): BattleResult
     baseExp,
     getExp: baseExp * 2,
     memberExp: baseExp * 2,
-    dropShipId: 1,
-    dropShipName: "Mutsuki",
-    dropShipType: "Destroyer"
+    dropShipId: mode === "practice" ? 0 : 1,
+    dropShipName: mode === "practice" ? "" : "Mutsuki",
+    dropShipType: mode === "practice" ? "" : "Destroyer"
   };
 }
 
@@ -429,6 +745,34 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
   };
 }
 
+function practiceEnemyUnit(masterId: number, level: number, position: number): BattleUnit {
+  const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
+  const maxHp = statValue(master?.api_taik, 15);
+  return {
+    side: 1,
+    position,
+    apiIndex: position + 6,
+    shipId: 0,
+    masterId,
+    level,
+    hp: maxHp,
+    maxHp,
+    firepower: statValue(master?.api_houg, level),
+    torpedo: statValue(master?.api_raig, 0),
+    aa: statValue(master?.api_tyku, 0),
+    armor: statValue(master?.api_souk, 1),
+    luck: statValue(master?.api_luck, 0),
+    range: safeNum(master?.api_leng, 1),
+    ammoModifier: 1,
+    slots: [1],
+    damageDealt: 0
+  };
+}
+
+function escortMvp(escort: BattleUnit[]) {
+  return escort.length > 0 ? [...escort].sort((a, b) => b.damageDealt - a.damageDealt || a.position - b.position)[0].position : 1;
+}
+
 function recordUnitsFrom(record: BattleRecord, side: Side) {
   const hps = side === 0 ? record.after.fNowHps : record.after.eNowHps;
   const ids = side === 0 ? record.shipIds : record.enemyIds;
@@ -440,14 +784,15 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
         unit.hp = hps[index] ?? unit.maxHp;
         return unit;
       }
-      const master = masterData.api_mst_ship.find((item) => item.api_id === id);
+      const masterId = record.shipMasterIds?.[index] ?? id;
+      const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
       const hp = hps[index] ?? statValue(master?.api_taik, 1);
       return {
         side,
         position: index + 1,
         apiIndex: index + 1,
         shipId: record.shipIds[index],
-        masterId: id,
+        masterId,
         level: 1,
         hp,
         maxHp: record.before.fNowHps[index] || hp,
@@ -527,6 +872,14 @@ function sortieDeck(save: SaveState) {
 
 function fixedShipIds(shipIds: number[]) {
   return [...shipIds, ...Array(6).fill(-1)].slice(0, 6).map((id) => (id > 0 ? id : -1));
+}
+
+function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {
+  return [...values, ...Array(length).fill(fill)].slice(0, length);
+}
+
+function fixedShipMasterIds(save: SaveState, shipIds: number[]) {
+  return fixedShipIds(shipIds).map((id) => save.ships.find((ship) => ship.id === id)?.masterId ?? -1);
 }
 
 function fixedEnemyIds(enemy: BattleUnit[]) {

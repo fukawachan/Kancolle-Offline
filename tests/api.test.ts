@@ -723,17 +723,146 @@ describe("local kcsapi endpoints", () => {
       api_win_rank: expect.stringMatching(/[SABC]/),
       api_mvp: expect.any(Number),
       api_get_exp: expect.any(Number),
-      api_get_ship: expect.any(Object)
+      api_get_ship: expect.any(Object),
+      api_get_ship_exp: expect.any(Array),
+      api_get_exp_lvup: expect.any(Array)
     });
+    expect(result.json().api_data.api_get_ship_exp).toHaveLength(7);
+    expect(result.json().api_data.api_get_ship_exp[0]).toBe(-1);
+    expect(result.json().api_data.api_get_ship_exp.slice(1, 3).every((exp: number) => exp > 0)).toBe(true);
+    expect(result.json().api_data.api_get_exp_lvup).toHaveLength(6);
+    expect(result.json().api_data.api_get_exp_lvup.every((levels: number[]) => Array.isArray(levels))).toBe(true);
+    expect(result.json().api_data.api_get_exp_lvup.slice(0, 2).every((levels: number[]) => levels.length >= 2)).toBe(true);
     expect(repeat.json().api_data.api_win_rank).toBe(result.json().api_data.api_win_rank);
+    expect(repeat.json().api_data.api_get_ship_exp).toEqual(result.json().api_data.api_get_ship_exp);
+    expect(repeat.json().api_data.api_get_exp_lvup).toEqual(result.json().api_data.api_get_exp_lvup);
     expect(afterRepeat.materials).toEqual(afterFirst.materials);
     for (const ship of afterRepeat.ships.slice(0, 2)) {
       expect(ship.hp).toBeGreaterThanOrEqual(1);
       expect(ship.hp).toBeLessThanOrEqual(ship.maxHp);
       expect(ship.fuel).toBeLessThanOrEqual(ship.maxFuel);
       expect(ship.ammo).toBeLessThanOrEqual(ship.maxAmmo);
+      expect(ship.exp).toBeGreaterThan(0);
     }
+    expect(afterRepeat.player.exp).toBeGreaterThan(0);
     expect((afterRepeat.sortieSession?.state as any).lastBattle.resultClaimed).toBe(true);
+  });
+
+  it("supports a playable practice battle loop with settlement fields", async () => {
+    const practice = await post("api_get_member/practice");
+    const practiceData = practice.json().api_data;
+
+    expect(practice.statusCode).toBe(200);
+    expect(practiceData.api_list.length).toBeGreaterThan(0);
+    expect(practiceData.api_list[0]).toMatchObject({
+      api_enemy_id: expect.any(Number),
+      api_enemy_name: expect.any(String),
+      api_enemy_level: expect.any(Number),
+      api_enemy_rank: expect.any(String),
+      api_enemy_flag: expect.any(Number),
+      api_enemy_flag_ship: expect.any(Number),
+      api_state: expect.any(Number)
+    });
+
+    const enemyId = practiceData.api_list[0].api_enemy_id;
+    const enemyInfo = await post("api_req_member/get_practice_enemyinfo", { api_member_id: enemyId });
+    expect(enemyInfo.json().api_data).toMatchObject({
+      api_nickname: expect.any(String),
+      api_level: expect.any(Number),
+      api_deck: {
+        api_deckname: expect.any(String),
+        api_ships: expect.any(Array)
+      }
+    });
+    expect(enemyInfo.json().api_data.api_deck.api_ships[0]).toMatchObject({
+      api_id: expect.any(Number),
+      api_ship_id: expect.any(Number),
+      api_level: expect.any(Number),
+      api_star: expect.any(Number)
+    });
+
+    const battle = await post("api_req_practice/battle", {
+      api_deck_id: 1,
+      api_enemy_id: enemyId,
+      api_formation_id: 1
+    });
+    const night = await post("api_req_practice/midnight_battle");
+    const result = await post("api_req_practice/battle_result");
+    const repeat = await post("api_req_practice/battle_result");
+    const afterPracticeList = await post("api_get_member/practice");
+    const after = store.getSave();
+
+    expect(battle.json().api_data).toMatchObject({
+      api_deck_id: 1,
+      api_ship_ke: expect.any(Array),
+      api_hougeki1: expect.any(Object)
+    });
+    expect(night.json().api_data.api_hougeki).toMatchObject({
+      api_sp_list: expect.any(Array),
+      api_n_mother_list: expect.any(Array)
+    });
+    expect(result.json().api_data).toMatchObject({
+      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_get_ship_exp: expect.any(Array),
+      api_get_exp_lvup: expect.any(Array)
+    });
+    expect(result.json().api_data.api_get_ship).toBeNull();
+    expect(result.json().api_data.api_get_ship_exp).toHaveLength(7);
+    expect(result.json().api_data.api_get_exp_lvup).toHaveLength(6);
+    expect(repeat.json().api_data.api_get_ship_exp).toEqual(result.json().api_data.api_get_ship_exp);
+    expect(afterPracticeList.json().api_data.api_list.find((item: any) => item.api_enemy_id === enemyId).api_state).toBe(1);
+    expect(after.ships[0].exp).toBeGreaterThan(0);
+    expect(after.player.exp).toBeGreaterThan(0);
+  });
+
+  it("supports a playable combined fleet sortie loop with main and escort settlement fields", async () => {
+    const escort1 = store.createShip(7);
+    const escort2 = store.createShip(11);
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort1.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: escort2.id });
+    await post("api_req_hensei/combined", { api_combined_type: 1 });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const battle = await post("api_req_combined_battle/battle", { api_formation: 1 });
+    const night = await post("api_req_combined_battle/midnight_battle");
+    const result = await post("api_req_combined_battle/battleresult");
+    const repeat = await post("api_req_combined_battle/battleresult");
+    const after = store.getSave();
+
+    expect(battle.json().api_data).toMatchObject({
+      api_deck_id: 1,
+      api_f_nowhps: expect.any(Array),
+      api_f_nowhps_combined: expect.any(Array),
+      api_fParam_combined: expect.any(Array),
+      api_ship_ke_combined: expect.any(Array)
+    });
+    expect(night.json().api_data.api_hougeki).toMatchObject({
+      api_sp_list: expect.any(Array),
+      api_n_mother_list: expect.any(Array)
+    });
+    expect(night.json().api_data).toMatchObject({
+      api_f_nowhps_combined: expect.any(Array),
+      api_f_maxhps_combined: expect.any(Array),
+      api_nowhps_combined: expect.any(Array),
+      api_fParam_combined: expect.any(Array)
+    });
+    expect(night.json().api_data.api_f_nowhps_combined).toHaveLength(6);
+    expect(result.json().api_data).toMatchObject({
+      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_get_ship_exp: expect.any(Array),
+      api_get_exp_lvup: expect.any(Array),
+      api_mvp_combined: expect.any(Number),
+      api_get_ship_exp_combined: expect.any(Array),
+      api_get_exp_lvup_combined: expect.any(Array)
+    });
+    expect(result.json().api_data.api_get_ship_exp).toHaveLength(7);
+    expect(result.json().api_data.api_get_ship_exp_combined).toHaveLength(7);
+    expect(result.json().api_data.api_get_exp_lvup).toHaveLength(6);
+    expect(result.json().api_data.api_get_exp_lvup_combined).toHaveLength(6);
+    expect(repeat.json().api_data.api_get_ship_exp_combined).toEqual(result.json().api_data.api_get_ship_exp_combined);
+    expect(after.ships.find((ship) => ship.id === escort1.id)?.exp).toBeGreaterThan(0);
+    expect(after.ships.find((ship) => ship.id === escort2.id)?.exp).toBeGreaterThan(0);
   });
 
   it("has non-unknown local handlers for the planned API surface", async () => {

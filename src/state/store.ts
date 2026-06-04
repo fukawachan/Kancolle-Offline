@@ -2,6 +2,8 @@ import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { mapMasterId, masterData } from "../master/data.js";
+import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
+import { playerLevelForExp, shipLevelForExp, shipLevelupInfo } from "../kcsapi/experience.js";
 import type {
   BuildDock,
   Deck,
@@ -38,7 +40,8 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
+const PRACTICE_STATES_SESSION_ID = "practice_states";
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -326,6 +329,10 @@ export function createStateStore(options: StateStoreOptions) {
         "INSERT INTO sortie_sessions (id, deck_id, area_id, map_no, node, seed, state_json) VALUES (1, ?, ?, ?, 1, ?, ?)"
       ).run(deckId, areaId, mapNo, seed, JSON.stringify({ battles: 0 }));
       consumeSortieSupply(db, deck);
+      if (deckId === 1 && save.player.combinedFleet > 0) {
+        const escort = save.decks.find((item) => item.id === 2);
+        if (escort) consumeSortieSupply(db, escort);
+      }
       return getSave(db).sortieSession;
     },
     recordSortieBattle: (record: JsonObject) => {
@@ -353,7 +360,16 @@ export function createStateStore(options: StateStoreOptions) {
       const battle = getSave(db).sortieSession?.state.lastBattle;
       return isJsonObject(battle) ? battle : null;
     },
-    applySortieBattleResult: () => applySortieBattleResult(db),
+    applySortieBattleResult: () => applyBattleResult(db, "sortie"),
+    recordPracticeBattle: (record: JsonObject) => recordBattleSession(db, "practice", record),
+    updatePracticeBattle: (record: JsonObject) => recordBattleSession(db, "practice", record),
+    lastPracticeBattle: () => lastBattleSession(db, "practice"),
+    applyPracticeBattleResult: () => applyBattleResult(db, "practice"),
+    practiceStates: () => practiceStates(db),
+    recordCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
+    updateCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
+    lastCombinedBattle: () => lastBattleSession(db, "combined"),
+    applyCombinedBattleResult: () => applyBattleResult(db, "combined"),
     nextSortieNode: () => {
       const session = getSave(db).sortieSession;
       if (!session) return null;
@@ -372,31 +388,144 @@ export function createStateStore(options: StateStoreOptions) {
   };
 }
 
-function applySortieBattleResult(db: Database.Database) {
-  const save = getSave(db);
-  const session = save.sortieSession;
-  const battle = session?.state.lastBattle;
-  if (!session || !isJsonObject(battle)) return { save, record: null, applied: false };
-  if (battle.resultClaimed) return { save, record: battle, applied: false };
+type BattleMode = "sortie" | "practice" | "combined";
 
-  const after = isJsonObject(battle.after) ? battle.after : {};
-  const shipIds = Array.isArray(battle.shipIds) ? battle.shipIds.map((id) => Number(id)) : [];
-  const fNowHps = Array.isArray(after.fNowHps) ? after.fNowHps.map((hp) => Math.max(1, Math.trunc(Number(hp) || 1))) : [];
-  const nextBattle = { ...battle, resultClaimed: true };
-  const nextState = { ...session.state, lastBattle: nextBattle };
+function applyBattleResult(db: Database.Database, mode: BattleMode) {
+  const save = getSave(db);
+  const loaded = loadBattleRecord(save, db, mode);
+  if (!loaded.record) return { save, record: null, applied: false };
+  if (loaded.record.resultClaimed && isJsonObject(loaded.record.settlement)) return { save, record: loaded.record, applied: false };
+
+  const record = loaded.record as unknown as BattleRecord;
+  const settlement = buildBattleSettlement(save, record);
+  const nextBattle = { ...record, resultClaimed: true, settlement };
   const tx = db.transaction(() => {
-    for (let index = 0; index < shipIds.length; index += 1) {
-      const shipId = shipIds[index];
-      if (shipId <= 0) continue;
-      const hp = fNowHps[index];
-      if (!Number.isFinite(hp)) continue;
-      db.prepare("UPDATE ships SET hp = max(1, min(max_hp, ?)) WHERE id = ?").run(hp, shipId);
+    applyFleetHp(db, record.shipIds, record.after?.fNowHps);
+    applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps);
+    applyFleetExperience(db, settlement.main);
+    applyFleetExperience(db, settlement.escort);
+    db.prepare("UPDATE players SET exp = ?, level = ? WHERE id = 1").run(settlement.memberExp, settlement.memberLevel);
+    if (mode !== "practice" && settlement.dropShipId > 0) createShip(db, settlement.dropShipId);
+    if (mode === "practice") markPracticeState(db, record.practiceEnemyId, record.result?.rank);
+    if ((mode === "sortie" || mode === "combined") && save.sortieSession) {
+      db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = ?").run(mapMasterId(save.sortieSession.areaId, save.sortieSession.mapNo));
     }
-    db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = ?").run(mapMasterId(session.areaId, session.mapNo));
-    db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(nextState), session.id);
+    loaded.saveRecord(nextBattle as unknown as JsonObject);
   });
   tx();
   return { save: getSave(db), record: nextBattle, applied: true };
+}
+
+function loadBattleRecord(save: SaveState, db: Database.Database, mode: BattleMode) {
+  if (mode === "sortie") {
+    const session = save.sortieSession;
+    const battle = session?.state.lastBattle;
+    return {
+      record: isJsonObject(battle) ? battle : null,
+      saveRecord: (record: JsonObject) => {
+        if (!session) return;
+        const nextState = { ...session.state, lastBattle: record };
+        db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(nextState), session.id);
+      }
+    };
+  }
+  return {
+    record: lastBattleSession(db, mode),
+    saveRecord: (record: JsonObject) => recordBattleSession(db, mode, record)
+  };
+}
+
+function recordBattleSession(db: Database.Database, id: BattleMode, record: JsonObject) {
+  const nextRecord = { ...record, resultClaimed: Boolean(record.resultClaimed) };
+  writeBattleSession(db, id, nextRecord);
+  return nextRecord;
+}
+
+function lastBattleSession(db: Database.Database, id: BattleMode) {
+  return readBattleSession(db, id);
+}
+
+function writeBattleSession(db: Database.Database, id: string, state: JsonObject) {
+  db.prepare("INSERT INTO battle_sessions (id, state_json) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET state_json = excluded.state_json").run(id, JSON.stringify(state));
+}
+
+function readBattleSession(db: Database.Database, id: string) {
+  const row = db.prepare("SELECT state_json FROM battle_sessions WHERE id = ?").get(id) as Row | undefined;
+  return row ? parseJson<JsonObject>(row.state_json, {}) : null;
+}
+
+function practiceStates(db: Database.Database) {
+  const state = readBattleSession(db, PRACTICE_STATES_SESSION_ID) ?? {};
+  return Object.fromEntries(
+    Object.entries(state)
+      .map(([id, value]) => [id, Number(value)] as const)
+      .filter(([id, value]) => Number.isInteger(Number(id)) && Number.isFinite(value))
+  );
+}
+
+function markPracticeState(db: Database.Database, enemyId: number | undefined, rank: string | undefined) {
+  if (!enemyId || enemyId <= 0) return;
+  const states = practiceStates(db);
+  states[String(enemyId)] = rank === "C" ? 2 : 1;
+  writeBattleSession(db, PRACTICE_STATES_SESSION_ID, states);
+}
+
+function buildBattleSettlement(save: SaveState, record: BattleRecord): BattleSettlementRecord {
+  const baseExp = safeNum(record.result?.baseExp, 0);
+  const memberGain = safeNum(record.result?.memberExp, baseExp * 2);
+  const memberExp = save.player.exp + memberGain;
+  const main = buildFleetSettlement(save, record.shipIds, safeNum(record.result?.mvp, 1), baseExp);
+  const escort = record.mode === "combined" ? buildFleetSettlement(save, record.escortShipIds ?? [], safeNum(record.result?.mvpCombined, 1), baseExp) : undefined;
+  const dropShipId = record.mode === "practice" ? 0 : safeNum(record.result?.dropShipId, 0);
+  return {
+    memberLevel: playerLevelForExp(memberExp),
+    memberExp,
+    memberExpGain: memberGain,
+    mvp: safeNum(record.result?.mvp, 1),
+    mvpCombined: record.mode === "combined" ? safeNum(record.result?.mvpCombined, 1) : undefined,
+    dropShipId,
+    main,
+    escort
+  };
+}
+
+function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: number, baseExp: number) {
+  const fixedShipIds = normalizeFixed(shipIds.map((id) => Number(id)), 6, -1);
+  return fixedShipIds.map((shipId, index) => {
+    if (shipId <= 0) return { shipId, gainedExp: -1, beforeExp: -1, afterExp: -1, afterLevel: 0, levelup: [-1] };
+    const ship = save.ships.find((item) => item.id === shipId);
+    if (!ship) return { shipId, gainedExp: -1, beforeExp: -1, afterExp: -1, afterLevel: 0, levelup: [-1] };
+    const flagship = index === 0;
+    const multiplier = (flagship ? 1.5 : 1) * (mvp === index + 1 ? 2 : 1);
+    const gainedExp = Math.max(1, Math.floor(baseExp * multiplier));
+    const afterExp = ship.exp + gainedExp;
+    return {
+      shipId,
+      gainedExp,
+      beforeExp: ship.exp,
+      afterExp,
+      afterLevel: shipLevelForExp(afterExp),
+      levelup: shipLevelupInfo(ship.exp, gainedExp)
+    };
+  });
+}
+
+function applyFleetHp(db: Database.Database, shipIds: number[] | undefined, hps: number[] | undefined) {
+  const fixedShipIds = normalizeFixed((shipIds ?? []).map((id) => Number(id)), 6, -1);
+  const fixedHps = normalizeFixed((hps ?? []).map((hp) => Math.max(1, Math.trunc(Number(hp) || 1))), 6, 1);
+  for (let index = 0; index < fixedShipIds.length; index += 1) {
+    const shipId = fixedShipIds[index];
+    if (shipId <= 0) continue;
+    db.prepare("UPDATE ships SET hp = max(1, min(max_hp, ?)) WHERE id = ?").run(fixedHps[index], shipId);
+  }
+}
+
+function applyFleetExperience(db: Database.Database, fleet: BattleSettlementRecord["main"] | undefined) {
+  if (!fleet) return;
+  for (const ship of fleet) {
+    if (ship.shipId <= 0 || ship.gainedExp < 0) continue;
+    db.prepare("UPDATE ships SET exp = ?, level = ? WHERE id = ?").run(ship.afterExp, ship.afterLevel, ship.shipId);
+  }
 }
 
 function isJsonObject(value: unknown): value is JsonObject {
@@ -410,14 +539,27 @@ function safeNum(value: unknown, fallback = 0) {
 
 function migrate(db: Database.Database) {
   const currentVersion = schemaVersion(db);
-  if (currentVersion !== SCHEMA_VERSION) {
+  if (currentVersion === 0 || currentVersion < 3 || currentVersion > SCHEMA_VERSION) {
     resetSchema(db);
     return;
   }
 
   createSchema(db);
+  if (currentVersion < 4) migrateToV4(db);
+  db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairMaps(db);
+}
+
+function migrateToV4(db: Database.Database) {
+  if (!columnExists(db, "players", "exp")) {
+    db.prepare("ALTER TABLE players ADD COLUMN exp INTEGER NOT NULL DEFAULT 0").run();
+  }
+}
+
+function columnExists(db: Database.Database, table: string, column: string) {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Row[];
+  return rows.some((row) => String(row.name) === column);
 }
 
 function repairShipMaxValues(db: Database.Database) {
@@ -463,6 +605,7 @@ function schemaVersion(db: Database.Database) {
 
 function resetSchema(db: Database.Database) {
   db.exec(`
+    DROP TABLE IF EXISTS battle_sessions;
     DROP TABLE IF EXISTS sortie_sessions;
     DROP TABLE IF EXISTS maps;
     DROP TABLE IF EXISTS furniture;
@@ -490,6 +633,7 @@ function createSchema(db: Database.Database) {
       world_id INTEGER NOT NULL,
       nickname TEXT NOT NULL,
       level INTEGER NOT NULL,
+      exp INTEGER NOT NULL,
       comment TEXT NOT NULL,
       tutorial_progress INTEGER NOT NULL,
       options_json TEXT NOT NULL,
@@ -580,6 +724,10 @@ function createSchema(db: Database.Database) {
       seed INTEGER NOT NULL,
       state_json TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS battle_sessions (
+      id TEXT PRIMARY KEY,
+      state_json TEXT NOT NULL
+    );
   `);
 }
 
@@ -601,7 +749,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
 
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO players (id, world_id, nickname, level, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, ?, 100, ?, 1, 0, 1)"
+      "INSERT INTO players (id, world_id, nickname, level, exp, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, 0, ?, 100, ?, 1, 0, 1)"
     ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
     db.prepare(
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5)"
@@ -683,6 +831,7 @@ function mapPlayer(row: Row): Player {
     worldId: Number(row.world_id),
     nickname: String(row.nickname),
     level: Number(row.level),
+    exp: Number(row.exp ?? 0),
     comment: String(row.comment),
     tutorialProgress: Number(row.tutorial_progress),
     options: parseJson<PlayerOptions>(row.options_json, defaultOptions),

@@ -5,6 +5,7 @@ export type Player = {
   worldId: number;
   nickname: string;
   level: number;
+  exp: number;
   comment: string;
   tutorialProgress: number;
   options: PlayerOptions;

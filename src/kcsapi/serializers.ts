@@ -12,6 +12,7 @@ import type {
   Ship,
   SlotItem
 } from "../state/types.js";
+import { shipApiExp } from "./experience.js";
 
 const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
 
@@ -24,7 +25,7 @@ export function toBasic(player: Player, furniture?: FurnitureState, resourceMani
     api_starttime: Date.now(),
     api_level: player.level,
     api_rank: 1,
-    api_experience: 0,
+    api_experience: player.exp,
     api_fleetname: null,
     api_flagship_position: player.flagshipPosition,
     api_comment: player.comment,
@@ -103,7 +104,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_sortno: master?.api_sortno ?? ship.masterId,
     api_ship_id: ship.masterId,
     api_lv: ship.level,
-    api_exp: [ship.exp, 100, 0],
+    api_exp: shipApiExp(ship.exp, ship.level),
     api_nowhp: ship.hp,
     api_maxhp: ship.maxHp,
     api_leng: master?.api_leng ?? 1,

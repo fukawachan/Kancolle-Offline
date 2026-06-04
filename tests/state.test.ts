@@ -66,6 +66,20 @@ describe("SQLite state store", () => {
     expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
   });
 
+  it("keeps version 3 saves while migrating battle settlement state", () => {
+    store.registerAccount(15);
+    store.updateComment("v3 save should migrate");
+    store.db.prepare("UPDATE schema_meta SET version = 3").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const save = store.getSave();
+
+    expect(store.hasAccount()).toBe(true);
+    expect(save.player.comment).toBe("v3 save should migrate");
+    expect(save.player.exp).toBe(0);
+  });
+
   it("persists mutations across store instances", () => {
     store.registerAccount(15);
     store.updateComment("persistent local save");

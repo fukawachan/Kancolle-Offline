@@ -16,7 +16,16 @@ import type { ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
 import type { SaveState } from "../state/types.js";
-import { battleResultPayload, createNightBattle, createSortieBattle, type BattleRecord } from "./battle.js";
+import {
+  battleResultPayload,
+  createCombinedBattle,
+  createNightBattle,
+  createPracticeBattle,
+  createSortieBattle,
+  practiceRivalById,
+  practiceRivals,
+  type BattleRecord
+} from "./battle.js";
 import { validateSlotEquip } from "./equipment-rules.js";
 import { apiError, apiOk, parseApiPayload } from "./envelope.js";
 import {
@@ -110,7 +119,7 @@ register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_
 register("api_get_member/payitem", () => apiOk([]));
 register("api_get_member/record", (_input, context) => apiOk({ api_member_id: 1, api_nickname: context.stateStore.getSave().player.nickname, api_level: 1 }));
 register("api_get_member/picture_book", (input, context) => apiOk({ api_list: pictureBookList(input, context.resourceManifest) }));
-register("api_get_member/practice", () => apiOk({ api_list: [] }));
+register("api_get_member/practice", (_input, context) => apiOk(practiceListPayload(context.stateStore.practiceStates())));
 register("api_get_member/sortie_conditions", () => apiOk({ api_sortie_conditions: [], api_mission_conditions: [] }));
 register("api_get_member/chart_additional_info", (_input, context) => apiOk(chartAdditionalInfo(context.stateStore.getSave())));
 
@@ -376,6 +385,45 @@ for (const path of [
 ]) {
   register(path, () => apiOk({ api_disabled: 1, api_message: "Local placeholder" }));
 }
+
+register("api_req_member/get_practice_enemyinfo", (input) => apiOk(practiceEnemyInfoPayload(num(input.body.api_member_id, 1))));
+register("api_req_practice/battle", (input, context) => apiOk(recordedPracticeBattlePayload(input, context)));
+register("api_req_practice/midnight_battle", (_input, context) => apiOk(recordedPracticeNightBattlePayload(context)));
+register("api_req_practice/battle_result", (_input, context) => {
+  const applied = context.stateStore.applyPracticeBattleResult();
+  if (applied.record) return apiOk(battleResultPayload(applied.record as unknown as BattleRecord));
+
+  const battle = createPracticeBattle(context.stateStore.getSave(), {});
+  context.stateStore.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
+  const generated = context.stateStore.applyPracticeBattleResult();
+  return apiOk(battleResultPayload((generated.record ?? battle.record) as unknown as BattleRecord));
+});
+
+register("api_req_combined_battle/battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/battle_water", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/each_battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/each_battle_water", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/airbattle", (input, context) => apiOk(combinedAirBattlePayload(input, context)));
+register("api_req_combined_battle/ld_airbattle", (input, context) => apiOk(combinedAirBattlePayload(input, context)));
+register("api_req_combined_battle/ld_shooting", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/midnight_battle", (_input, context) => apiOk(recordedCombinedNightBattlePayload(context)));
+register("api_req_combined_battle/sp_midnight", (_input, context) => apiOk(recordedCombinedNightBattlePayload(context)));
+register("api_req_combined_battle/ec_battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/ec_midnight_battle", (_input, context) => apiOk(recordedCombinedNightBattlePayload(context)));
+register("api_req_combined_battle/ec_night_to_day", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/battleresult", (_input, context) => {
+  const applied = context.stateStore.applyCombinedBattleResult();
+  if (applied.record) return apiOk(battleResultPayload(applied.record as unknown as BattleRecord));
+
+  const battle = createCombinedBattle(context.stateStore.getSave(), {});
+  context.stateStore.recordCombinedBattle(battle.record as unknown as Record<string, unknown>);
+  const generated = context.stateStore.applyCombinedBattleResult();
+  return apiOk(battleResultPayload((generated.record ?? battle.record) as unknown as BattleRecord));
+});
+register("api_req_combined_battle/goback_port", (_input, context) => {
+  context.stateStore.clearSortie();
+  return apiOk(toPort(context.stateStore.getSave(), context.resourceManifest));
+});
 
 export function isKnownKcsApi(path: string) {
   return handlers.has(normalizeApiPath(path));
@@ -679,6 +727,46 @@ function recordedNightBattlePayload(input: HandlerInput, context: HandlerContext
   return night.payload;
 }
 
+function recordedPracticeBattlePayload(input: HandlerInput, context: HandlerContext) {
+  const battle = createPracticeBattle(context.stateStore.getSave(), {
+    deckId: num(input.body.api_deck_id, 1),
+    practiceEnemyId: num(input.body.api_enemy_id, 1),
+    formation: battleFormation(input)
+  });
+  context.stateStore.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
+  return battle.payload;
+}
+
+function recordedPracticeNightBattlePayload(context: HandlerContext) {
+  let record = context.stateStore.lastPracticeBattle() as unknown as BattleRecord | null;
+  if (!record) {
+    const battle = createPracticeBattle(context.stateStore.getSave(), {});
+    context.stateStore.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
+    record = battle.record;
+  }
+  const night = createNightBattle(record);
+  context.stateStore.updatePracticeBattle(night.record as unknown as Record<string, unknown>);
+  return night.payload;
+}
+
+function recordedCombinedBattlePayload(input: HandlerInput, context: HandlerContext) {
+  const battle = createCombinedBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+  context.stateStore.recordCombinedBattle(battle.record as unknown as Record<string, unknown>);
+  return battle.payload;
+}
+
+function recordedCombinedNightBattlePayload(context: HandlerContext) {
+  let record = context.stateStore.lastCombinedBattle() as unknown as BattleRecord | null;
+  if (!record) {
+    const battle = createCombinedBattle(context.stateStore.getSave(), {});
+    context.stateStore.recordCombinedBattle(battle.record as unknown as Record<string, unknown>);
+    record = battle.record;
+  }
+  const night = createNightBattle(record);
+  context.stateStore.updateCombinedBattle(night.record as unknown as Record<string, unknown>);
+  return night.payload;
+}
+
 function airBattlePayload(input: HandlerInput, context: HandlerContext) {
   const payload = recordedBattlePayload(input, context);
   return {
@@ -688,6 +776,68 @@ function airBattlePayload(input: HandlerInput, context: HandlerContext) {
       api_stage1: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0, api_disp_seiku: 1 },
       api_stage2: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0 },
       api_stage3: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] }
+    }
+  };
+}
+
+function combinedAirBattlePayload(input: HandlerInput, context: HandlerContext) {
+  const payload = recordedCombinedBattlePayload(input, context);
+  return {
+    ...payload,
+    api_stage_flag: [1, 1, 1],
+    api_kouku: {
+      api_stage1: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0, api_disp_seiku: 1 },
+      api_stage2: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0 },
+      api_stage3: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] },
+      api_stage3_combined: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] }
+    }
+  };
+}
+
+function practiceListPayload(states: Record<string, number> = {}) {
+  return {
+    api_create_kind: 2,
+    api_selected_kind: 2,
+    api_entry_limit: 0,
+    api_list: practiceRivals().map((rival) => ({
+      api_enemy_id: rival.id,
+      api_enemy_name: rival.name,
+      api_enemy_level: rival.level,
+      api_enemy_rank: rival.rank,
+      api_enemy_flag: rival.flag,
+      api_enemy_flag_ship: rival.ships[0]?.masterId ?? 0,
+      api_enemy_comment: rival.comment,
+      api_state: states[String(rival.id)] ?? 0,
+      api_medals: rival.medals
+    }))
+  };
+}
+
+function practiceEnemyInfoPayload(enemyId: number) {
+  const rival = practiceRivalById(enemyId);
+  return {
+    api_member_id: rival.id,
+    api_nickname: rival.name,
+    api_nickname_id: rival.name,
+    api_cmt: rival.comment,
+    api_level: rival.level,
+    api_rank: 1,
+    api_experience: [0, 100],
+    api_war: { api_win: 0, api_lose: 0, api_rate: "0%" },
+    api_mission: { api_count: 0, api_success: 0, api_rate: "0%" },
+    api_practice: { api_win: 0, api_lose: 0, api_rate: "0%" },
+    api_ship: [rival.ships.length, 300],
+    api_slotitem: [0, 500],
+    api_furniture: 0,
+    api_deckname: "Practice Fleet",
+    api_deck: {
+      api_deckname: "Practice Fleet",
+      api_ships: rival.ships.map((ship) => ({
+        api_id: ship.id,
+        api_ship_id: ship.masterId,
+        api_level: ship.level,
+        api_star: ship.star
+      }))
     }
   };
 }
