@@ -512,6 +512,7 @@ describe("local kcsapi endpoints", () => {
       api_item4: 30
     });
     const expedition = await post("api_req_mission/start", { api_deck_id: 2, api_mission_id: 2 });
+    const chartInfo = await post("api_get_member/chart_additional_info");
     const mapInfo = await post("api_get_member/mapinfo");
     const mapStart = await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     const mapNext = await post("api_req_map/next");
@@ -522,6 +523,11 @@ describe("local kcsapi endpoints", () => {
     expect(craft.json().api_data).toMatchObject({ api_create_flag: 1, api_slot_item: expect.any(Object) });
     expect(build.json().api_data).toMatchObject({ api_result: 1, api_kdock: expect.any(Object) });
     expect(expedition.json().api_data).toMatchObject({ api_complatetime: expect.any(Number) });
+    expect(chartInfo.json().api_data.api_deck_param[0]).toMatchObject({
+      api_seiku_value: expect.any(Number),
+      api_tp_value: expect.any(Number),
+      api_atp_value: expect.any(Object)
+    });
     expect(mapInfo.json().api_data).toMatchObject({
       api_map_info: expect.arrayContaining([
         expect.objectContaining({
@@ -564,6 +570,18 @@ describe("local kcsapi endpoints", () => {
 
     const missionResult = await post("api_req_mission/result", { api_deck_id: 2 });
     expect(missionResult.json().api_data).toMatchObject({ api_clear_result: 1, api_get_material: expect.any(Array) });
+  });
+
+  it("returns deck parameter slots required by sortie deck selection", async () => {
+    const response = await post("api_get_member/chart_additional_info");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().api_data.api_deck_param).toEqual([
+      { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} },
+      { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} },
+      { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} },
+      { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} }
+    ]);
   });
 
   it("has non-unknown local handlers for the planned API surface", async () => {

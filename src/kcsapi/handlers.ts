@@ -111,7 +111,7 @@ register("api_get_member/record", (_input, context) => apiOk({ api_member_id: 1,
 register("api_get_member/picture_book", (input, context) => apiOk({ api_list: pictureBookList(input, context.resourceManifest) }));
 register("api_get_member/practice", () => apiOk({ api_list: [] }));
 register("api_get_member/sortie_conditions", () => apiOk({ api_sortie_conditions: [], api_mission_conditions: [] }));
-register("api_get_member/chart_additional_info", () => apiOk({}));
+register("api_get_member/chart_additional_info", (_input, context) => apiOk(chartAdditionalInfo(context.stateStore.getSave())));
 
 register("api_req_init/nickname", (input, context) => {
   const player = context.stateStore.updateNickname(str(input.body.api_nickname ?? input.body.api_name, "Local Admiral"));
@@ -526,6 +526,17 @@ function bgmMaster(resourceManifest: ResourceManifest) {
       api_filename: bgm.frame,
       api_rarity: 1
     }));
+}
+
+function chartAdditionalInfo(save: SaveState) {
+  const deckCount = save.decks.length > 0 ? save.decks.length : 4;
+  return {
+    api_deck_param: Array.from({ length: deckCount }, () => ({
+      api_seiku_value: 0,
+      api_tp_value: 0,
+      api_atp_value: {}
+    }))
+  };
 }
 
 function mapInfoMasters(resourceManifest: ResourceManifest) {
