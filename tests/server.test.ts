@@ -157,6 +157,24 @@ describe("local Fastify server", () => {
     expect(fanfare.headers["content-type"]).toContain("audio/mpeg");
   });
 
+  it("falls back to a cache-backed battle slot text image when a cutin asks for an uncached equipment id", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({ method: "GET", url: "/kcs2/resources/slot/btxt_flat/0103_0000.png" });
+    const fallbackForSlot1 = await app.inject({ method: "GET", url: "/kcs2/resources/slot/btxt_flat/0001_0000.png" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/png");
+    expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+    expect(fallbackForSlot1.statusCode).toBe(200);
+    expect(fallbackForSlot1.headers["content-type"]).toContain("image/png");
+    expect(fallbackForSlot1.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+  });
+
   it("requires single-account world registration before issuing login tokens", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

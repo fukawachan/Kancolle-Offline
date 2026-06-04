@@ -29,6 +29,19 @@ describe("cached resource manifest", () => {
       id: 1,
       pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/item_on\/0001_\d{4}\.png$/)
     });
+    expect(manifest.slot.btxtFlat.get(7)).toMatchObject({
+      id: 7,
+      frame: "2591",
+      pathname: "/kcs2/resources/slot/btxt_flat/0007_2591.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/slot/btxt_flat/0007_0000.png", manifest)).toMatchObject({
+      id: 7,
+      frame: "2591"
+    });
+    expect(resolveMappedResource("/kcs2/resources/slot/btxt_flat/0103_0000.png", manifest)).toMatchObject({
+      extension: "png",
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/btxt_flat\/\d{4}_\d{4}\.png$/)
+    });
     expect(manifest.furniture.normal.get(1)).toMatchObject({
       id: 1,
       frame: "8807",

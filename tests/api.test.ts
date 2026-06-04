@@ -632,7 +632,14 @@ describe("local kcsapi endpoints", () => {
       api_formation: [2, 1, 1],
       api_ship_ke: [1501, 1502, -1, -1, -1, -1],
       api_ship_lv: [1, 1, 0, 0, 0, 0],
-      api_eSlot: [[], [], [], [], [], []]
+      api_eSlot: [
+        [1, -1, -1, -1, -1],
+        [1, -1, -1, -1, -1],
+        [],
+        [],
+        [],
+        []
+      ]
     });
     for (const key of ["api_ship_ke", "api_ship_lv", "api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
       expect(battleData[key], key).toHaveLength(6);
@@ -646,8 +653,23 @@ describe("local kcsapi endpoints", () => {
     expect(battleData.api_hougeki1.api_si_list).toHaveLength(battleData.api_hougeki1.api_at_list.length);
     expect(battleData.api_hougeki1.api_cl_list).toHaveLength(battleData.api_hougeki1.api_at_list.length);
     expect(battleData.api_hougeki1.api_damage).toHaveLength(battleData.api_hougeki1.api_at_list.length);
-    for (const targets of battleData.api_hougeki1.api_df_list) {
-      for (const target of targets) expect(target).toBeGreaterThanOrEqual(1);
+    const activeFriendCount = battleData.api_f_nowhps.filter((hp: number) => hp > 0).length;
+    const activeEnemyCount = battleData.api_ship_ke.filter((id: number) => id > 0).length;
+    for (const [index, attacker] of battleData.api_hougeki1.api_at_list.entries()) {
+      const attackerIsEnemy = battleData.api_hougeki1.api_at_eflag[index] === 1;
+      expect(attacker).toBeGreaterThanOrEqual(0);
+      expect(attacker).toBeLessThan(attackerIsEnemy ? activeEnemyCount : activeFriendCount);
+      for (const defender of battleData.api_hougeki1.api_df_list[index]) {
+        expect(defender).toBeGreaterThanOrEqual(0);
+        expect(defender).toBeLessThan(attackerIsEnemy ? activeFriendCount : activeEnemyCount);
+      }
+    }
+    const slotMasterIds = new Set(start2Data.api_mst_slotitem.map((slot: any) => slot.api_id));
+    for (const slotIds of battleData.api_hougeki1.api_si_list) {
+      for (const slotId of slotIds) {
+        expect(slotId).toBeGreaterThan(0);
+        expect(slotMasterIds.has(slotId), `api_mst_slotitem contains ${slotId}`).toBe(true);
+      }
     }
     expect(battleData.api_raigeki).toMatchObject({
       api_frai: expect.any(Array),
@@ -664,6 +686,11 @@ describe("local kcsapi endpoints", () => {
       api_ebak_flag: expect.any(Array)
     });
     for (const key of Object.keys(battleData.api_raigeki)) expect(battleData.api_raigeki[key], key).toHaveLength(6);
+    for (const [attackerIndex, target] of battleData.api_raigeki.api_frai.entries()) {
+      if (target < 0) continue;
+      expect(target).toBeLessThan(activeEnemyCount);
+      expect(battleData.api_raigeki.api_edam[target]).toBeGreaterThanOrEqual(battleData.api_raigeki.api_fydam[attackerIndex]);
+    }
 
     const enemyIds = battleData.api_ship_ke.filter((id: number) => id > 0);
     expect(enemyIds).not.toEqual(expect.arrayContaining([501, 502]));

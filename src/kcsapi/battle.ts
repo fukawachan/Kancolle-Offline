@@ -224,7 +224,7 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_nowhps: [-1, ...record.before.fNowHps, ...record.before.eNowHps],
     api_maxhps: [-1, ...fMaxHps, ...eMaxHps],
     api_midnight_flag: record.after.eNowHps.some((hp) => hp > 0) ? 1 : 0,
-    api_eSlot: [[], [], [], [], [], []],
+    api_eSlot: fixedUnitValues(enemy, (unit) => fixedSlotIds(unit.slots), []),
     api_fParam: fixedUnitValues(friendly, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_eParam: fixedUnitValues(enemy, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_search: [1, 1],
@@ -271,10 +271,10 @@ function appendShellingAttack(
   attacker.damageDealt += damage;
 
   payload.api_at_eflag.push(attacker.side);
-  payload.api_at_list.push(attacker.apiIndex);
+  payload.api_at_list.push(attacker.position - 1);
   payload.api_at_type.push(0);
-  payload.api_df_list.push([target.apiIndex]);
-  payload.api_si_list.push([attacker.slots[0] ?? 1]);
+  payload.api_df_list.push([target.position - 1]);
+  payload.api_si_list.push([primarySlotId(attacker)]);
   payload.api_cl_list.push([damage > 0 ? 1 : 0]);
   payload.api_damage.push([damage]);
   if (payload.api_sp_list) payload.api_sp_list.push(0);
@@ -306,7 +306,7 @@ function torpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: nu
     const power = capAttack((attacker.torpedo + 5) * formationModifier(formation, "torpedo") * damageStateModifier(attacker), 180);
     const damage = applyDamage(target, power, attacker.ammoModifier, rng, 1);
     attacker.damageDealt += damage;
-    payload.api_frai[attackerIdx] = target.position;
+    payload.api_frai[attackerIdx] = targetIdx;
     payload.api_frai_flag[attackerIdx] = 1;
     payload.api_fydam[attackerIdx] = damage;
     payload.api_edam[targetIdx] += damage;
@@ -322,7 +322,7 @@ function torpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: nu
     const power = capAttack((attacker.torpedo + 5) * damageStateModifier(attacker), 180);
     const damage = applyDamage(target, power, attacker.ammoModifier, rng, 0);
     attacker.damageDealt += damage;
-    payload.api_erai[attackerIdx] = target.position;
+    payload.api_erai[attackerIdx] = targetIdx;
     payload.api_erai_flag[attackerIdx] = 1;
     payload.api_eydam[attackerIdx] = damage;
     payload.api_fdam[targetIdx] += damage;
@@ -424,7 +424,7 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     luck: 0,
     range: 1,
     ammoModifier: 1,
-    slots: [0],
+    slots: [1],
     damageDealt: 0
   };
 }
@@ -539,6 +539,15 @@ function fixedHp(units: BattleUnit[]) {
 
 function fixedMaxHp(units: BattleUnit[]) {
   return fixedUnitValues(units, (unit) => unit.maxHp, 0);
+}
+
+function fixedSlotIds(slotIds: number[]) {
+  const activeSlots = slotIds.filter((id) => id > 0);
+  return [...activeSlots, ...Array(5).fill(-1)].slice(0, 5);
+}
+
+function primarySlotId(unit: BattleUnit) {
+  return unit.slots.find((id) => id > 0) ?? 1;
 }
 
 function fixedUnitValues<T>(units: BattleUnit[], pick: (unit: BattleUnit) => T, fill: T): T[] {

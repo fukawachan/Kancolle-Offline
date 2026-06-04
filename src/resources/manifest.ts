@@ -51,10 +51,13 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return collection?.get(Number(shipAlbum[2]));
   }
 
-  const slot = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
+  const slot = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|btxt_flat|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
   if (slot) {
     const collection = slotCollection(manifest, slot[1]);
-    return collection?.get(Number(slot[2]));
+    const id = Number(slot[2]);
+    const resource = collection?.get(id);
+    if (resource) return resource;
+    return slot[1].toLowerCase() === "btxt_flat" && collection ? firstResource(collection) : undefined;
   }
 
   const furniture = pathname.match(/^\/kcs2\/resources\/furniture\/normal\/(\d{3})_\d{4}\.png$/i);
@@ -90,6 +93,7 @@ function emptyManifest(): ResourceManifest {
     slot: {
       card: new Map(),
       cardThumbnail: new Map(),
+      btxtFlat: new Map(),
       itemOn: new Map(),
       itemUp: new Map()
     },
@@ -170,7 +174,7 @@ function addShipResource(manifest: ResourceManifest, cacheDir: string, pathname:
 }
 
 function addSlotResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
-  const match = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
+  const match = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|btxt_flat|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
   if (!match) return;
 
   const collection = slotCollection(manifest, match[1]);
@@ -203,6 +207,8 @@ function slotCollection(manifest: ResourceManifest, rawKind: string) {
       return manifest.slot.card;
     case "card_t":
       return manifest.slot.cardThumbnail;
+    case "btxt_flat":
+      return manifest.slot.btxtFlat;
     case "item_on":
       return manifest.slot.itemOn;
     case "item_up":

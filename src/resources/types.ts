@@ -28,6 +28,7 @@ export type ShipResourceManifest = {
 export type SlotResourceManifest = {
   card: Map<number, FileResource>;
   cardThumbnail: Map<number, FileResource>;
+  btxtFlat: Map<number, FileResource>;
   itemOn: Map<number, FileResource>;
   itemUp: Map<number, FileResource>;
 };

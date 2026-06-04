@@ -40,7 +40,23 @@ describe("sortie battle simulation", () => {
     expect(payload.api_maxhps).toHaveLength(13);
     expect(payload.api_hougeki1.api_at_list.length).toBeGreaterThan(0);
     expect(payload.api_hougeki1.api_at_eflag).toHaveLength(payload.api_hougeki1.api_at_list.length);
-    expect(payload.api_hougeki1.api_df_list[0][0]).toBeGreaterThanOrEqual(7);
+    const activeFriendCount = payload.api_f_nowhps.filter((hp: number) => hp > 0).length;
+    const activeEnemyCount = payload.api_ship_ke.filter((id: number) => id > 0).length;
+    for (const [index, attacker] of payload.api_hougeki1.api_at_list.entries()) {
+      const attackerIsEnemy = payload.api_hougeki1.api_at_eflag[index] === 1;
+      expect(attacker).toBeGreaterThanOrEqual(0);
+      expect(attacker).toBeLessThan(attackerIsEnemy ? activeEnemyCount : activeFriendCount);
+      for (const defender of payload.api_hougeki1.api_df_list[index]) {
+        expect(defender).toBeGreaterThanOrEqual(0);
+        expect(defender).toBeLessThan(attackerIsEnemy ? activeFriendCount : activeEnemyCount);
+      }
+    }
+    for (const slotIds of payload.api_eSlot.slice(0, 2)) {
+      expect(slotIds[0]).toBeGreaterThan(0);
+    }
+    for (const slotIds of payload.api_hougeki1.api_si_list) {
+      for (const slotId of slotIds) expect(slotId).toBeGreaterThan(0);
+    }
     expect(payload.api_raigeki).toMatchObject({
       api_frai: expect.any(Array),
       api_erai: expect.any(Array),
@@ -52,6 +68,11 @@ describe("sortie battle simulation", () => {
     const raigeki = payload.api_raigeki!;
     expect(raigeki.api_frai).toHaveLength(6);
     expect(raigeki.api_erai).toHaveLength(6);
+    for (const [attackerIndex, target] of raigeki.api_frai.entries()) {
+      if (target < 0) continue;
+      expect(target).toBeLessThan(activeEnemyCount);
+      expect(raigeki.api_edam[target]).toBeGreaterThanOrEqual(raigeki.api_fydam[attackerIndex]);
+    }
     expect(battle.record.result.rank).toMatch(/[SABC]/);
     expect(battle.record.result.mvp).toBeGreaterThanOrEqual(1);
   });
