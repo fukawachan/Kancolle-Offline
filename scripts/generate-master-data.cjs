@@ -191,6 +191,22 @@ function buildShipTypes(ships) {
   return [...typeSet.values()].sort((a, b) => a.api_id - b.api_id);
 }
 
+function applyStart2SlotOverrides(equipment, start2Data) {
+  const start2SlotById = new Map((start2Data.api_mst_slotitem || []).map((slot) => [slot.api_id, slot]));
+  return equipment.map((item) => {
+    const start2Slot = start2SlotById.get(item.api_id);
+    if (!start2Slot) return item;
+    return {
+      ...item,
+      api_type: Array.isArray(start2Slot.api_type) ? [...start2Slot.api_type] : item.api_type,
+      api_leng: num(start2Slot.api_leng, item.api_leng),
+      api_version: num(start2Slot.api_version, item.api_version),
+      api_cost: start2Slot.api_cost ?? item.api_cost,
+      api_distance: start2Slot.api_distance ?? item.api_distance,
+    };
+  });
+}
+
 // ---- Main ----
 async function main() {
   console.log("Fetching equipment data...");
@@ -215,7 +231,7 @@ async function main() {
   for (const e of equipment) {
     equipById.set(e.api_id, e);
   }
-  const uniqueEquipment = [...equipById.values()].sort((a, b) => a.api_id - b.api_id);
+  const uniqueEquipment = applyStart2SlotOverrides([...equipById.values()].sort((a, b) => a.api_id - b.api_id), start2Data);
   console.log(`  ${uniqueEquipment.length} unique equipment after dedup`);
 
   // Map ships

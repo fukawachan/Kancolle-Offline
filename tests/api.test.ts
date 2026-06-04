@@ -117,6 +117,13 @@ describe("local kcsapi endpoints", () => {
     expect((slotById.get(10) as any).api_type[2]).toBe(4);  // Secondary Gun
     expect((slotById.get(37) as any).api_type[2]).toBe(21); // Anti-Aircraft Gun
     expect((slotById.get(46) as any).api_type[2]).toBe(14); // Sonar
+    expect(slotById.get(20)).toMatchObject({ api_leng: 0, api_cost: 4, api_distance: 7 });
+    expect(slotById.get(27)).toMatchObject({ api_leng: 0 });
+    expect(slotById.get(64)).toMatchObject({ api_type: [3, 5, 7, 7, 59], api_version: 2 });
+    expect(slotById.get(69)).toMatchObject({ api_type: [3, 15, 25, 21, 53], api_cost: 2, api_distance: 1 });
+    expect(slotById.get(70)).toMatchObject({ api_type: [3, 16, 26, 22, 54], api_cost: 3, api_distance: 2 });
+    expect(slotById.get(138)).toMatchObject({ api_cost: 25, api_distance: 20 });
+    expect(slotById.get(505)).toMatchObject({ api_type: [4, 6, 21, 15, 0], api_leng: 0 });
     const shipTypeById = new Map(start2Data.api_mst_stype.map((shipType: any) => [shipType.api_id, shipType]));
     const destroyerEquipTypes = (shipTypeById.get(2) as any).api_equip_type;
     expect(destroyerEquipTypes["1"]).toBe(1);
