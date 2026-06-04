@@ -143,6 +143,33 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
     expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(1);
     expect(start2Data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
+    expect(start2Data.api_mst_maparea).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_id: 1, api_name: "鎮守府海域", api_type: 0 }),
+        expect.objectContaining({ api_id: 2, api_name: "南西諸島海域", api_type: 0 }),
+        expect.objectContaining({ api_id: 7, api_name: "南西海域", api_type: 0 })
+      ])
+    );
+    expect(start2Data.api_mst_mapinfo.find((map: any) => map.api_id === 11)).toMatchObject({
+      api_id: 11,
+      api_maparea_id: 1,
+      api_no: 1,
+      api_name: "鎮守府正面海域",
+      api_sally_flag: [1, 0, 0]
+    });
+    expect(start2Data.api_mst_mapbgm.find((map: any) => map.api_id === 11)).toMatchObject({
+      api_id: 11,
+      api_maparea_id: 1,
+      api_no: 1,
+      api_map_bgm: expect.any(Array),
+      api_boss_bgm: expect.any(Array)
+    });
+    expect(start2Data.api_mst_mapcell).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_maparea_id: 1, api_mapinfo_no: 1, api_no: 0, api_color_no: 0 }),
+        expect.objectContaining({ api_maparea_id: 1, api_mapinfo_no: 1, api_no: 1, api_color_no: 5 })
+      ])
+    );
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
       api_voice_flag: 1,
@@ -485,7 +512,9 @@ describe("local kcsapi endpoints", () => {
       api_item4: 30
     });
     const expedition = await post("api_req_mission/start", { api_deck_id: 2, api_mission_id: 2 });
+    const mapInfo = await post("api_get_member/mapinfo");
     const mapStart = await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    const mapNext = await post("api_req_map/next");
     const battle = await post("api_req_sortie/battle");
     const result = await post("api_req_sortie/battleresult");
 
@@ -493,7 +522,35 @@ describe("local kcsapi endpoints", () => {
     expect(craft.json().api_data).toMatchObject({ api_create_flag: 1, api_slot_item: expect.any(Object) });
     expect(build.json().api_data).toMatchObject({ api_result: 1, api_kdock: expect.any(Object) });
     expect(expedition.json().api_data).toMatchObject({ api_complatetime: expect.any(Number) });
-    expect(mapStart.json().api_data).toMatchObject({ api_no: 1, api_maparea_id: 1, api_mapinfo_no: 1 });
+    expect(mapInfo.json().api_data).toMatchObject({
+      api_map_info: expect.arrayContaining([
+        expect.objectContaining({
+          api_id: 11,
+          api_maparea_id: 1,
+          api_no: 1,
+          api_sally_flag: [1, 0, 0]
+        })
+      ]),
+      api_air_base: [],
+      api_air_base_expanded_info: []
+    });
+    expect(mapStart.json().api_data).toMatchObject({
+      api_no: 1,
+      api_from_no: 0,
+      api_maparea_id: 1,
+      api_mapinfo_no: 1,
+      api_cell_data: expect.arrayContaining([
+        expect.objectContaining({ api_no: 0, api_color_no: 0 }),
+        expect.objectContaining({ api_no: 1, api_color_no: 5 })
+      ]),
+      api_next: expect.any(Number)
+    });
+    expect(mapNext.json().api_data).toMatchObject({
+      api_maparea_id: 1,
+      api_mapinfo_no: 1,
+      api_from_no: 1,
+      api_no: expect.any(Number)
+    });
     expect(battle.json().api_data).toMatchObject({
       api_dock_id: 1,
       api_ship_ke: expect.any(Array),

@@ -363,8 +363,8 @@ export function toMapInfo(save: SaveState) {
     api_gauge_type: 0,
     api_maparea_id: map.areaId,
     api_no: map.mapNo,
-    api_required_defeat_count: 1,
-    api_sally_flag: [0, 0],
+    api_required_defeat_count: masterData.api_mst_mapinfo.find((master) => master.api_id === map.id)?.api_required_defeat_count ?? null,
+    api_sally_flag: masterData.api_mst_mapinfo.find((master) => master.api_id === map.id)?.api_sally_flag ?? [1, 0, 0],
     api_eventmap: null
   }));
 }

@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
-import { masterData } from "../master/data.js";
+import { mapMasterId, masterData } from "../master/data.js";
 import type {
   BuildDock,
   Deck,
@@ -316,13 +316,16 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).decks.find((deck) => deck.id === deckId);
     },
     startSortie: (deckId: number, areaId: number, mapNo: number) => {
+      const save = getSave(db);
+      const map = save.maps.find((item) => item.id === mapMasterId(areaId, mapNo));
+      const deck = save.decks.find((item) => item.id === deckId);
+      if (!map || map.unlocked !== 1 || !deck) return null;
       const seed = Number(`${Date.now()}`.slice(-8));
       db.prepare("DELETE FROM sortie_sessions").run();
       db.prepare(
         "INSERT INTO sortie_sessions (id, deck_id, area_id, map_no, node, seed, state_json) VALUES (1, ?, ?, ?, 1, ?, ?)"
       ).run(deckId, areaId, mapNo, seed, JSON.stringify({ battles: 0 }));
-      const deck = getSave(db).decks.find((item) => item.id === deckId);
-      if (deck) consumeSortieSupply(db, deck);
+      consumeSortieSupply(db, deck);
       return getSave(db).sortieSession;
     },
     nextSortieNode: () => {
@@ -333,6 +336,12 @@ export function createStateStore(options: StateStoreOptions) {
     },
     clearSortie: () => {
       db.prepare("DELETE FROM sortie_sessions").run();
+    },
+    completeSortieBattle: () => {
+      const session = getSave(db).sortieSession;
+      if (!session) return getSave(db);
+      db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = ?").run(mapMasterId(session.areaId, session.mapNo));
+      return getSave(db);
     }
   };
 }
@@ -346,6 +355,7 @@ function migrate(db: Database.Database) {
 
   createSchema(db);
   repairShipMaxValues(db);
+  repairMaps(db);
 }
 
 function repairShipMaxValues(db: Database.Database) {
@@ -361,6 +371,21 @@ function repairShipMaxValues(db: Database.Database) {
       update.run(expectedFuel, expectedAmmo, Number(row.id));
     }
   }
+}
+
+function repairMaps(db: Database.Database) {
+  const rows = db.prepare("SELECT id, area_id, map_no FROM maps").all() as Row[];
+  const hasOfficialOneOne = rows.some((row) => Number(row.id) === 11);
+  if (!hasOfficialOneOne) {
+    const legacyOneOne = rows.find((row) => Number(row.id) === 1 && Number(row.area_id) === 1 && Number(row.map_no) === 1);
+    if (legacyOneOne) {
+      db.prepare("UPDATE maps SET id = ? WHERE id = ?").run(11, 1);
+    }
+  } else {
+    db.prepare("DELETE FROM maps WHERE id = 1").run();
+  }
+
+  seedMissingMaps(db);
 }
 
 function schemaVersion(db: Database.Database) {
@@ -563,7 +588,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       JSON.stringify({ api_floor: 1, api_wall: 2, api_window: 3, api_chest: 4, api_desk: 5, api_object: 0 })
     );
 
-    db.prepare("INSERT INTO maps (id, area_id, map_no, unlocked, cleared, gauge) VALUES (1, 1, 1, 1, 0, 0)").run();
+    seedMissingMaps(db);
   });
   tx();
   return getSave(db);
@@ -789,4 +814,11 @@ function consumeSortieSupply(db: Database.Database, deck: Deck) {
     }
   });
   tx();
+}
+
+function seedMissingMaps(db: Database.Database) {
+  const insert = db.prepare("INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge) VALUES (?, ?, ?, 1, 0, 0)");
+  for (const map of masterData.api_mst_mapinfo) {
+    insert.run(map.api_id, map.api_maparea_id, map.api_no);
+  }
 }

@@ -51,6 +51,28 @@ describe("cached resource manifest", () => {
       pathname: "/kcs2/resources/bgm/port/000_7138.mp3"
     });
     expect(manifest.bgm.port.has(1)).toBe(false);
+    expect(manifest.map.thumbnail.get(11)).toMatchObject({
+      id: 11,
+      areaId: 1,
+      mapNo: 1,
+      frame: "01",
+      pathname: "/kcs2/resources/map/001/01.png"
+    });
+    expect(manifest.map.info.get(11)).toMatchObject({
+      id: 11,
+      areaId: 1,
+      mapNo: 1,
+      frame: "01",
+      pathname: "/kcs2/resources/map/001/01_info.json",
+      extension: "json"
+    });
+    expect(manifest.map.image.get(11)).toMatchObject({
+      id: 11,
+      areaId: 1,
+      mapNo: 1,
+      frame: "01",
+      pathname: "/kcs2/resources/map/001/01_image.png"
+    });
   });
 
   it("derives ship voice availability from cache-backed sound files", async () => {

@@ -1,6 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { CachedResourceMeta, FileResource, ResourceManifest } from "./types.js";
+import type { CachedResourceMeta, FileResource, MapFileResource, MapSpot, ResourceManifest } from "./types.js";
 
 type CacheIndex = Record<string, CachedResourceMeta>;
 
@@ -21,10 +21,12 @@ export async function createResourceManifest(cacheDir: string): Promise<Resource
     addSlotResource(manifest, resolvedCacheDir, pathname, meta);
     addFurnitureResource(manifest, resolvedCacheDir, pathname, meta);
     addBgmResource(manifest, resolvedCacheDir, pathname, meta);
+    addMapResource(manifest, resolvedCacheDir, pathname, meta);
     addVoiceResource(manifest, pathname);
   }
 
   attachShipVoiceResources(manifest);
+  await attachMapInfoResources(manifest);
 
   return manifest;
 }
@@ -92,6 +94,12 @@ function emptyManifest(): ResourceManifest {
     },
     bgm: {
       port: new Map()
+    },
+    map: {
+      thumbnail: new Map(),
+      image: new Map(),
+      info: new Map(),
+      spots: new Map()
     },
     voice: {
       byShipId: new Map(),
@@ -224,6 +232,34 @@ function addBgmResource(manifest: ResourceManifest, cacheDir: string, pathname: 
   );
 }
 
+function addMapResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
+  const match = pathname.match(/^\/kcs2\/resources\/map\/(\d{3})\/(\d{2})(?:_(image|info)(\d+)?)?\.(png|json)$/i);
+  if (!match) return;
+
+  const areaId = Number(match[1]);
+  const mapNo = Number(match[2]);
+  const kind = (match[3] || "thumbnail").toLowerCase();
+  const variant = match[4] || "";
+  const extension = pathname.endsWith(".json") ? "json" : "png";
+  const id = areaId * 10 + mapNo;
+  const parsed = {
+    id,
+    areaId,
+    mapNo,
+    frame: match[2],
+    extension
+  };
+
+  const file = mapResource(cacheDir, pathname, meta, parsed);
+  if (kind === "thumbnail") {
+    manifest.map.thumbnail.set(id, file);
+  } else if (kind === "info") {
+    manifest.map.info.set(id, file);
+  } else if (kind === "image" && (!variant || !manifest.map.image.has(id))) {
+    manifest.map.image.set(id, file);
+  }
+}
+
 function addVoiceResource(manifest: ResourceManifest, pathname: string) {
   const match = pathname.match(/^\/kcs\/sound\/kc([a-z]+)\/(\d+)\.mp3$/i);
   if (!match) return;
@@ -252,6 +288,23 @@ function attachShipVoiceResources(manifest: ResourceManifest) {
   }
 }
 
+async function attachMapInfoResources(manifest: ResourceManifest) {
+  for (const [mapId, file] of manifest.map.info) {
+    try {
+      const raw = JSON.parse(await readFile(file.filePath, "utf8")) as { spots?: MapSpot[] };
+      const spots = Array.isArray(raw.spots)
+        ? raw.spots
+            .map((spot) => ({ ...spot, no: Number(spot.no) }))
+            .filter((spot) => Number.isFinite(spot.no))
+            .sort((a, b) => a.no - b.no)
+        : [];
+      manifest.map.spots.set(mapId, spots);
+    } catch {
+      manifest.map.spots.set(mapId, []);
+    }
+  }
+}
+
 function availableVoiceNos(shipId: number, files: Set<string>) {
   const available = new Set<number>();
   for (let voiceNo = 1; voiceNo <= VOICE_FILE_HASHES.length; voiceNo += 1) {
@@ -268,6 +321,23 @@ function resource(
   meta: CachedResourceMeta,
   parsed: Pick<FileResource, "id" | "frame" | "extension" | "filename">
 ): FileResource {
+  return {
+    ...parsed,
+    pathname,
+    filePath: safeCachePath(cacheDir, pathname),
+    version: parseVersion(meta.version),
+    lastModified: meta.lastmodified,
+    length: meta.length,
+    cache: meta.cache
+  };
+}
+
+function mapResource(
+  cacheDir: string,
+  pathname: string,
+  meta: CachedResourceMeta,
+  parsed: Pick<MapFileResource, "id" | "areaId" | "mapNo" | "frame" | "extension" | "filename">
+): MapFileResource {
   return {
     ...parsed,
     pathname,

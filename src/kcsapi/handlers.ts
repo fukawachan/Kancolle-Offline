@@ -11,7 +11,7 @@ import {
   slotPictureBookPage,
   type ShipMaster
 } from "../master/catalog.js";
-import { masterData } from "../master/data.js";
+import { mapMasterId, masterData } from "../master/data.js";
 import type { ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
@@ -96,7 +96,13 @@ register("api_get_member/furniture", (_input, context) => apiOk(toFurniture(cont
 register("api_get_member/kdock", (_input, context) => apiOk(context.stateStore.getSave().buildDocks.map(toBuildDock)));
 register("api_get_member/ndock", (_input, context) => apiOk(context.stateStore.getSave().repairDocks.map(toRepairDock)));
 register("api_get_member/questlist", (_input, context) => apiOk(toQuestList(context.stateStore.getSave().quests)));
-register("api_get_member/mapinfo", (_input, context) => apiOk(toMapInfo(context.stateStore.getSave())));
+register("api_get_member/mapinfo", (_input, context) =>
+  apiOk({
+    api_map_info: toMapInfo(context.stateStore.getSave()),
+    api_air_base: [],
+    api_air_base_expanded_info: []
+  })
+);
 register("api_get_member/mission", () => apiOk({ api_list: masterData.api_mst_mission, api_exec: [] }));
 register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
 register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
@@ -303,12 +309,14 @@ register("api_req_mission/result", (input, context) => {
 register("api_req_mission/return_instruction", (input, context) => apiOk({ api_deck: toDeck(context.stateStore.recallMission(num(input.body.api_deck_id, 2))!) }));
 
 register("api_req_map/start", (input, context) => {
-  const session = context.stateStore.startSortie(num(input.body.api_deck_id, 1), num(input.body.api_maparea_id, 1), num(input.body.api_mapinfo_no, 1))!;
-  return apiOk(mapNode(session.areaId, session.mapNo, session.node));
+  const session = context.stateStore.startSortie(num(input.body.api_deck_id, 1), num(input.body.api_maparea_id, 1), num(input.body.api_mapinfo_no, 1));
+  if (!session) return apiError("Unknown or locked sortie map", 400);
+  return apiOk(mapNode(context.resourceManifest, session.areaId, session.mapNo, session.node, 0, true));
 });
 register("api_req_map/next", (_input, context) => {
+  const previousNode = context.stateStore.getSave().sortieSession?.node ?? 0;
   const session = context.stateStore.nextSortieNode();
-  return apiOk(session ? mapNode(session.areaId, session.mapNo, session.node) : mapNode(1, 1, 1));
+  return apiOk(session ? mapNode(context.resourceManifest, session.areaId, session.mapNo, session.node, previousNode) : mapNode(context.resourceManifest, 1, 1, 1, 0));
 });
 register("api_req_sortie/battle", (_input, context) => apiOk(battlePayload(context.stateStore.getSave())));
 register("api_req_battle_midnight/battle", (_input, context) => apiOk(nightBattlePayload(context.stateStore.getSave())));
@@ -318,9 +326,11 @@ register("api_req_sortie/airbattle", (_input, context) => apiOk(airBattlePayload
 register("api_req_sortie/ld_airbattle", (_input, context) => apiOk(airBattlePayload(context.stateStore.getSave())));
 register("api_req_sortie/ld_shooting", (_input, context) => apiOk(battlePayload(context.stateStore.getSave())));
 register("api_req_sortie/battleresult", (_input, context) => {
+  const save = context.stateStore.completeSortieBattle();
+  const deck = sortieDeck(save);
   context.stateStore.addMaterials({ fuel: 20 });
   return apiOk({
-    api_ship_id: context.stateStore.getSave().decks[0].shipIds.filter((id) => id > 0),
+    api_ship_id: deck.shipIds.filter((id) => id > 0),
     api_win_rank: "S",
     api_get_exp: 60,
     api_mvp: 1,
@@ -417,6 +427,7 @@ async function recordUnknown(input: HandlerInput, context: HandlerContext) {
 function masterDataWithResources(resourceManifest: ResourceManifest) {
   const ships = buildShipMasters(resourceManifest);
   const slotItems = buildSlotMasters(resourceManifest);
+  const mapInfos = mapInfoMasters(resourceManifest);
   return {
     ...masterData,
     api_mst_ship: ships,
@@ -425,7 +436,11 @@ function masterDataWithResources(resourceManifest: ResourceManifest) {
     api_mst_slotitem_equiptype: buildSlotEquipTypes(slotItems),
     api_mst_shipgraph: shipGraph(resourceManifest, ships),
     api_mst_furnituregraph: furnitureGraph(resourceManifest),
-    api_mst_bgm: bgmMaster(resourceManifest)
+    api_mst_bgm: bgmMaster(resourceManifest),
+    api_mst_maparea: mapAreaMasters(mapInfos),
+    api_mst_mapinfo: mapInfos,
+    api_mst_mapbgm: mapBgmMasters(mapInfos),
+    api_mst_mapcell: mapCellMasters(resourceManifest, mapInfos)
   };
 }
 
@@ -513,6 +528,41 @@ function bgmMaster(resourceManifest: ResourceManifest) {
     }));
 }
 
+function mapInfoMasters(resourceManifest: ResourceManifest) {
+  const cacheBackedIds = new Set(resourceManifest.map.thumbnail.keys());
+  return masterData.api_mst_mapinfo.filter((map) => cacheBackedIds.has(map.api_id));
+}
+
+function mapAreaMasters(mapInfos: typeof masterData.api_mst_mapinfo) {
+  const areaIds = new Set(mapInfos.map((map) => map.api_maparea_id));
+  return masterData.api_mst_maparea.filter((area) => areaIds.has(area.api_id));
+}
+
+function mapBgmMasters(mapInfos: typeof masterData.api_mst_mapinfo) {
+  return mapInfos.map((map) => ({
+    api_id: map.api_id,
+    api_maparea_id: map.api_maparea_id,
+    api_no: map.api_no,
+    api_moving_bgm: 0,
+    api_map_bgm: [0, 0],
+    api_boss_bgm: [0, 0]
+  }));
+}
+
+function mapCellMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
+  return mapInfos.flatMap((map) => {
+    const spots = mapSpots(resourceManifest, map.api_maparea_id, map.api_no);
+    const bossCellNo = lastCellNo(spots);
+    return spots.map((spot) => ({
+      api_id: map.api_id * 100 + spot.no,
+      api_maparea_id: map.api_maparea_id,
+      api_mapinfo_no: map.api_no,
+      api_no: spot.no,
+      api_color_no: mapCellColor(spot.no, bossCellNo)
+    }));
+  });
+}
+
 function recipeDelta(body: Record<string, unknown>) {
   return {
     fuel: num(body.api_item1, 0),
@@ -522,24 +572,62 @@ function recipeDelta(body: Record<string, unknown>) {
   };
 }
 
-function mapNode(areaId: number, mapNo: number, node: number) {
+function mapNode(resourceManifest: ResourceManifest, areaId: number, mapNo: number, node: number, fromNo: number, includeCells = false) {
+  const spots = mapSpots(resourceManifest, areaId, mapNo);
+  const bossCellNo = lastCellNo(spots);
+  const currentNode = spots.some((spot) => spot.no === node) ? node : node > bossCellNo ? bossCellNo : firstSortieCellNo(spots);
+  const next = nextCellNo(spots, currentNode);
+  const colorNo = mapCellColor(currentNode, bossCellNo);
   return {
     api_rashin_flg: 1,
     api_rashin_id: 1,
     api_maparea_id: areaId,
     api_mapinfo_no: mapNo,
-    api_no: node,
-    api_color_no: node === 1 ? 5 : 6,
-    api_event_id: node === 1 ? 4 : 5,
-    api_event_kind: node === 1 ? 1 : 0,
-    api_next: node === 1 ? 2 : 0,
-    api_bosscell_no: 2,
-    api_select_route: null
+    api_no: currentNode,
+    api_from_no: fromNo,
+    api_color_no: colorNo,
+    api_event_id: currentNode === bossCellNo ? 5 : 4,
+    api_event_kind: currentNode === 0 ? 0 : 1,
+    api_next: next,
+    api_bosscell_no: bossCellNo,
+    api_select_route: null,
+    ...(includeCells ? { api_cell_data: cellData(spots, bossCellNo) } : {})
   };
 }
 
+function mapSpots(resourceManifest: ResourceManifest, areaId: number, mapNo: number) {
+  const mapId = mapMasterId(areaId, mapNo);
+  const spots = resourceManifest.map.spots.get(mapId);
+  if (spots && spots.length > 0) return spots;
+  return [{ no: 0 }, { no: 1 }];
+}
+
+function cellData(spots: { no: number }[], bossCellNo: number) {
+  return spots.map((spot) => ({
+    api_no: spot.no,
+    api_color_no: mapCellColor(spot.no, bossCellNo)
+  }));
+}
+
+function firstSortieCellNo(spots: { no: number }[]) {
+  return spots.find((spot) => spot.no > 0)?.no ?? 1;
+}
+
+function lastCellNo(spots: { no: number }[]) {
+  return spots.reduce((max, spot) => Math.max(max, spot.no), firstSortieCellNo(spots));
+}
+
+function nextCellNo(spots: { no: number }[], currentNode: number) {
+  return spots.find((spot) => spot.no > currentNode)?.no ?? 0;
+}
+
+function mapCellColor(cellNo: number, bossCellNo: number) {
+  if (cellNo <= 0) return 0;
+  return cellNo === bossCellNo ? 6 : 5;
+}
+
 function battlePayload(save: SaveState) {
-  const deck = save.decks[0];
+  const deck = sortieDeck(save);
   const shipIds = deck.shipIds.filter((id) => id > 0);
   return {
     api_dock_id: deck.id,
@@ -570,6 +658,10 @@ function battlePayload(save: SaveState) {
     api_hougeki3: null,
     api_raigeki: null
   };
+}
+
+function sortieDeck(save: SaveState) {
+  return save.decks.find((deck) => deck.id === save.sortieSession?.deckId) || save.decks[0];
 }
 
 function nightBattlePayload(save: SaveState) {
