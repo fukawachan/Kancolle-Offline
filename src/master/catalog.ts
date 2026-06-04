@@ -16,19 +16,25 @@ const VOICE_FLAG_TIRED_BE_LEFT = 4;
 const BE_LEFT_VOICE_NO = 29;
 const TIME_SIGNAL_VOICE_NOS = Array.from({ length: 24 }, (_value, index) => index + 30);
 const TIRED_BE_LEFT_VOICE_FILE = "129";
+const DEEP_SEA_SHIP_MASTERS: ShipMaster[] = [
+  deepSeaShipMaster(1501, "駆逐イ級"),
+  deepSeaShipMaster(1502, "駆逐ロ級")
+];
 
 export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster[] {
   const baseById = new Map(masterData.api_mst_ship.map((ship) => [ship.api_id, ship] as const));
+  const deepSeaById = new Map(DEEP_SEA_SHIP_MASTERS.map((ship) => [ship.api_id, ship] as const));
   const ids = new Set<number>(resourceManifest.ship.albumStatus.keys());
 
   if (ids.size === 0) {
     for (const id of resourceManifest.ship.card.keys()) ids.add(id);
   }
   for (const id of baseById.keys()) ids.add(id);
+  for (const id of deepSeaById.keys()) ids.add(id);
 
   return [...ids]
     .sort((a, b) => a - b)
-    .map((id) => normalizeShipVoiceFlag(baseById.get(id) ?? generatedShipMaster(id), resourceManifest));
+    .map((id) => normalizeShipVoiceFlag(baseById.get(id) ?? deepSeaById.get(id) ?? generatedShipMaster(id), resourceManifest));
 }
 
 export function buildSlotMasters(resourceManifest: ResourceManifest): SlotMaster[] {
@@ -138,6 +144,37 @@ function generatedShipMaster(api_id: number): ShipMaster {
     api_luck: [0, 0],
     api_leng: 1,
     api_slot_num: 0,
+    api_maxeq: [0, 0, 0, 0, 0],
+    api_buildtime: 0,
+    api_broken: [0, 0, 0, 0],
+    api_powup: [0, 0, 0, 0],
+    api_backs: 1,
+    api_getmes: "",
+    api_fuel_max: 0,
+    api_bull_max: 0,
+    api_voicef: 0
+  };
+}
+
+function deepSeaShipMaster(api_id: number, api_name: string): ShipMaster {
+  return {
+    api_id,
+    api_sortno: api_id,
+    api_sort_id: 0,
+    api_name,
+    api_yomi: "-",
+    api_stype: 2,
+    api_ctype: 1,
+    api_afterlv: 0,
+    api_aftershipid: 0,
+    api_taik: [20, 20],
+    api_souk: [5, 5],
+    api_houg: [5, 5],
+    api_raig: [0, 0],
+    api_tyku: [0, 0],
+    api_luck: [0, 0],
+    api_leng: 1,
+    api_slot_num: 2,
     api_maxeq: [0, 0, 0, 0, 0],
     api_buildtime: 0,
     api_broken: [0, 0, 0, 0],

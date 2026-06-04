@@ -99,6 +99,20 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 77)).toMatchObject({
       api_filename: "skgpomqtcedb"
     });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1501)).toMatchObject({
+      api_name: "駆逐イ級",
+      api_stype: 2
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1502)).toMatchObject({
+      api_name: "駆逐ロ級",
+      api_stype: 2
+    });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1501)).toMatchObject({
+      api_filename: "mtjmdcwtvhdr"
+    });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1502)).toMatchObject({
+      api_filename: "pbgkfylkbjuy"
+    });
     const shipById = new Map(start2Data.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
     expect(((shipById.get(9) as any).api_voicef as number) & 1).toBe(0);
     expect(((shipById.get(179) as any).api_voicef as number) & 1).toBe(1);
@@ -582,6 +596,53 @@ describe("local kcsapi endpoints", () => {
       { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} },
       { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} }
     ]);
+  });
+
+  it("returns HTML5 battle arrays that match exposed enemy master data", async () => {
+    const start2 = await post("api_start2/getData");
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const battle = await post("api_req_sortie/battle", { api_formation: 2 });
+
+    expect(battle.statusCode).toBe(200);
+    const start2Data = start2.json().api_data;
+    const battleData = battle.json().api_data;
+    expect(battleData).toMatchObject({
+      api_deck_id: 1,
+      api_dock_id: 1,
+      api_formation: [2, 1, 1],
+      api_ship_ke: [1501, -1, -1, -1, -1, -1],
+      api_ship_lv: [1, 0, 0, 0, 0, 0],
+      api_f_nowhps: [15, 15, 0, 0, 0, 0],
+      api_f_maxhps: [15, 15, 0, 0, 0, 0],
+      api_e_nowhps: [20, 0, 0, 0, 0, 0],
+      api_e_maxhps: [20, 0, 0, 0, 0, 0],
+      api_eSlot: [[], [], [], [], [], []],
+      api_hougeki1: {
+        api_at_eflag: [0],
+        api_at_type: [0],
+        api_at_list: [1],
+        api_df_list: [[7]],
+        api_si_list: [[1]],
+        api_cl_list: [[1]],
+        api_damage: [[20]]
+      }
+    });
+    for (const key of ["api_ship_ke", "api_ship_lv", "api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
+      expect(battleData[key], key).toHaveLength(6);
+    }
+    expect(battleData.api_nowhps).toHaveLength(13);
+    expect(battleData.api_maxhps).toHaveLength(13);
+
+    const enemyIds = battleData.api_ship_ke.filter((id: number) => id > 0);
+    expect(enemyIds).not.toEqual(expect.arrayContaining([501, 502]));
+    const shipMasterIds = new Set(start2Data.api_mst_ship.map((ship: any) => ship.api_id));
+    const shipGraphIds = new Set(start2Data.api_mst_shipgraph.map((ship: any) => ship.api_id));
+    for (const enemyId of enemyIds) {
+      expect(shipMasterIds.has(enemyId), `api_mst_ship contains ${enemyId}`).toBe(true);
+      expect(shipGraphIds.has(enemyId), `api_mst_shipgraph contains ${enemyId}`).toBe(true);
+    }
   });
 
   it("has non-unknown local handlers for the planned API surface", async () => {
