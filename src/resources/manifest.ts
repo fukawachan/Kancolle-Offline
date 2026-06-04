@@ -69,6 +69,13 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return manifest.bgm.port.get(id) || manifest.bgm.port.get(0);
   }
 
+  const bgm = pathname.match(/^\/kcs2\/resources\/bgm\/(battle|fanfare)\/(\d{3})_\d{4}\.mp3$/i);
+  if (bgm) {
+    const collection = bgm[1].toLowerCase() === "battle" ? manifest.bgm.battle : manifest.bgm.fanfare;
+    const id = Number(bgm[2]);
+    return collection.get(id) || (id === 0 ? firstResource(collection) : undefined);
+  }
+
   return undefined;
 }
 
@@ -93,7 +100,9 @@ function emptyManifest(): ResourceManifest {
       thumbnail: new Map()
     },
     bgm: {
-      port: new Map()
+      port: new Map(),
+      battle: new Map(),
+      fanfare: new Map()
     },
     map: {
       thumbnail: new Map(),
@@ -219,17 +228,22 @@ function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, path
 }
 
 function addBgmResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
-  const match = pathname.match(/^\/kcs2\/resources\/bgm\/port\/(\d{3})_(\d{4})\.mp3$/i);
+  const match = pathname.match(/^\/kcs2\/resources\/bgm\/(port|battle|fanfare)\/(\d{3})_(\d{4})\.mp3$/i);
   if (!match) return;
 
-  manifest.bgm.port.set(
-    Number(match[1]),
+  const collection = manifest.bgm[match[1].toLowerCase() as keyof ResourceManifest["bgm"]];
+  collection.set(
+    Number(match[2]),
     resource(cacheDir, pathname, meta, {
-      id: Number(match[1]),
-      frame: match[2],
+      id: Number(match[2]),
+      frame: match[3],
       extension: "mp3"
     })
   );
+}
+
+function firstResource(collection: Map<number, FileResource>) {
+  return [...collection.values()].sort((a, b) => a.id - b.id)[0];
 }
 
 function addMapResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {

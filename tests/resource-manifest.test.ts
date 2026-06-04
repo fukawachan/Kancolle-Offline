@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { createResourceManifest } from "../src/resources/manifest.js";
+import { createResourceManifest, resolveMappedResource } from "../src/resources/manifest.js";
 
 describe("cached resource manifest", () => {
   it("derives ship, furniture, and BGM mappings from the cache index without writing into cache", async () => {
@@ -51,6 +51,28 @@ describe("cached resource manifest", () => {
       pathname: "/kcs2/resources/bgm/port/000_7138.mp3"
     });
     expect(manifest.bgm.port.has(1)).toBe(false);
+    expect(manifest.bgm.battle.get(155)).toMatchObject({
+      id: 155,
+      frame: "2953",
+      pathname: "/kcs2/resources/bgm/battle/155_2953.mp3"
+    });
+    expect(manifest.bgm.fanfare.get(1)).toMatchObject({
+      id: 1,
+      frame: "7793",
+      pathname: "/kcs2/resources/bgm/fanfare/001_7793.mp3"
+    });
+    expect(resolveMappedResource("/kcs2/resources/bgm/battle/155_0000.mp3", manifest)).toMatchObject({
+      id: 155,
+      frame: "2953"
+    });
+    expect(resolveMappedResource("/kcs2/resources/bgm/battle/000_1633.mp3", manifest)).toMatchObject({
+      id: 1,
+      frame: "6601"
+    });
+    expect(resolveMappedResource("/kcs2/resources/bgm/fanfare/001_0000.mp3", manifest)).toMatchObject({
+      id: 1,
+      frame: "7793"
+    });
     expect(manifest.map.thumbnail.get(11)).toMatchObject({
       id: 11,
       areaId: 1,

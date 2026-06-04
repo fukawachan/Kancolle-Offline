@@ -137,6 +137,26 @@ describe("local Fastify server", () => {
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
+  it("falls back to cache-backed battle and fanfare BGM when the client asks with a stale frame", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const battle = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/battle/155_0000.mp3" });
+    const legacyZero = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/battle/000_1633.mp3" });
+    const fanfare = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/fanfare/001_0000.mp3" });
+
+    expect(battle.statusCode).toBe(200);
+    expect(battle.headers["content-type"]).toContain("audio/mpeg");
+    expect(battle.body.length).toBeGreaterThan(1000);
+    expect(legacyZero.statusCode).toBe(200);
+    expect(legacyZero.headers["content-type"]).toContain("audio/mpeg");
+    expect(fanfare.statusCode).toBe(200);
+    expect(fanfare.headers["content-type"]).toContain("audio/mpeg");
+  });
+
   it("requires single-account world registration before issuing login tokens", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

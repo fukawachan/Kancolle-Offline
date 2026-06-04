@@ -16,6 +16,7 @@ import type { ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
 import type { SaveState } from "../state/types.js";
+import { battleResultPayload, createNightBattle, createSortieBattle, type BattleRecord } from "./battle.js";
 import { validateSlotEquip } from "./equipment-rules.js";
 import { apiError, apiOk, parseApiPayload } from "./envelope.js";
 import {
@@ -252,7 +253,7 @@ register("api_req_furniture/change", (input, context) => {
   return apiOk(toFurniture(context.stateStore.updateFurnitureSet(patch), context.resourceManifest));
 });
 register("api_req_furniture/buy", (input, context) => apiOk(toFurniture(context.stateStore.buyFurniture(num(input.body.api_id, 1)), context.resourceManifest)));
-register("api_req_furniture/music_list", (_input, context) => apiOk({ api_list: bgmMaster(context.resourceManifest) }));
+register("api_req_furniture/music_list", (_input, context) => apiOk({ api_list: portBgmMaster(context.resourceManifest) }));
 register("api_req_furniture/music_play", () => apiOk({ api_id: 0 }));
 register("api_req_furniture/set_portbgm", (input, context) =>
   apiOk({ api_p_bgm_id: context.stateStore.setPortBgm(normalizePortBgmId(num(input.body.api_id, 0), context.resourceManifest)) })
@@ -318,29 +319,21 @@ register("api_req_map/next", (_input, context) => {
   const session = context.stateStore.nextSortieNode();
   return apiOk(session ? mapNode(context.resourceManifest, session.areaId, session.mapNo, session.node, previousNode) : mapNode(context.resourceManifest, 1, 1, 1, 0));
 });
-register("api_req_sortie/battle", (input, context) => apiOk(battlePayload(context.stateStore.getSave(), input)));
-register("api_req_battle_midnight/battle", (input, context) => apiOk(nightBattlePayload(context.stateStore.getSave(), input)));
-register("api_req_battle_midnight/sp_midnight", (input, context) => apiOk(nightBattlePayload(context.stateStore.getSave(), input)));
-register("api_req_sortie/night_to_day", (input, context) => apiOk(battlePayload(context.stateStore.getSave(), input)));
-register("api_req_sortie/airbattle", (input, context) => apiOk(airBattlePayload(context.stateStore.getSave(), input)));
-register("api_req_sortie/ld_airbattle", (input, context) => apiOk(airBattlePayload(context.stateStore.getSave(), input)));
-register("api_req_sortie/ld_shooting", (input, context) => apiOk(battlePayload(context.stateStore.getSave(), input)));
+register("api_req_sortie/battle", (input, context) => apiOk(recordedBattlePayload(input, context)));
+register("api_req_battle_midnight/battle", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
+register("api_req_battle_midnight/sp_midnight", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
+register("api_req_sortie/night_to_day", (input, context) => apiOk(recordedBattlePayload(input, context)));
+register("api_req_sortie/airbattle", (input, context) => apiOk(airBattlePayload(input, context)));
+register("api_req_sortie/ld_airbattle", (input, context) => apiOk(airBattlePayload(input, context)));
+register("api_req_sortie/ld_shooting", (input, context) => apiOk(recordedBattlePayload(input, context)));
 register("api_req_sortie/battleresult", (_input, context) => {
-  const save = context.stateStore.completeSortieBattle();
-  const deck = sortieDeck(save);
-  context.stateStore.addMaterials({ fuel: 20 });
-  return apiOk({
-    api_ship_id: deck.shipIds.filter((id) => id > 0),
-    api_win_rank: "S",
-    api_get_exp: 60,
-    api_mvp: 1,
-    api_member_lv: 1,
-    api_member_exp: 60,
-    api_get_base_exp: 30,
-    api_get_ship: { api_ship_id: 1, api_ship_type: "Destroyer", api_ship_name: "Mutsuki", api_ship_getmes: "Local drop" },
-    api_get_eventflag: 0,
-    api_get_exmap_rate: 0
-  });
+  const applied = context.stateStore.applySortieBattleResult();
+  if (applied.record) return apiOk(battleResultPayload(applied.record as unknown as BattleRecord));
+
+  const battle = createSortieBattle(context.stateStore.getSave(), {});
+  context.stateStore.recordSortieBattle(battle.record as unknown as Record<string, unknown>);
+  const generated = context.stateStore.applySortieBattleResult();
+  return apiOk(battleResultPayload((generated.record ?? battle.record) as unknown as BattleRecord));
 });
 register("api_req_sortie/goback_port", (_input, context) => {
   context.stateStore.clearSortie();
@@ -439,7 +432,7 @@ function masterDataWithResources(resourceManifest: ResourceManifest) {
     api_mst_bgm: bgmMaster(resourceManifest),
     api_mst_maparea: mapAreaMasters(mapInfos),
     api_mst_mapinfo: mapInfos,
-    api_mst_mapbgm: mapBgmMasters(mapInfos),
+    api_mst_mapbgm: mapBgmMasters(resourceManifest, mapInfos),
     api_mst_mapcell: mapCellMasters(resourceManifest, mapInfos)
   };
 }
@@ -518,14 +511,28 @@ function furnitureGraph(resourceManifest: ResourceManifest) {
 }
 
 function bgmMaster(resourceManifest: ResourceManifest) {
+  const bgms = new Map<number, ReturnType<typeof bgmEntry>>();
+  for (const bgm of resourceManifest.bgm.port.values()) bgms.set(bgm.id, bgmEntry(bgm, bgm.id === 0 ? "母港" : "Port"));
+  for (const bgm of resourceManifest.bgm.battle.values()) bgms.set(bgm.id, bgmEntry(bgm, "Battle"));
+  for (const bgm of resourceManifest.bgm.fanfare.values()) {
+    if (!bgms.has(bgm.id)) bgms.set(bgm.id, bgmEntry(bgm, "Fanfare"));
+  }
+  return [...bgms.values()].sort((a, b) => a.api_id - b.api_id);
+}
+
+function portBgmMaster(resourceManifest: ResourceManifest) {
   return [...resourceManifest.bgm.port.values()]
     .sort((a, b) => a.id - b.id)
-    .map((bgm) => ({
-      api_id: bgm.id,
-      api_name: bgm.id === 0 ? "母港" : `Local Port BGM ${String(bgm.id).padStart(3, "0")}`,
-      api_filename: bgm.frame,
-      api_rarity: 1
-    }));
+    .map((bgm) => bgmEntry(bgm, bgm.id === 0 ? "母港" : "Port"));
+}
+
+function bgmEntry(bgm: ResourceManifest["bgm"]["port"] extends Map<number, infer T> ? T : never, label: string) {
+  return {
+    api_id: bgm.id,
+    api_name: label === "母港" ? label : `Local ${label} BGM ${String(bgm.id).padStart(3, "0")}`,
+    api_filename: bgm.frame,
+    api_rarity: 1
+  };
 }
 
 function chartAdditionalInfo(save: SaveState) {
@@ -549,15 +556,32 @@ function mapAreaMasters(mapInfos: typeof masterData.api_mst_mapinfo) {
   return masterData.api_mst_maparea.filter((area) => areaIds.has(area.api_id));
 }
 
-function mapBgmMasters(mapInfos: typeof masterData.api_mst_mapinfo) {
+function mapBgmMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
+  const defaultMoving = firstExistingBattleBgm(resourceManifest, [154, 1]);
+  const defaultMap = existingBattleBgmPair(resourceManifest, [155, 2], [1, 2]);
+  const defaultBoss = existingBattleBgmPair(resourceManifest, [156, 156], [2, 2]);
   return mapInfos.map((map) => ({
     api_id: map.api_id,
     api_maparea_id: map.api_maparea_id,
     api_no: map.api_no,
-    api_moving_bgm: 0,
-    api_map_bgm: [0, 0],
-    api_boss_bgm: [0, 0]
+    api_moving_bgm: defaultMoving,
+    api_map_bgm: map.api_id === 11 ? defaultMap : existingBattleBgmPair(resourceManifest, [1, 2], defaultMap),
+    api_boss_bgm: map.api_id === 11 ? defaultBoss : existingBattleBgmPair(resourceManifest, [2, 2], defaultBoss)
   }));
+}
+
+function existingBattleBgmPair(resourceManifest: ResourceManifest, preferred: [number, number], fallback: [number, number]) {
+  return [firstExistingBattleBgm(resourceManifest, [preferred[0], fallback[0], 1]), firstExistingBattleBgm(resourceManifest, [preferred[1], fallback[1], 2, 1])] as [
+    number,
+    number
+  ];
+}
+
+function firstExistingBattleBgm(resourceManifest: ResourceManifest, ids: number[]) {
+  for (const id of ids) {
+    if (id > 0 && resourceManifest.bgm.battle.has(id)) return id;
+  }
+  return [...resourceManifest.bgm.battle.keys()].filter((id) => id > 0).sort((a, b) => a - b)[0] ?? 1;
 }
 
 function mapCellMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
@@ -637,80 +661,28 @@ function mapCellColor(cellNo: number, bossCellNo: number) {
   return cellNo === bossCellNo ? 6 : 5;
 }
 
-function battlePayload(save: SaveState, input?: HandlerInput) {
-  const deck = sortieDeck(save);
-  const friendlyShips = deck.shipIds
-    .slice(0, 6)
-    .map((id) => (id > 0 ? save.ships.find((ship) => ship.id === id) || null : null));
-  const fNowHps = friendlyShips.map((ship) => ship?.hp ?? 0);
-  const fMaxHps = friendlyShips.map((ship) => ship?.maxHp ?? 0);
-  const eNowHps = [20, 0, 0, 0, 0, 0];
-  const eMaxHps = [20, 0, 0, 0, 0, 0];
+function recordedBattlePayload(input: HandlerInput, context: HandlerContext) {
+  const battle = createSortieBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+  context.stateStore.recordSortieBattle(battle.record as unknown as Record<string, unknown>);
+  return battle.payload;
+}
+
+function recordedNightBattlePayload(input: HandlerInput, context: HandlerContext) {
+  let record = context.stateStore.lastSortieBattle() as unknown as BattleRecord | null;
+  if (!record) {
+    const battle = createSortieBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+    context.stateStore.recordSortieBattle(battle.record as unknown as Record<string, unknown>);
+    record = battle.record;
+  }
+  const night = createNightBattle(record);
+  context.stateStore.updateSortieBattle(night.record as unknown as Record<string, unknown>);
+  return night.payload;
+}
+
+function airBattlePayload(input: HandlerInput, context: HandlerContext) {
+  const payload = recordedBattlePayload(input, context);
   return {
-    api_deck_id: deck.id,
-    api_dock_id: deck.id,
-    api_formation: [battleFormation(input), 1, 1],
-    api_ship_ke: [1501, -1, -1, -1, -1, -1],
-    api_ship_lv: [1, 0, 0, 0, 0, 0],
-    api_f_nowhps: fNowHps,
-    api_f_maxhps: fMaxHps,
-    api_e_nowhps: eNowHps,
-    api_e_maxhps: eMaxHps,
-    api_nowhps: [-1, ...fNowHps, ...eNowHps],
-    api_maxhps: [-1, ...fMaxHps, ...eMaxHps],
-    api_midnight_flag: 1,
-    api_eSlot: [[], [], [], [], [], []],
-    api_fParam: friendlyShips.map((ship) => (ship ? [5, 15, 5, 5] : [0, 0, 0, 0])),
-    api_eParam: [
-      [5, 0, 0, 5],
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-      [0, 0, 0, 0],
-      [0, 0, 0, 0]
-    ],
-    api_search: [1, 1],
-    api_stage_flag: [0, 0, 0],
-    api_kouku: null,
-    api_support_flag: 0,
-    api_support_info: null,
-    api_hougeki1: hougekiPayload(20),
-    api_hougeki2: null,
-    api_hougeki3: null,
-    api_raigeki: null
-  };
-}
-
-function battleFormation(input?: HandlerInput) {
-  return Math.max(1, Math.trunc(num(input?.body.api_formation ?? input?.body.api_formation_id, 1)));
-}
-
-function hougekiPayload(damage: number) {
-  return {
-    api_at_eflag: [0],
-    api_at_type: [0],
-    api_at_list: [1],
-    api_df_list: [[7]],
-    api_si_list: [[1]],
-    api_cl_list: [[1]],
-    api_damage: [[damage]]
-  };
-}
-
-function sortieDeck(save: SaveState) {
-  return save.decks.find((deck) => deck.id === save.sortieSession?.deckId) || save.decks[0];
-}
-
-function nightBattlePayload(save: SaveState, input?: HandlerInput) {
-  return {
-    ...battlePayload(save, input),
-    api_hougeki: hougekiPayload(30)
-  };
-}
-
-function airBattlePayload(save: SaveState, input?: HandlerInput) {
-  return {
-    ...battlePayload(save, input),
+    ...payload,
     api_stage_flag: [1, 1, 1],
     api_kouku: {
       api_stage1: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0, api_disp_seiku: 1 },
@@ -718,6 +690,10 @@ function airBattlePayload(save: SaveState, input?: HandlerInput) {
       api_stage3: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] }
     }
   };
+}
+
+function battleFormation(input?: HandlerInput) {
+  return Math.max(1, Math.trunc(num(input?.body.api_formation ?? input?.body.api_formation_id, 1)));
 }
 
 function str(value: unknown, fallback: string) {

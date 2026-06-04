@@ -41,6 +41,8 @@ export type FurnitureResourceManifest = {
 
 export type BgmResourceManifest = {
   port: Map<number, FileResource>;
+  battle: Map<number, FileResource>;
+  fanfare: Map<number, FileResource>;
 };
 
 export type MapFileResource = FileResource & {

@@ -113,6 +113,24 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1502)).toMatchObject({
       api_filename: "pbgkfylkbjuy"
     });
+    const battleBgmIds = new Set(
+      start2Data.api_mst_bgm
+        .map((bgm: any) => bgm.api_id)
+        .filter((id: unknown) => typeof id === "number" && id > 0)
+    );
+    const map11Bgm = start2Data.api_mst_mapbgm.find((bgm: any) => bgm.api_id === 11);
+    expect(map11Bgm).toMatchObject({
+      api_moving_bgm: 154,
+      api_map_bgm: [155, 2],
+      api_boss_bgm: [156, 156]
+    });
+    for (const mapBgm of start2Data.api_mst_mapbgm) {
+      expect(mapBgm.api_moving_bgm, `moving BGM for map ${mapBgm.api_id}`).toBeGreaterThan(0);
+      for (const id of [...mapBgm.api_map_bgm, ...mapBgm.api_boss_bgm]) {
+        expect(id, `battle BGM id for map ${mapBgm.api_id}`).toBeGreaterThan(0);
+        expect(battleBgmIds.has(id), `api_mst_bgm contains battle BGM ${id}`).toBe(true);
+      }
+    }
     const shipById = new Map(start2Data.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
     expect(((shipById.get(9) as any).api_voicef as number) & 1).toBe(0);
     expect(((shipById.get(179) as any).api_voicef as number) & 1).toBe(1);
@@ -155,7 +173,7 @@ describe("local kcsapi endpoints", () => {
       ])
     );
     expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
-    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(1);
+    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toEqual(expect.arrayContaining([1, 154, 155, 156]));
     expect(start2Data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
     expect(start2Data.api_mst_maparea).toEqual(
       expect.arrayContaining([
@@ -333,10 +351,10 @@ describe("local kcsapi endpoints", () => {
     const destroyItem = (await post("api_req_kousyou/destroyitem2", { api_slotitem_ids: "2" })).json().api_data;
     const destroyShip = (await post("api_req_kousyou/destroyship", { api_ship_id: "2" })).json().api_data;
 
-    expect(charge.api_material).toEqual([985, 980, 1000, 1000, 10, 10, 50, 5]);
-    expect(craft.api_material).toEqual([975, 970, 990, 990, 10, 10, 49, 5]);
+    expect(charge.api_material).toEqual([1000, 1000, 1000, 1000, 10, 10, 50, 5]);
+    expect(craft.api_material).toEqual([990, 990, 990, 990, 10, 10, 49, 5]);
     expect(destroyItem.api_get_material).toEqual([1, 1, 2, 0]);
-    expect(destroyShip.api_material).toEqual([977, 972, 994, 990, 10, 10, 49, 5]);
+    expect(destroyShip.api_material).toEqual([992, 992, 994, 990, 10, 10, 49, 5]);
   });
 
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
@@ -612,28 +630,40 @@ describe("local kcsapi endpoints", () => {
       api_deck_id: 1,
       api_dock_id: 1,
       api_formation: [2, 1, 1],
-      api_ship_ke: [1501, -1, -1, -1, -1, -1],
-      api_ship_lv: [1, 0, 0, 0, 0, 0],
-      api_f_nowhps: [15, 15, 0, 0, 0, 0],
-      api_f_maxhps: [15, 15, 0, 0, 0, 0],
-      api_e_nowhps: [20, 0, 0, 0, 0, 0],
-      api_e_maxhps: [20, 0, 0, 0, 0, 0],
-      api_eSlot: [[], [], [], [], [], []],
-      api_hougeki1: {
-        api_at_eflag: [0],
-        api_at_type: [0],
-        api_at_list: [1],
-        api_df_list: [[7]],
-        api_si_list: [[1]],
-        api_cl_list: [[1]],
-        api_damage: [[20]]
-      }
+      api_ship_ke: [1501, 1502, -1, -1, -1, -1],
+      api_ship_lv: [1, 1, 0, 0, 0, 0],
+      api_eSlot: [[], [], [], [], [], []]
     });
     for (const key of ["api_ship_ke", "api_ship_lv", "api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
       expect(battleData[key], key).toHaveLength(6);
     }
     expect(battleData.api_nowhps).toHaveLength(13);
     expect(battleData.api_maxhps).toHaveLength(13);
+    expect(battleData.api_hougeki1.api_at_list.length).toBeGreaterThan(0);
+    expect(battleData.api_hougeki1.api_at_eflag).toHaveLength(battleData.api_hougeki1.api_at_list.length);
+    expect(battleData.api_hougeki1.api_at_type).toHaveLength(battleData.api_hougeki1.api_at_list.length);
+    expect(battleData.api_hougeki1.api_df_list).toHaveLength(battleData.api_hougeki1.api_at_list.length);
+    expect(battleData.api_hougeki1.api_si_list).toHaveLength(battleData.api_hougeki1.api_at_list.length);
+    expect(battleData.api_hougeki1.api_cl_list).toHaveLength(battleData.api_hougeki1.api_at_list.length);
+    expect(battleData.api_hougeki1.api_damage).toHaveLength(battleData.api_hougeki1.api_at_list.length);
+    for (const targets of battleData.api_hougeki1.api_df_list) {
+      for (const target of targets) expect(target).toBeGreaterThanOrEqual(1);
+    }
+    expect(battleData.api_raigeki).toMatchObject({
+      api_frai: expect.any(Array),
+      api_erai: expect.any(Array),
+      api_fdam: expect.any(Array),
+      api_edam: expect.any(Array),
+      api_fydam: expect.any(Array),
+      api_eydam: expect.any(Array),
+      api_fcl: expect.any(Array),
+      api_ecl: expect.any(Array),
+      api_frai_flag: expect.any(Array),
+      api_erai_flag: expect.any(Array),
+      api_fbak_flag: expect.any(Array),
+      api_ebak_flag: expect.any(Array)
+    });
+    for (const key of Object.keys(battleData.api_raigeki)) expect(battleData.api_raigeki[key], key).toHaveLength(6);
 
     const enemyIds = battleData.api_ship_ke.filter((id: number) => id > 0);
     expect(enemyIds).not.toEqual(expect.arrayContaining([501, 502]));
@@ -643,6 +673,40 @@ describe("local kcsapi endpoints", () => {
       expect(shipMasterIds.has(enemyId), `api_mst_ship contains ${enemyId}`).toBe(true);
       expect(shipGraphIds.has(enemyId), `api_mst_shipgraph contains ${enemyId}`).toBe(true);
     }
+  });
+
+  it("applies sortie battle results once and exposes night battle fields", async () => {
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const battle = await post("api_req_sortie/battle", { api_formation: 1 });
+    const night = await post("api_req_battle_midnight/battle");
+    const result = await post("api_req_sortie/battleresult");
+    const afterFirst = store.getSave();
+    const repeat = await post("api_req_sortie/battleresult");
+    const afterRepeat = store.getSave();
+
+    expect(battle.statusCode).toBe(200);
+    expect(night.json().api_data.api_hougeki).toMatchObject({
+      api_sp_list: expect.any(Array),
+      api_n_mother_list: expect.any(Array)
+    });
+    expect(night.json().api_data.api_hougeki.api_sp_list).toHaveLength(night.json().api_data.api_hougeki.api_df_list.length);
+    expect(result.json().api_data).toMatchObject({
+      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_mvp: expect.any(Number),
+      api_get_exp: expect.any(Number),
+      api_get_ship: expect.any(Object)
+    });
+    expect(repeat.json().api_data.api_win_rank).toBe(result.json().api_data.api_win_rank);
+    expect(afterRepeat.materials).toEqual(afterFirst.materials);
+    for (const ship of afterRepeat.ships.slice(0, 2)) {
+      expect(ship.hp).toBeGreaterThanOrEqual(1);
+      expect(ship.hp).toBeLessThanOrEqual(ship.maxHp);
+      expect(ship.fuel).toBeLessThanOrEqual(ship.maxFuel);
+      expect(ship.ammo).toBeLessThanOrEqual(ship.maxAmmo);
+    }
+    expect((afterRepeat.sortieSession?.state as any).lastBattle.resultClaimed).toBe(true);
   });
 
   it("has non-unknown local handlers for the planned API surface", async () => {

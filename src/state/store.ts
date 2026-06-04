@@ -328,6 +328,32 @@ export function createStateStore(options: StateStoreOptions) {
       consumeSortieSupply(db, deck);
       return getSave(db).sortieSession;
     },
+    recordSortieBattle: (record: JsonObject) => {
+      const session = getSave(db).sortieSession;
+      if (!session) return null;
+      const state = {
+        ...session.state,
+        battles: safeNum(session.state.battles) + 1,
+        lastBattle: { ...record, resultClaimed: false }
+      };
+      db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(state), session.id);
+      return getSave(db).sortieSession;
+    },
+    updateSortieBattle: (record: JsonObject) => {
+      const session = getSave(db).sortieSession;
+      if (!session) return null;
+      const state = {
+        ...session.state,
+        lastBattle: record
+      };
+      db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(state), session.id);
+      return getSave(db).sortieSession;
+    },
+    lastSortieBattle: () => {
+      const battle = getSave(db).sortieSession?.state.lastBattle;
+      return isJsonObject(battle) ? battle : null;
+    },
+    applySortieBattleResult: () => applySortieBattleResult(db),
     nextSortieNode: () => {
       const session = getSave(db).sortieSession;
       if (!session) return null;
@@ -344,6 +370,42 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db);
     }
   };
+}
+
+function applySortieBattleResult(db: Database.Database) {
+  const save = getSave(db);
+  const session = save.sortieSession;
+  const battle = session?.state.lastBattle;
+  if (!session || !isJsonObject(battle)) return { save, record: null, applied: false };
+  if (battle.resultClaimed) return { save, record: battle, applied: false };
+
+  const after = isJsonObject(battle.after) ? battle.after : {};
+  const shipIds = Array.isArray(battle.shipIds) ? battle.shipIds.map((id) => Number(id)) : [];
+  const fNowHps = Array.isArray(after.fNowHps) ? after.fNowHps.map((hp) => Math.max(1, Math.trunc(Number(hp) || 1))) : [];
+  const nextBattle = { ...battle, resultClaimed: true };
+  const nextState = { ...session.state, lastBattle: nextBattle };
+  const tx = db.transaction(() => {
+    for (let index = 0; index < shipIds.length; index += 1) {
+      const shipId = shipIds[index];
+      if (shipId <= 0) continue;
+      const hp = fNowHps[index];
+      if (!Number.isFinite(hp)) continue;
+      db.prepare("UPDATE ships SET hp = max(1, min(max_hp, ?)) WHERE id = ?").run(hp, shipId);
+    }
+    db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = ?").run(mapMasterId(session.areaId, session.mapNo));
+    db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(nextState), session.id);
+  });
+  tx();
+  return { save: getSave(db), record: nextBattle, applied: true };
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function safeNum(value: unknown, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function migrate(db: Database.Database) {
@@ -551,8 +613,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       const maxFuel = master?.api_fuel_max ?? 20;
       const maxAmmo = master?.api_bull_max ?? 20;
       db.prepare(
-        "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, 0, ?, 0, ?, 0, ?, -1, ?)"
-      ).run(masterId, maxHp, maxHp, maxFuel, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
+        "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, -1, ?)"
+      ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
     }
 
     for (const masterId of [1, 1, 2, 46]) {
@@ -765,8 +827,8 @@ function createShip(db: Database.Database, masterId: number): Ship {
   const maxFuel = master?.api_fuel_max ?? 20;
   const maxAmmo = master?.api_bull_max ?? 20;
   const info = db.prepare(
-    "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, 0, ?, 0, ?, 0, ?, -1, '{}')"
-  ).run(masterId, maxHp, maxHp, maxFuel, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]));
+    "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, -1, '{}')"
+  ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]));
   return mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
 }
 
