@@ -15,7 +15,7 @@ import type {
 import { shipApiExp } from "./experience.js";
 import { repairCost, repairTimeMs } from "./repair.js";
 
-const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
+export const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
 
 export function toBasic(player: Player, furniture?: FurnitureState, resourceManifest?: ResourceManifest) {
   return {
@@ -153,7 +153,7 @@ function toOnSlot(
   });
 }
 
-function isAircraftSlotItem(slotMaster: (typeof masterData.api_mst_slotitem)[number]) {
+export function isAircraftSlotItem(slotMaster: (typeof masterData.api_mst_slotitem)[number]) {
   return AIRCRAFT_EQUIP_TYPE_IDS.has(safeNum(slotMaster.api_type?.[2]));
 }
 

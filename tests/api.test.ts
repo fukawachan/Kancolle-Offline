@@ -756,6 +756,41 @@ describe("local kcsapi endpoints", () => {
     }
   });
 
+  it("returns aviation phase data from normal sortie battle when the fleet has carrier aircraft", async () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: akagi.id });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const battle = await post("api_req_sortie/battle", { api_formation: 1 });
+    const battleData = battle.json().api_data;
+
+    expect(battle.statusCode).toBe(200);
+    expect(battleData.api_stage_flag).toEqual([1, 1, 1]);
+    expect(battleData.api_kouku).toMatchObject({
+      api_plane_from: [[1], []],
+      api_stage1: {
+        api_f_count: 20,
+        api_f_lostcount: 0,
+        api_e_count: 0,
+        api_e_lostcount: 0,
+        api_disp_seiku: 1,
+        api_touch_plane: [-1, -1]
+      },
+      api_stage2: {
+        api_f_count: 20,
+        api_f_lostcount: 0,
+        api_e_count: 0,
+        api_e_lostcount: 0
+      }
+    });
+    for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
+      expect(battleData.api_kouku.api_stage3[key], key).toHaveLength(6);
+    }
+  });
+
   it("applies sortie battle results once and exposes night battle fields", async () => {
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     await post("api_req_map/next");

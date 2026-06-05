@@ -22,6 +22,7 @@ import {
   createNightBattle,
   createPracticeBattle,
   createSortieBattle,
+  emptyKoukuStage3Payload,
   practiceRivalById,
   practiceRivals,
   type BattleRecord
@@ -778,29 +779,16 @@ function recordedCombinedNightBattlePayload(context: HandlerContext) {
 }
 
 function airBattlePayload(input: HandlerInput, context: HandlerContext) {
-  const payload = recordedBattlePayload(input, context);
-  return {
-    ...payload,
-    api_stage_flag: [1, 1, 1],
-    api_kouku: {
-      api_stage1: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0, api_disp_seiku: 1 },
-      api_stage2: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0 },
-      api_stage3: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] }
-    }
-  };
+  return recordedBattlePayload(input, context);
 }
 
 function combinedAirBattlePayload(input: HandlerInput, context: HandlerContext) {
   const payload = recordedCombinedBattlePayload(input, context);
   return {
     ...payload,
-    api_stage_flag: [1, 1, 1],
-    api_kouku: {
-      api_stage1: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0, api_disp_seiku: 1 },
-      api_stage2: { api_f_count: 0, api_f_lostcount: 0, api_e_count: 0, api_e_lostcount: 0 },
-      api_stage3: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] },
-      api_stage3_combined: { api_frai_flag: [], api_erai_flag: [], api_fbak_flag: [], api_ebak_flag: [], api_fcl_flag: [], api_ecl_flag: [], api_fdam: [], api_edam: [] }
-    }
+    api_kouku: payload.api_kouku
+      ? { ...payload.api_kouku, api_stage3_combined: emptyKoukuStage3Payload() }
+      : null
   };
 }
 

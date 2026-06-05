@@ -1,5 +1,6 @@
 import { masterData } from "../master/data.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
+import { isAircraftSlotItem } from "./serializers.js";
 
 export type BattleInput = {
   formation?: number;
@@ -10,6 +11,13 @@ export type BattleInput = {
 export type BattleMode = "sortie" | "practice" | "combined";
 
 type Side = 0 | 1;
+
+type AirSlot = {
+  shipPosition: number;
+  slotMasterId: number;
+  equipTypeId: number;
+  count: number;
+};
 
 type BattleUnit = {
   side: Side;
@@ -28,6 +36,7 @@ type BattleUnit = {
   range: number;
   ammoModifier: number;
   slots: number[];
+  airSlots: AirSlot[];
   damageDealt: number;
 };
 
@@ -58,11 +67,44 @@ export type RaigekiPayload = {
   api_ebak_flag: number[];
 };
 
+export type KoukuStage3Payload = {
+  api_frai_flag: number[];
+  api_erai_flag: number[];
+  api_fbak_flag: number[];
+  api_ebak_flag: number[];
+  api_fcl_flag: number[];
+  api_ecl_flag: number[];
+  api_fdam: number[];
+  api_edam: number[];
+};
+
+export type KoukuPayload = {
+  api_plane_from: number[][];
+  api_stage1: {
+    api_f_count: number;
+    api_f_lostcount: number;
+    api_e_count: number;
+    api_e_lostcount: number;
+    api_disp_seiku: number;
+    api_touch_plane: number[];
+  };
+  api_stage2: {
+    api_f_count: number;
+    api_f_lostcount: number;
+    api_e_count: number;
+    api_e_lostcount: number;
+  };
+  api_stage3: KoukuStage3Payload;
+  api_stage3_combined?: KoukuStage3Payload;
+};
+
 export type BattlePayload = Record<string, any> & {
   api_deck_id: number;
   api_dock_id: number;
   api_formation: [number, number, number];
   api_ship_ke: number[];
+  api_stage_flag: [number, number, number];
+  api_kouku: KoukuPayload | null;
   api_hougeki1: HougekiPayload;
   api_raigeki: RaigekiPayload | null;
 };
@@ -91,6 +133,7 @@ export type BattleRecord = {
     eCombinedNowHps?: number[];
   };
   phases: {
+    kouku: KoukuPayload | null;
     hougeki1: HougekiPayload;
     hougeki2: HougekiPayload | null;
     hougeki3: HougekiPayload | null;
@@ -249,6 +292,7 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const beforeF = fixedHp(friendly);
   const beforeE = fixedHp(enemy);
 
+  const kouku = airPhase(friendly, enemy);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
 
@@ -265,6 +309,7 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
     before: { fNowHps: beforeF, eNowHps: beforeE },
     after: { fNowHps: afterF, eNowHps: afterE },
     phases: {
+      kouku,
       hougeki1,
       hougeki2: null,
       hougeki3: null,
@@ -290,6 +335,7 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
   const beforeF = fixedHp(friendly);
   const beforeE = fixedHp(enemy);
 
+  const kouku = airPhase(friendly, enemy);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
   const afterF = fixedHp(friendly);
@@ -306,6 +352,7 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
     before: { fNowHps: beforeF, eNowHps: beforeE },
     after: { fNowHps: afterF, eNowHps: afterE },
     phases: {
+      kouku,
       hougeki1,
       hougeki2: null,
       hougeki3: null,
@@ -335,6 +382,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const beforeE = fixedHp(enemy);
   const beforeECombined = fixedHp(enemyCombined);
 
+  const kouku = airPhase(friendly, enemy);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
   const afterF = fixedHp(friendly);
@@ -356,6 +404,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
     before: { fNowHps: beforeF, eNowHps: beforeE, fCombinedNowHps: beforeEscort, eCombinedNowHps: beforeECombined },
     after: { fNowHps: afterF, eNowHps: afterE, fCombinedNowHps: afterEscort, eCombinedNowHps: afterECombined },
     phases: {
+      kouku,
       hougeki1,
       hougeki2: null,
       hougeki3: null,
@@ -467,6 +516,8 @@ function normalizeSettlement(settlement: FleetSettlementSlot[]) {
 function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: BattleUnit[]): BattlePayload {
   const fMaxHps = fixedMaxHp(friendly);
   const eMaxHps = fixedMaxHp(enemy);
+  const kouku = record.phases.kouku ?? null;
+  const stageFlag: [number, number, number] = kouku ? [1, 1, 1] : [0, 0, 0];
   return {
     api_deck_id: record.deckId,
     api_dock_id: record.deckId,
@@ -484,8 +535,8 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_fParam: fixedUnitValues(friendly, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_eParam: fixedUnitValues(enemy, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_search: [1, 1],
-    api_stage_flag: [0, 0, 0],
-    api_kouku: null,
+    api_stage_flag: stageFlag,
+    api_kouku: kouku,
     api_support_flag: 0,
     api_support_info: null,
     api_hougeki1: record.phases.hougeki1,
@@ -553,6 +604,60 @@ function fixedParamsFromMasters(masterIds: number[]) {
       statValue(master?.api_souk)
     ];
   });
+}
+
+function airPhase(friendly: BattleUnit[], enemy: BattleUnit[]): KoukuPayload | null {
+  const friendlyAir = activeAirSlots(friendly);
+  const enemyAir = activeAirSlots(enemy);
+  if (friendlyAir.length === 0 && enemyAir.length === 0) return null;
+
+  const fCount = airCount(friendlyAir);
+  const eCount = airCount(enemyAir);
+  return {
+    api_plane_from: [airShipPositions(friendlyAir), airShipPositions(enemyAir)],
+    api_stage1: {
+      api_f_count: fCount,
+      api_f_lostcount: 0,
+      api_e_count: eCount,
+      api_e_lostcount: 0,
+      api_disp_seiku: 1,
+      api_touch_plane: [-1, -1]
+    },
+    api_stage2: {
+      api_f_count: fCount,
+      api_f_lostcount: 0,
+      api_e_count: eCount,
+      api_e_lostcount: 0
+    },
+    api_stage3: emptyKoukuStage3Payload()
+  };
+}
+
+function activeAirSlots(units: BattleUnit[]) {
+  return units
+    .filter((unit) => unit.hp > 0)
+    .flatMap((unit) => unit.airSlots.filter((slot) => slot.count > 0));
+}
+
+function airCount(slots: AirSlot[]) {
+  return slots.reduce((sum, slot) => sum + slot.count, 0);
+}
+
+function airShipPositions(slots: AirSlot[]) {
+  return [...new Set(slots.map((slot) => slot.shipPosition))].sort((a, b) => a - b);
+}
+
+export function emptyKoukuStage3Payload(length = 6): KoukuStage3Payload {
+  return {
+    api_frai_flag: Array(length).fill(0),
+    api_erai_flag: Array(length).fill(0),
+    api_fbak_flag: Array(length).fill(0),
+    api_ebak_flag: Array(length).fill(0),
+    api_fcl_flag: Array(length).fill(0),
+    api_ecl_flag: Array(length).fill(0),
+    api_fdam: Array(length).fill(0),
+    api_edam: Array(length).fill(0)
+  };
 }
 
 function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: () => number, phase: "day" | "night"): HougekiPayload {
@@ -687,15 +792,27 @@ function friendlyUnits(save: SaveState, shipIds: number[]) {
 
 function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): BattleUnit {
   const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
-  const slotMasters = ship.slotIds
-    .filter((id) => id > 0)
-    .map((id) => slotItems.find((item) => item.id === id))
-    .filter((item): item is SlotItem => Boolean(item))
-    .map((item) => masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId))
-    .filter((item): item is (typeof masterData.api_mst_slotitem)[number] => Boolean(item));
+  const maxeq = Array.isArray(master?.api_maxeq) ? master.api_maxeq : [];
+  const equippedSlots = normalizeFixed(ship.slotIds, 5, -1)
+    .map((id, index) => {
+      if (id <= 0) return null;
+      const item = slotItems.find((slotItem) => slotItem.id === id);
+      const slotMaster = item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
+      return slotMaster ? { index, slotMaster, count: safeNum(maxeq[index]) } : null;
+    })
+    .filter((item): item is { index: number; slotMaster: (typeof masterData.api_mst_slotitem)[number]; count: number } => Boolean(item));
+  const slotMasters = equippedSlots.map((item) => item.slotMaster);
   const equipSum = (field: keyof (typeof masterData.api_mst_slotitem)[number]) =>
     slotMasters.reduce((sum, item) => sum + safeNum(item[field]), 0);
   const slots = slotMasters.map((item) => item.api_id);
+  const airSlots = equippedSlots
+    .filter((item) => item.count > 0 && isAircraftSlotItem(item.slotMaster))
+    .map((item) => ({
+      shipPosition: position,
+      slotMasterId: item.slotMaster.api_id,
+      equipTypeId: safeNum(item.slotMaster.api_type?.[2]),
+      count: item.count
+    }));
   return {
     side: 0,
     position,
@@ -713,6 +830,7 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     range: Math.max(safeNum(master?.api_leng, 1), ...slotMasters.map((item) => safeNum(item.api_leng, 0))),
     ammoModifier: ammoModifier(ship.ammo, ship.maxAmmo),
     slots: slots.length ? slots : [1],
+    airSlots,
     damageDealt: 0
   };
 }
@@ -741,6 +859,7 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     range: 1,
     ammoModifier: 1,
     slots: [1],
+    airSlots: [],
     damageDealt: 0
   };
 }
@@ -765,6 +884,7 @@ function practiceEnemyUnit(masterId: number, level: number, position: number): B
     range: safeNum(master?.api_leng, 1),
     ammoModifier: 1,
     slots: [1],
+    airSlots: [],
     damageDealt: 0
   };
 }
@@ -804,6 +924,7 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
         range: safeNum(master?.api_leng, 1),
         ammoModifier: 1,
         slots: [1],
+        airSlots: [],
         damageDealt: 0
       } satisfies BattleUnit;
     })

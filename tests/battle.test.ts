@@ -77,6 +77,47 @@ describe("sortie battle simulation", () => {
     expect(battle.record.result.mvp).toBeGreaterThanOrEqual(1);
   });
 
+  it("does not emit an aviation phase when neither side has active aircraft", () => {
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+    expect(battle.payload.api_stage_flag).toEqual([0, 0, 0]);
+    expect(battle.payload.api_kouku).toBeNull();
+  });
+
+  it("emits a client-playable aviation phase before shelling when a carrier has aircraft", () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.changeDeckShip(1, 0, akagi.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const kouku = battle.payload.api_kouku;
+
+    expect(battle.payload.api_stage_flag).toEqual([1, 1, 1]);
+    expect(kouku).not.toBeNull();
+    expect(kouku).toMatchObject({
+      api_plane_from: [[1], []],
+      api_stage1: {
+        api_f_count: 20,
+        api_f_lostcount: 0,
+        api_e_count: 0,
+        api_e_lostcount: 0,
+        api_disp_seiku: 1,
+        api_touch_plane: [-1, -1]
+      },
+      api_stage2: {
+        api_f_count: 20,
+        api_f_lostcount: 0,
+        api_e_count: 0,
+        api_e_lostcount: 0
+      }
+    });
+    const stage3 = kouku!.api_stage3;
+    for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
+      expect(stage3[key as keyof typeof stage3], key).toHaveLength(6);
+    }
+  });
+
   it("adds client-required night shelling fields", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const night = createNightBattlePayload(battle.record);
