@@ -463,10 +463,19 @@ function practiceStates(db: Database.Database) {
   );
 }
 
+const PRACTICE_STATE_BY_RANK: Record<string, number> = {
+  E: 1,
+  D: 2,
+  C: 3,
+  B: 4,
+  A: 5,
+  S: 6
+};
+
 function markPracticeState(db: Database.Database, enemyId: number | undefined, rank: string | undefined) {
   if (!enemyId || enemyId <= 0) return;
   const states = practiceStates(db);
-  states[String(enemyId)] = rank === "C" ? 2 : 1;
+  states[String(enemyId)] = rank ? PRACTICE_STATE_BY_RANK[rank] ?? 1 : 1;
   writeBattleSession(db, PRACTICE_STATES_SESSION_ID, states);
 }
 

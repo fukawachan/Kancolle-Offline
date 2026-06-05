@@ -810,7 +810,9 @@ describe("local kcsapi endpoints", () => {
     expect(result.json().api_data.api_get_ship_exp).toHaveLength(7);
     expect(result.json().api_data.api_get_exp_lvup).toHaveLength(6);
     expect(repeat.json().api_data.api_get_ship_exp).toEqual(result.json().api_data.api_get_ship_exp);
-    expect(afterPracticeList.json().api_data.api_list.find((item: any) => item.api_enemy_id === enemyId).api_state).toBe(1);
+    const practiceStateByRank: Record<string, number> = { S: 6, A: 5, B: 4, C: 3, D: 2, E: 1 };
+    const expectedPracticeState = practiceStateByRank[result.json().api_data.api_win_rank] ?? 1;
+    expect(afterPracticeList.json().api_data.api_list.find((item: any) => item.api_enemy_id === enemyId).api_state).toBe(expectedPracticeState);
     expect(after.ships[0].exp).toBeGreaterThan(0);
     expect(after.player.exp).toBeGreaterThan(0);
   });
