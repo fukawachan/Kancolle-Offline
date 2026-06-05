@@ -357,6 +357,59 @@ describe("local kcsapi endpoints", () => {
     expect(destroyShip.api_material).toEqual([992, 992, 994, 990, 10, 10, 49, 5]);
   });
 
+  it("exposes repair cost and time on damaged ships", async () => {
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
+
+    const ships = (await post("api_get_member/ship2")).json().api_data;
+    const fubuki = ships.find((ship: any) => ship.api_id === 1);
+
+    expect(fubuki.api_ndock_item).toEqual([2, 4]);
+    expect(fubuki.api_ndock_time).toBe(80_000);
+  });
+
+  it("charges fuel and steel when starting repairs and only buckets on speedchange", async () => {
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
+    const before = store.getSave();
+
+    const start = await post("api_req_nyukyo/start", { api_ship_id: 1, api_highspeed: 0 });
+
+    expect(start.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 1 } });
+    const afterStart = store.getSave();
+    expect(afterStart.materials.fuel).toBe(before.materials.fuel - 2);
+    expect(afterStart.materials.steel).toBe(before.materials.steel - 4);
+    expect(afterStart.materials.repairKit).toBe(before.materials.repairKit);
+    expect(afterStart.ships.find((ship) => ship.id === 1)?.hp).toBe(10);
+    expect(afterStart.repairDocks[0]).toMatchObject({ id: 1, shipId: 1, state: 1 });
+
+    const ndock = (await post("api_get_member/ndock")).json().api_data;
+    expect(ndock[0]).toMatchObject({ api_id: 1, api_state: 1, api_ship_id: 1, api_item1: 2, api_item2: 4 });
+
+    const speedchange = await post("api_req_nyukyo/speedchange", { api_ndock_id: 1 });
+
+    expect(speedchange.json()).toMatchObject({ api_result: 1 });
+    const afterSpeedchange = store.getSave();
+    expect(afterSpeedchange.materials.fuel).toBe(afterStart.materials.fuel);
+    expect(afterSpeedchange.materials.steel).toBe(afterStart.materials.steel);
+    expect(afterSpeedchange.materials.repairKit).toBe(afterStart.materials.repairKit - 1);
+    expect(afterSpeedchange.ships.find((ship) => ship.id === 1)?.hp).toBe(15);
+    expect(afterSpeedchange.repairDocks[0]).toMatchObject({ id: 1, shipId: 0, state: 0 });
+  });
+
+  it("charges fuel, steel, and a bucket when starting high-speed repairs", async () => {
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 2);
+    const before = store.getSave();
+
+    const start = await post("api_req_nyukyo/start", { api_ship_id: 2, api_highspeed: 1 });
+
+    expect(start.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 1 } });
+    const afterStart = store.getSave();
+    expect(afterStart.materials.fuel).toBe(before.materials.fuel - 2);
+    expect(afterStart.materials.steel).toBe(before.materials.steel - 4);
+    expect(afterStart.materials.repairKit).toBe(before.materials.repairKit - 1);
+    expect(afterStart.ships.find((ship) => ship.id === 2)?.hp).toBe(15);
+    expect(afterStart.repairDocks.every((dock) => dock.state === 0 && dock.shipId === 0)).toBe(true);
+  });
+
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
     await post("api_req_member/updatecomment", { api_cmt: "offline sortie ready" });
     await post("api_req_member/updatedeckname", { api_id: 1, api_name: "First Local Fleet" });
@@ -529,6 +582,7 @@ describe("local kcsapi endpoints", () => {
   });
 
   it("supports docks, arsenal, expeditions, items, and a deterministic first sortie loop", async () => {
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
     const repair = await post("api_req_nyukyo/start", { api_ship_id: 1, api_highspeed: 1 });
     const craft = await post("api_req_kousyou/createitem", {
       api_item1: 10,

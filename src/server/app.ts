@@ -60,7 +60,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return reply
       .type("application/javascript; charset=utf-8")
       .header("cache-control", "public, max-age=3600")
-      .send(await readFile(localVendorPath("createjs/builds/1.0.0/createjs.min.js"), "utf8"));
+      .send(await readFile(localVendorPath("createjs/builds/createjs-2015.11.26.min.js"), "utf8"));
   });
 
   app.get("/local-vendor/axios.min.js", async (_request, reply) => {

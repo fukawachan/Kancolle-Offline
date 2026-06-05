@@ -104,7 +104,10 @@ register("api_get_member/unsetslot", (_input, context) => apiOk(toUnsetSlot(cont
 register("api_get_member/useitem", (_input, context) => apiOk(toUseItems(context.stateStore.getSave().materials)));
 register("api_get_member/furniture", (_input, context) => apiOk(toFurniture(context.stateStore.getSave().furniture, context.resourceManifest)));
 register("api_get_member/kdock", (_input, context) => apiOk(context.stateStore.getSave().buildDocks.map(toBuildDock)));
-register("api_get_member/ndock", (_input, context) => apiOk(context.stateStore.getSave().repairDocks.map(toRepairDock)));
+register("api_get_member/ndock", (_input, context) => {
+  const save = context.stateStore.getSave();
+  return apiOk(save.repairDocks.map((dock) => toRepairDock(dock, save.ships)));
+});
 register("api_get_member/questlist", (_input, context) => apiOk(toQuestList(context.stateStore.getSave().quests)));
 register("api_get_member/mapinfo", (_input, context) =>
   apiOk({
@@ -269,8 +272,15 @@ register("api_req_furniture/set_portbgm", (input, context) =>
 );
 register("api_req_furniture/radio_play", () => apiOk({ api_id: 0 }));
 
-register("api_req_nyukyo/start", (input, context) => apiOk({ api_ndock_id: context.stateStore.startRepair(num(input.body.api_ship_id, 1), num(input.body.api_highspeed, 0) === 1)?.id ?? 1 }));
-register("api_req_nyukyo/speedchange", (input, context) => apiOk(toRepairDock(context.stateStore.completeRepair(num(input.body.api_ndock_id ?? input.body.api_id, 1))!)));
+register("api_req_nyukyo/start", (input, context) => {
+  const repair = context.stateStore.startRepair(num(input.body.api_ship_id, 1), num(input.body.api_highspeed, 0) === 1);
+  return repair.ok ? apiOk({ api_ndock_id: repair.dock.id }) : apiError(repair.error, 400);
+});
+register("api_req_nyukyo/speedchange", (input, context) => {
+  const repair = context.stateStore.completeRepair(num(input.body.api_ndock_id ?? input.body.api_id, 1));
+  if (!repair.ok) return apiError(repair.error, 400);
+  return apiOk(toRepairDock(repair.dock, context.stateStore.getSave().ships));
+});
 register("api_req_nyukyo/open_new_dock", () => apiOk({ api_opened: 1 }));
 
 register("api_req_kousyou/createitem", (input, context) => {

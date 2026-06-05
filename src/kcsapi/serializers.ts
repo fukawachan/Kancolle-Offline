@@ -13,6 +13,7 @@ import type {
   SlotItem
 } from "../state/types.js";
 import { shipApiExp } from "./experience.js";
+import { repairCost, repairTimeMs } from "./repair.js";
 
 const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
 
@@ -85,6 +86,7 @@ export function toMaterialValues(materials: Materials) {
 export function toShip(ship: Ship, slotItems?: SlotItem[]) {
   const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
   const slot = [...ship.slotIds, ...Array(5).fill(-1)].slice(0, 5);
+  const repair = repairCost(ship, master);
 
   const equippedMasters = resolveEquippedMasters(ship, slotItems);
   const equipSum = (field: string) =>
@@ -117,8 +119,8 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_fuel_max: master?.api_fuel_max ?? ship.maxFuel,
     api_bull_max: master?.api_bull_max ?? ship.maxAmmo,
     api_slotnum: master?.api_slot_num ?? 0,
-    api_ndock_time: 0,
-    api_ndock_item: [0, 0],
+    api_ndock_time: repairTimeMs(ship, master),
+    api_ndock_item: [repair.fuel, repair.steel],
     api_srate: 0,
     api_cond: ship.condition,
     api_karyoku: [arrVal(master?.api_houg, 0) + equipSum("api_houg") + kyouka(0), arrVal(master?.api_houg, 1) + equipSum("api_houg") + kyouka(0)],
@@ -202,7 +204,11 @@ export function toDeck(deck: Deck) {
   };
 }
 
-export function toRepairDock(dock: RepairDock) {
+export function toRepairDock(dock: RepairDock, ships: Ship[] = []) {
+  const ship = ships.find((item) => item.id === dock.shipId);
+  const master = ship ? masterData.api_mst_ship.find((item) => item.api_id === ship.masterId) : undefined;
+  const repair = ship ? repairCost(ship, master) : { fuel: 0, steel: 0 };
+
   return {
     api_member_id: 1,
     api_id: dock.id,
@@ -210,8 +216,8 @@ export function toRepairDock(dock: RepairDock) {
     api_ship_id: dock.shipId,
     api_complete_time: dock.completeTime,
     api_complete_time_str: dock.completeTime ? new Date(dock.completeTime).toISOString() : "0",
-    api_item1: 0,
-    api_item2: 0,
+    api_item1: repair.fuel,
+    api_item2: repair.steel,
     api_item3: 0,
     api_item4: 0
   };
@@ -267,7 +273,7 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
   return {
     api_material: toMaterials(save.materials),
     api_deck_port: save.decks.map(toDeck),
-    api_ndock: save.repairDocks.map(toRepairDock),
+    api_ndock: save.repairDocks.map((dock) => toRepairDock(dock, save.ships)),
     api_ship: save.ships.map((s) => toShip(s, save.slotItems)),
     api_basic: toBasic(save.player, save.furniture, resourceManifest),
     api_log: [],

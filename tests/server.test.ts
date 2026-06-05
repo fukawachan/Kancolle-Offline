@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createContext, runInContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
@@ -87,6 +88,24 @@ describe("local Fastify server", () => {
     expect(createjs.statusCode).toBe(200);
     expect(createjs.headers["content-type"]).toContain("application/javascript");
     expect(createjs.body).toContain("createjs");
+    const createjsContext: Record<string, unknown> = {
+      console,
+      Date,
+      Math,
+      setTimeout,
+      clearTimeout,
+      setInterval,
+      clearInterval,
+      performance: { now: () => Date.now() },
+      document: { createElement: () => ({ canPlayType: () => "" }) },
+      navigator: { userAgent: "" }
+    };
+    createjsContext.window = createjsContext;
+    createjsContext.self = createjsContext;
+    createjsContext.global = createjsContext;
+    createContext(createjsContext);
+    runInContext(createjs.body, createjsContext);
+    expect(() => new (createjsContext.createjs as any).Timeline([], { start: 0 }, { loop: true, paused: true })).not.toThrow();
     expect(axios.statusCode).toBe(200);
     expect(axios.headers["content-type"]).toContain("application/javascript");
     expect(axios.body).toContain("axios");
