@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createPracticeBattle } from "../src/kcsapi/battle.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
 describe("SQLite state store", () => {
@@ -110,5 +111,19 @@ describe("SQLite state store", () => {
     expect(after.materials.devmat).toBe(before.materials.devmat - 1);
     expect(after.slotItems.find((item) => item.id === created.id)).toBeTruthy();
     expect(after.ships.find((ship) => ship.id === 1)?.slotIds[0]).toBe(created.id);
+  });
+
+  it("does not persist or repair practice battle damage", () => {
+    store.registerAccount(15);
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(5, 1);
+    const before = store.getSave().ships.find((ship) => ship.id === 1)!;
+    const battle = createPracticeBattle(store.getSave(), { practiceEnemyId: 1, formation: 1 });
+
+    store.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
+    store.applyPracticeBattleResult();
+
+    const after = store.getSave().ships.find((ship) => ship.id === 1)!;
+    expect(after.hp).toBe(before.hp);
+    expect(after.hp).toBeLessThan(after.maxHp);
   });
 });

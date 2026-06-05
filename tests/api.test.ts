@@ -751,6 +751,10 @@ describe("local kcsapi endpoints", () => {
   it("supports a playable practice battle loop with settlement fields", async () => {
     const practice = await post("api_get_member/practice");
     const practiceData = practice.json().api_data;
+    const beforePractice = store.getSave();
+    const beforePracticeFleet = beforePractice.decks[0].shipIds
+      .filter((shipId) => shipId > 0)
+      .map((shipId) => beforePractice.ships.find((ship) => ship.id === shipId)!);
 
     expect(practice.statusCode).toBe(200);
     expect(practiceData.api_list.length).toBeGreaterThan(0);
@@ -788,9 +792,12 @@ describe("local kcsapi endpoints", () => {
     });
     const night = await post("api_req_practice/midnight_battle");
     const result = await post("api_req_practice/battle_result");
+    const afterFirst = store.getSave();
+    const afterFirstFleet = beforePracticeFleet.map((ship) => afterFirst.ships.find((afterShip) => afterShip.id === ship.id)!);
     const repeat = await post("api_req_practice/battle_result");
+    const afterRepeat = store.getSave();
+    const afterRepeatFleet = beforePracticeFleet.map((ship) => afterRepeat.ships.find((afterShip) => afterShip.id === ship.id)!);
     const afterPracticeList = await post("api_get_member/practice");
-    const after = store.getSave();
 
     expect(battle.json().api_data).toMatchObject({
       api_deck_id: 1,
@@ -810,11 +817,20 @@ describe("local kcsapi endpoints", () => {
     expect(result.json().api_data.api_get_ship_exp).toHaveLength(7);
     expect(result.json().api_data.api_get_exp_lvup).toHaveLength(6);
     expect(repeat.json().api_data.api_get_ship_exp).toEqual(result.json().api_data.api_get_ship_exp);
+    for (const [index, beforeShip] of beforePracticeFleet.entries()) {
+      expect(afterFirstFleet[index].hp).toBe(beforeShip.hp);
+      expect(afterFirstFleet[index].fuel).toBe(Math.max(0, beforeShip.fuel - 2));
+      expect(afterFirstFleet[index].ammo).toBe(Math.max(0, beforeShip.ammo - 2));
+      expect(afterRepeatFleet[index].hp).toBe(afterFirstFleet[index].hp);
+      expect(afterRepeatFleet[index].fuel).toBe(afterFirstFleet[index].fuel);
+      expect(afterRepeatFleet[index].ammo).toBe(afterFirstFleet[index].ammo);
+      expect(afterRepeatFleet[index].exp).toBe(afterFirstFleet[index].exp);
+    }
     const practiceStateByRank: Record<string, number> = { S: 6, A: 5, B: 4, C: 3, D: 2, E: 1 };
     const expectedPracticeState = practiceStateByRank[result.json().api_data.api_win_rank] ?? 1;
     expect(afterPracticeList.json().api_data.api_list.find((item: any) => item.api_enemy_id === enemyId).api_state).toBe(expectedPracticeState);
-    expect(after.ships[0].exp).toBeGreaterThan(0);
-    expect(after.player.exp).toBeGreaterThan(0);
+    expect(afterFirst.ships[0].exp).toBeGreaterThan(0);
+    expect(afterFirst.player.exp).toBeGreaterThan(0);
   });
 
   it("supports a playable combined fleet sortie loop with main and escort settlement fields", async () => {

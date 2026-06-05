@@ -328,10 +328,10 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare(
         "INSERT INTO sortie_sessions (id, deck_id, area_id, map_no, node, seed, state_json) VALUES (1, ?, ?, ?, 1, ?, ?)"
       ).run(deckId, areaId, mapNo, seed, JSON.stringify({ battles: 0 }));
-      consumeSortieSupply(db, deck);
+      consumeFleetSupply(db, deck.shipIds);
       if (deckId === 1 && save.player.combinedFleet > 0) {
         const escort = save.decks.find((item) => item.id === 2);
-        if (escort) consumeSortieSupply(db, escort);
+        if (escort) consumeFleetSupply(db, escort.shipIds);
       }
       return getSave(db).sortieSession;
     },
@@ -400,8 +400,12 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
   const settlement = buildBattleSettlement(save, record);
   const nextBattle = { ...record, resultClaimed: true, settlement };
   const tx = db.transaction(() => {
-    applyFleetHp(db, record.shipIds, record.after?.fNowHps);
-    applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps);
+    if (mode === "practice") {
+      consumeFleetSupply(db, record.shipIds);
+    } else {
+      applyFleetHp(db, record.shipIds, record.after?.fNowHps);
+      applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps);
+    }
     applyFleetExperience(db, settlement.main);
     applyFleetExperience(db, settlement.escort);
     db.prepare("UPDATE players SET exp = ?, level = ? WHERE id = 1").run(settlement.memberExp, settlement.memberLevel);
@@ -1023,17 +1027,11 @@ function firstDock<T extends { id: number; state: number }>(docks: T[]): T {
   return docks.find((dock) => dock.state === 0) || docks[0];
 }
 
-function consumeSortieSupply(db: Database.Database, deck: Deck) {
-  const save = getSave(db);
-  const shipIds = deck.shipIds.filter((id) => id > 0);
-  const tx = db.transaction(() => {
-    for (const shipId of shipIds) {
-      const ship = save.ships.find((item) => item.id === shipId);
-      if (!ship) continue;
-      db.prepare("UPDATE ships SET fuel = max(0, fuel - 2), ammo = max(0, ammo - 2) WHERE id = ?").run(shipId);
-    }
-  });
-  tx();
+function consumeFleetSupply(db: Database.Database, shipIds: number[] | undefined) {
+  const update = db.prepare("UPDATE ships SET fuel = max(0, fuel - 2), ammo = max(0, ammo - 2) WHERE id = ?");
+  for (const shipId of shipIds ?? []) {
+    if (shipId > 0) update.run(shipId);
+  }
 }
 
 function seedMissingMaps(db: Database.Database) {
