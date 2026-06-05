@@ -5,6 +5,7 @@ import { mapMasterId, masterData } from "../master/data.js";
 import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
 import { playerLevelForExp, shipLevelForExp, shipLevelupInfo } from "../kcsapi/experience.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
+import { isAircraftSlotItem } from "../kcsapi/serializers.js";
 import type {
   BuildDock,
   Deck,
@@ -44,8 +45,9 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const PRACTICE_STATES_SESSION_ID = "practice_states";
+const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -158,7 +160,8 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       let fuel = 0;
       let ammo = 0;
-      const update = db.prepare("UPDATE ships SET fuel = ?, ammo = ?, max_fuel = ?, max_ammo = ? WHERE id = ?");
+      let bauxite = 0;
+      const update = db.prepare("UPDATE ships SET fuel = ?, ammo = ?, max_fuel = ?, max_ammo = ?, onslot_json = ? WHERE id = ?");
       const tx = db.transaction(() => {
         for (const shipId of shipIds) {
           const ship = save.ships.find((item) => item.id === shipId);
@@ -166,11 +169,13 @@ export function createStateStore(options: StateStoreOptions) {
           const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
           const targetFuel = master?.api_fuel_max ?? ship.maxFuel;
           const targetAmmo = master?.api_bull_max ?? ship.maxAmmo;
+          const targetOnSlot = onSlotForShip(master, save.slotItems, ship.slotIds);
           fuel += Math.max(0, targetFuel - ship.fuel);
           ammo += Math.max(0, targetAmmo - ship.ammo);
-          update.run(targetFuel, targetAmmo, targetFuel, targetAmmo, ship.id);
+          bauxite += aircraftRefillCount(ship.onSlot, targetOnSlot) * 5;
+          update.run(targetFuel, targetAmmo, targetFuel, targetAmmo, JSON.stringify(targetOnSlot), ship.id);
         }
-        consumeMaterials(db, { fuel, ammo });
+        consumeMaterials(db, { fuel, ammo, bauxite });
       });
       tx();
       return getSave(db).ships.filter((ship) => shipIds.includes(ship.id));
@@ -181,7 +186,9 @@ export function createStateStore(options: StateStoreOptions) {
       if (!ship) return null;
       const slotIds = normalizeFixed(ship.slotIds, 5, -1);
       slotIds[Math.max(0, slotIndex)] = itemId;
-      db.prepare("UPDATE ships SET slot_ids_json = ? WHERE id = ?").run(JSON.stringify(slotIds), shipId);
+      const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
+      const onSlot = onSlotForShip(master, save.slotItems, slotIds, ship.onSlot, true);
+      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(slotIds), JSON.stringify(onSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     equipExSlotItem: (shipId: number, itemId: number) => {
@@ -189,17 +196,23 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     unsetAllSlots: (shipId: number) => {
-      db.prepare("UPDATE ships SET slot_ids_json = ?, ex_slot_id = -1 WHERE id = ?").run(JSON.stringify([-1, -1, -1, -1, -1]), shipId);
+      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = -1 WHERE id = ?").run(JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     exchangeSlotIndex: (shipId: number, from: number, to: number) => {
       const ship = getSave(db).ships.find((item) => item.id === shipId);
       if (!ship) return null;
       const slotIds = normalizeFixed(ship.slotIds, 5, -1);
+      const onSlot = normalizeFixed(ship.onSlot, 5, 0);
       const moving = slotIds[from];
       slotIds[from] = slotIds[to];
       slotIds[to] = moving;
-      db.prepare("UPDATE ships SET slot_ids_json = ? WHERE id = ?").run(JSON.stringify(slotIds), shipId);
+      const movingCount = onSlot[from];
+      onSlot[from] = onSlot[to];
+      onSlot[to] = movingCount;
+      const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
+      const nextOnSlot = onSlotForShip(master, getSave(db).slotItems, slotIds, onSlot, false);
+      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(slotIds), JSON.stringify(nextOnSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     lockSlotItem: (itemId: number, explicit?: number) => {
@@ -223,7 +236,11 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     remodelShip: (shipId: number, masterId: number) => {
-      db.prepare("UPDATE ships SET master_id = ?, level = level + 1 WHERE id = ?").run(masterId, shipId);
+      const save = getSave(db);
+      const ship = save.ships.find((item) => item.id === shipId);
+      const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
+      const onSlot = ship ? onSlotForShip(master, save.slotItems, ship.slotIds, ship.onSlot, true) : EMPTY_ONSLOT;
+      db.prepare("UPDATE ships SET master_id = ?, level = level + 1, onslot_json = ? WHERE id = ?").run(masterId, JSON.stringify(onSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     createSlotItem: (masterId: number) => createSlotItem(db, masterId),
@@ -437,6 +454,8 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     } else {
       applyFleetHp(db, record.shipIds, record.after?.fNowHps);
       applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps);
+      applyFleetOnSlot(db, record.after?.fOnSlotByShipId);
+      applyFleetOnSlot(db, record.after?.fCombinedOnSlotByShipId);
     }
     applyFleetExperience(db, settlement.main);
     applyFleetExperience(db, settlement.escort);
@@ -565,6 +584,16 @@ function applyFleetHp(db: Database.Database, shipIds: number[] | undefined, hps:
   }
 }
 
+function applyFleetOnSlot(db: Database.Database, onSlotByShipId: Record<string, number[]> | undefined) {
+  if (!onSlotByShipId) return;
+  const update = db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?");
+  for (const [shipId, onSlot] of Object.entries(onSlotByShipId)) {
+    const id = Number(shipId);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    update.run(JSON.stringify(normalizeFixed(onSlot.map((count) => Math.max(0, Math.trunc(Number(count) || 0))), 5, 0)), id);
+  }
+}
+
 function applyFleetExperience(db: Database.Database, fleet: BattleSettlementRecord["main"] | undefined) {
   if (!fleet) return;
   for (const ship of fleet) {
@@ -591,14 +620,23 @@ function migrate(db: Database.Database) {
 
   createSchema(db);
   if (currentVersion < 4) migrateToV4(db);
+  if (currentVersion < 5) migrateToV5(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
+  repairShipOnSlotValues(db);
   repairMaps(db);
 }
 
 function migrateToV4(db: Database.Database) {
   if (!columnExists(db, "players", "exp")) {
     db.prepare("ALTER TABLE players ADD COLUMN exp INTEGER NOT NULL DEFAULT 0").run();
+  }
+}
+
+function migrateToV5(db: Database.Database) {
+  if (!columnExists(db, "ships", "onslot_json")) {
+    db.prepare("ALTER TABLE ships ADD COLUMN onslot_json TEXT NOT NULL DEFAULT '[0,0,0,0,0]'").run();
+    backfillShipOnSlotValues(db, true);
   }
 }
 
@@ -631,6 +669,26 @@ function repairShipMaxValues(db: Database.Database) {
       Number(row.max_ammo) !== expectedAmmo
     ) {
       update.run(expectedHp, expectedMaxHp, expectedFuel, expectedAmmo, Number(row.id));
+    }
+  }
+}
+
+function repairShipOnSlotValues(db: Database.Database) {
+  if (!columnExists(db, "ships", "onslot_json")) return;
+  backfillShipOnSlotValues(db, false);
+}
+
+function backfillShipOnSlotValues(db: Database.Database, refillEmptyAircraft: boolean) {
+  const slotItems = (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem);
+  const ships = db.prepare("SELECT id, master_id, slot_ids_json, onslot_json FROM ships").all() as Row[];
+  const update = db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?");
+  for (const row of ships) {
+    const master = masterData.api_mst_ship.find((item) => item.api_id === Number(row.master_id));
+    const slotIds = parseJson<number[]>(row.slot_ids_json, [-1, -1, -1, -1, -1]);
+    const current = parseJson<number[]>(row.onslot_json, EMPTY_ONSLOT);
+    const next = onSlotForShip(master, slotItems, slotIds, current, refillEmptyAircraft);
+    if (JSON.stringify(normalizeFixed(current, 5, 0)) !== JSON.stringify(next)) {
+      update.run(JSON.stringify(next), Number(row.id));
     }
   }
 }
@@ -724,6 +782,7 @@ function createSchema(db: Database.Database) {
       max_ammo INTEGER NOT NULL,
       locked INTEGER NOT NULL,
       slot_ids_json TEXT NOT NULL,
+      onslot_json TEXT NOT NULL,
       ex_slot_id INTEGER NOT NULL,
       stats_json TEXT NOT NULL
     );
@@ -819,8 +878,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       const maxFuel = master?.api_fuel_max ?? 20;
       const maxAmmo = master?.api_bull_max ?? 20;
       db.prepare(
-        "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, -1, ?)"
-      ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify({}));
+        "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, onslot_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, ?, -1, ?)"
+      ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT), JSON.stringify({}));
     }
 
     for (const masterId of [1, 1, 2, 46]) {
@@ -927,6 +986,7 @@ function mapShip(row: Row): Ship {
     maxAmmo: Number(row.max_ammo),
     locked: Number(row.locked),
     slotIds: parseJson<number[]>(row.slot_ids_json, [-1, -1, -1, -1, -1]),
+    onSlot: normalizeFixed(parseJson<number[]>(row.onslot_json, EMPTY_ONSLOT), 5, 0),
     exSlotId: Number(row.ex_slot_id),
     stats: parseJson<JsonObject>(row.stats_json, {})
   };
@@ -1034,9 +1094,37 @@ function createShip(db: Database.Database, masterId: number): Ship {
   const maxFuel = master?.api_fuel_max ?? 20;
   const maxAmmo = master?.api_bull_max ?? 20;
   const info = db.prepare(
-    "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, -1, '{}')"
-  ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]));
+    "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, onslot_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, ?, -1, '{}')"
+  ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT));
   return mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
+}
+
+function onSlotForShip(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  slotItems: SlotItem[],
+  slotIds: number[],
+  current: number[] = [],
+  refillEmptyAircraft = true
+) {
+  const maxeq = Array.isArray(master?.api_maxeq) ? master.api_maxeq : [];
+  const fixedSlots = normalizeFixed(slotIds, 5, -1);
+  const fixedCurrent = normalizeFixed(current, 5, -1);
+  return fixedSlots.map((slotItemId, index) => {
+    if (slotItemId <= 0) return 0;
+    const item = slotItems.find((slotItem) => slotItem.id === slotItemId);
+    const slotMaster = item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
+    const max = Math.max(0, Math.trunc(safeNum(maxeq[index])));
+    if (!slotMaster || !isAircraftSlotItem(slotMaster) || max <= 0) return 0;
+    const previous = Math.trunc(safeNum(fixedCurrent[index], -1));
+    if (previous > 0) return Math.min(previous, max);
+    return refillEmptyAircraft ? max : 0;
+  });
+}
+
+function aircraftRefillCount(current: number[], target: number[]) {
+  const fixedCurrent = normalizeFixed(current, 5, 0);
+  const fixedTarget = normalizeFixed(target, 5, 0);
+  return fixedTarget.reduce((sum, targetCount, index) => sum + Math.max(0, targetCount - fixedCurrent[index]), 0);
 }
 
 function shipInitialMaxHp(master: (typeof masterData.api_mst_ship)[number] | undefined, fallback = 15) {

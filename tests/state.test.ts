@@ -138,6 +138,52 @@ describe("SQLite state store", () => {
     expect(after.ships.find((ship) => ship.id === 1)?.slotIds[0]).toBe(created.id);
   });
 
+  it("persists current aircraft counts and restores them during supply", () => {
+    store.registerAccount(15);
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+
+    const equipped = store.getSave().ships.find((ship) => ship.id === akagi.id)! as any;
+    expect(equipped.onSlot).toEqual([20, 0, 32, 0, 0]);
+
+    const beforeBauxite = store.getSave().materials.bauxite;
+    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([18, 0, 30, 0, 0]), akagi.id);
+
+    const supplied = store.supplyShips([akagi.id])[0] as any;
+
+    expect(supplied.onSlot).toEqual([20, 0, 32, 0, 0]);
+    expect(store.getSave().materials.bauxite).toBe(beforeBauxite - 20);
+  });
+
+  it("migrates version 4 saves by initializing current aircraft counts", () => {
+    store.registerAccount(15);
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+
+    const columns = (store.db.prepare("PRAGMA table_info(ships)").all() as { name: string }[])
+      .map((row) => row.name)
+      .filter((name) => name !== "onslot_json");
+    store.db.exec(`
+      CREATE TABLE ships_legacy AS SELECT ${columns.join(", ")} FROM ships;
+      DROP TABLE ships;
+      ALTER TABLE ships_legacy RENAME TO ships;
+      UPDATE schema_meta SET version = 4;
+    `);
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const migrated = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
+
+    expect(migrated.onSlot).toEqual([20, 0, 32, 0, 0]);
+  });
+
   it("does not persist or repair practice battle damage", () => {
     store.registerAccount(15);
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(5, 1);

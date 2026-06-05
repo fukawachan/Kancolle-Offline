@@ -20,6 +20,7 @@ describe("repair calculations", () => {
       maxAmmo: 20,
       locked: 0,
       slotIds: [-1, -1, -1, -1, -1],
+      onSlot: [0, 0, 0, 0, 0],
       exSlotId: -1,
       stats: {}
     };

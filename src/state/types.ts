@@ -48,6 +48,7 @@ export type Ship = {
   maxAmmo: number;
   locked: number;
   slotIds: number[];
+  onSlot: number[];
   exSlotId: number;
   stats: JsonObject;
 };

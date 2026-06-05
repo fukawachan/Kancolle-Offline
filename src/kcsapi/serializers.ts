@@ -111,7 +111,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_maxhp: ship.maxHp,
     api_leng: master?.api_leng ?? 1,
     api_slot: slot,
-    api_onslot: toOnSlot(master, slot, slotItems),
+    api_onslot: toOnSlot(ship, master, slot, slotItems),
     api_kyouka: [kyouka(0), kyouka(1), kyouka(2), kyouka(3), kyouka(4)],
     api_backs: master?.api_backs ?? 1,
     api_fuel: ship.fuel,
@@ -140,16 +140,18 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
 }
 
 function toOnSlot(
+  ship: Ship,
   shipMaster: (typeof masterData.api_mst_ship)[number] | undefined,
   slot: number[],
   slotItems?: SlotItem[]
 ) {
   const maxeq = Array.isArray(shipMaster?.api_maxeq) ? shipMaster.api_maxeq : [];
+  const current = [...ship.onSlot, ...Array(5).fill(0)].slice(0, 5);
   return slot.map((slotId, index) => {
     if (slotId <= 0) return 0;
     const item = slotItems?.find((si) => si.id === slotId);
     const slotMaster = item ? masterData.api_mst_slotitem.find((m) => m.api_id === item.masterId) : undefined;
-    return slotMaster && isAircraftSlotItem(slotMaster) ? safeNum(maxeq[index]) : 0;
+    return slotMaster && isAircraftSlotItem(slotMaster) ? Math.max(0, Math.min(safeNum(maxeq[index]), safeNum(current[index]))) : 0;
   });
 }
 

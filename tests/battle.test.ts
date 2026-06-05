@@ -84,10 +84,12 @@ describe("sortie battle simulation", () => {
     expect(battle.payload.api_kouku).toBeNull();
   });
 
-  it("emits a client-playable aviation phase before shelling when a carrier has aircraft", () => {
+  it("resolves fighter combat and opening airstrike damage before shelling", () => {
     const akagi = store.createShip(277);
     const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
     store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
     store.changeDeckShip(1, 0, akagi.id);
 
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
@@ -98,24 +100,42 @@ describe("sortie battle simulation", () => {
     expect(kouku).toMatchObject({
       api_plane_from: [[1], []],
       api_stage1: {
-        api_f_count: 20,
-        api_f_lostcount: 0,
+        api_f_count: 52,
+        api_f_lostcount: expect.any(Number),
         api_e_count: 0,
         api_e_lostcount: 0,
         api_disp_seiku: 1,
-        api_touch_plane: [-1, -1]
+        api_touch_plane: expect.any(Array)
       },
       api_stage2: {
-        api_f_count: 20,
+        api_f_count: expect.any(Number),
         api_f_lostcount: 0,
         api_e_count: 0,
         api_e_lostcount: 0
       }
     });
+    expect(kouku!.api_stage1.api_f_lostcount).toBeGreaterThan(0);
+    expect(kouku!.api_stage2.api_f_count).toBeLessThan(52);
+    expect(kouku!.api_stage3.api_edam.some((damage) => damage > 0)).toBe(true);
+    expect(battle.record.aircraftLosses?.friendly[akagi.id]).toBeGreaterThan(0);
     const stage3 = kouku!.api_stage3;
     for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
       expect(stage3[key as keyof typeof stage3], key).toHaveLength(6);
     }
+  });
+
+  it("includes enemy carrier aircraft in later-node air battles", () => {
+    store.nextSortieNode();
+    store.nextSortieNode();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const kouku = battle.payload.api_kouku;
+
+    expect(battle.payload.api_ship_ke).toEqual([1503, 1501, -1, -1, -1, -1]);
+    expect(kouku).not.toBeNull();
+    expect(kouku!.api_plane_from).toEqual([[], [1]]);
+    expect(kouku!.api_stage1.api_e_count).toBeGreaterThan(0);
+    expect(battle.payload.api_eSlot[0]).toEqual(expect.arrayContaining([20, 23]));
   });
 
   it("adds client-required night shelling fields", () => {
@@ -125,5 +145,29 @@ describe("sortie battle simulation", () => {
 
     expect(hougeki.api_sp_list).toHaveLength(hougeki.api_df_list.length);
     expect(hougeki.api_n_mother_list).toHaveLength(hougeki.api_df_list.length);
+  });
+
+  it("uses daytime equipment snapshots for night torpedo cut-ins", () => {
+    const torpedoA = store.createSlotItem(13);
+    const torpedoB = store.createSlotItem(14);
+    store.equipSlotItem(1, 0, torpedoA.id);
+    store.equipSlotItem(1, 1, torpedoB.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [...battle.record.before.fNowHps],
+        eNowHps: [20, 20, 0, 0, 0, 0]
+      }
+    };
+    const night = createNightBattlePayload(record);
+    const hougeki = night.api_hougeki as any;
+    const cutInIndex = hougeki.api_sp_list.indexOf(5);
+
+    expect(cutInIndex).toBeGreaterThanOrEqual(0);
+    expect(hougeki.api_si_list[cutInIndex]).toEqual(expect.arrayContaining([13, 14]));
+    expect(hougeki.api_damage[cutInIndex]).toHaveLength(1);
   });
 });

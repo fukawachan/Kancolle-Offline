@@ -759,7 +759,9 @@ describe("local kcsapi endpoints", () => {
   it("returns aviation phase data from normal sortie battle when the fleet has carrier aircraft", async () => {
     const akagi = store.createShip(277);
     const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
     await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter.id });
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: bomber.id });
     await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: akagi.id });
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     await post("api_req_map/next");
@@ -772,22 +774,76 @@ describe("local kcsapi endpoints", () => {
     expect(battleData.api_kouku).toMatchObject({
       api_plane_from: [[1], []],
       api_stage1: {
-        api_f_count: 20,
-        api_f_lostcount: 0,
+        api_f_count: 52,
+        api_f_lostcount: expect.any(Number),
         api_e_count: 0,
         api_e_lostcount: 0,
         api_disp_seiku: 1,
-        api_touch_plane: [-1, -1]
+        api_touch_plane: expect.any(Array)
       },
       api_stage2: {
-        api_f_count: 20,
+        api_f_count: expect.any(Number),
         api_f_lostcount: 0,
         api_e_count: 0,
         api_e_lostcount: 0
       }
     });
+    expect(battleData.api_kouku.api_stage1.api_f_lostcount).toBeGreaterThan(0);
+    expect(battleData.api_kouku.api_stage3.api_edam.some((damage: number) => damage > 0)).toBe(true);
     for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
       expect(battleData.api_kouku.api_stage3[key], key).toHaveLength(6);
+    }
+
+    await post("api_req_sortie/battleresult");
+    const afterShips = (await post("api_get_member/ship2")).json().api_data;
+    const akagiAfter = afterShips.find((ship: any) => ship.api_id === akagi.id);
+    expect(akagiAfter.api_onslot[0] + akagiAfter.api_onslot[2]).toBeLessThan(52);
+  });
+
+  it("exposes enemy carrier aircraft through battle payload and start2 master data", async () => {
+    const start2Data = (await post("api_start2/getData")).json().api_data;
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+    await post("api_req_map/next");
+
+    const battle = await post("api_req_sortie/battle", { api_formation: 1 });
+    const battleData = battle.json().api_data;
+
+    expect(battleData.api_ship_ke).toEqual([1503, 1501, -1, -1, -1, -1]);
+    expect(battleData.api_kouku.api_plane_from).toEqual([[], [1]]);
+    expect(battleData.api_kouku.api_stage1.api_e_count).toBeGreaterThan(0);
+    expect(battleData.api_eSlot[0]).toEqual(expect.arrayContaining([20, 23]));
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1503)).toMatchObject({
+      api_name: "空母ヲ級"
+    });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1503)).toMatchObject({
+      api_id: 1503
+    });
+  });
+
+  it("returns combined airbattle payloads with combined stage3 arrays", async () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    const escort1 = store.createShip(7);
+    const escort2 = store.createShip(11);
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter.id });
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: bomber.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: akagi.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort1.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: escort2.id });
+    await post("api_req_hensei/combined", { api_combined_type: 1 });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const battle = await post("api_req_combined_battle/airbattle", { api_formation: 1 });
+    const data = battle.json().api_data;
+
+    expect(data.api_stage_flag).toEqual([1, 1, 1]);
+    expect(data.api_kouku.api_plane_from).toEqual([[1], []]);
+    expect(data.api_kouku.api_stage3_combined).toBeTruthy();
+    for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
+      expect(data.api_kouku.api_stage3_combined[key], key).toHaveLength(6);
     }
   });
 

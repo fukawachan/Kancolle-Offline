@@ -18,7 +18,19 @@ const TIME_SIGNAL_VOICE_NOS = Array.from({ length: 24 }, (_value, index) => inde
 const TIRED_BE_LEFT_VOICE_FILE = "129";
 const DEEP_SEA_SHIP_MASTERS: ShipMaster[] = [
   deepSeaShipMaster(1501, "駆逐イ級"),
-  deepSeaShipMaster(1502, "駆逐ロ級")
+  deepSeaShipMaster(1502, "駆逐ロ級"),
+  deepSeaShipMaster(1503, "空母ヲ級", {
+    stype: 11,
+    hp: 85,
+    armor: 40,
+    firepower: 25,
+    torpedo: 0,
+    aa: 35,
+    luck: 10,
+    range: 2,
+    slotNum: 3,
+    maxeq: [24, 24, 8, 0, 0]
+  })
 ];
 
 export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster[] {
@@ -156,26 +168,43 @@ function generatedShipMaster(api_id: number): ShipMaster {
   };
 }
 
-function deepSeaShipMaster(api_id: number, api_name: string): ShipMaster {
+function deepSeaShipMaster(api_id: number, api_name: string, options: {
+  stype?: number;
+  hp?: number;
+  armor?: number;
+  firepower?: number;
+  torpedo?: number;
+  aa?: number;
+  luck?: number;
+  range?: number;
+  slotNum?: number;
+  maxeq?: number[];
+} = {}): ShipMaster {
+  const hp = options.hp ?? 20;
+  const armor = options.armor ?? 5;
+  const firepower = options.firepower ?? 5;
+  const torpedo = options.torpedo ?? 0;
+  const aa = options.aa ?? 0;
+  const luck = options.luck ?? 0;
   return {
     api_id,
     api_sortno: api_id,
     api_sort_id: 0,
     api_name,
     api_yomi: "-",
-    api_stype: 2,
+    api_stype: options.stype ?? 2,
     api_ctype: 1,
     api_afterlv: 0,
     api_aftershipid: 0,
-    api_taik: [20, 20],
-    api_souk: [5, 5],
-    api_houg: [5, 5],
-    api_raig: [0, 0],
-    api_tyku: [0, 0],
-    api_luck: [0, 0],
-    api_leng: 1,
-    api_slot_num: 2,
-    api_maxeq: [0, 0, 0, 0, 0],
+    api_taik: [hp, hp],
+    api_souk: [armor, armor],
+    api_houg: [firepower, firepower],
+    api_raig: [torpedo, torpedo],
+    api_tyku: [aa, aa],
+    api_luck: [luck, luck],
+    api_leng: options.range ?? 1,
+    api_slot_num: options.slotNum ?? 2,
+    api_maxeq: options.maxeq ?? [0, 0, 0, 0, 0],
     api_buildtime: 0,
     api_broken: [0, 0, 0, 0],
     api_powup: [0, 0, 0, 0],
