@@ -608,16 +608,29 @@ function columnExists(db: Database.Database, table: string, column: string) {
 }
 
 function repairShipMaxValues(db: Database.Database) {
-  const ships = db.prepare("SELECT id, master_id, max_fuel, max_ammo FROM ships").all() as Row[];
-  const update = db.prepare("UPDATE ships SET max_fuel = ?, max_ammo = ? WHERE id = ?");
+  const ships = db.prepare("SELECT id, master_id, hp, max_hp, max_fuel, max_ammo FROM ships").all() as Row[];
+  const update = db.prepare("UPDATE ships SET hp = ?, max_hp = ?, max_fuel = ?, max_ammo = ? WHERE id = ?");
   for (const row of ships) {
     const masterId = Number(row.master_id);
     const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
     if (!master) continue;
+    const currentHp = safeNum(row.hp, 1);
+    const currentMaxHp = safeNum(row.max_hp, 1);
+    const expectedMaxHp = shipInitialMaxHp(master, currentMaxHp);
+    const expectedHp = currentMaxHp !== expectedMaxHp
+      ? currentHp >= currentMaxHp
+        ? expectedMaxHp
+        : Math.max(1, Math.min(currentHp, expectedMaxHp))
+      : currentHp;
     const expectedFuel = master.api_fuel_max;
     const expectedAmmo = master.api_bull_max;
-    if (Number(row.max_fuel) !== expectedFuel || Number(row.max_ammo) !== expectedAmmo) {
-      update.run(expectedFuel, expectedAmmo, Number(row.id));
+    if (
+      currentHp !== expectedHp ||
+      currentMaxHp !== expectedMaxHp ||
+      Number(row.max_fuel) !== expectedFuel ||
+      Number(row.max_ammo) !== expectedAmmo
+    ) {
+      update.run(expectedHp, expectedMaxHp, expectedFuel, expectedAmmo, Number(row.id));
     }
   }
 }
@@ -802,7 +815,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
 
     for (const masterId of [9, 10, 1, 2]) {
       const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
-      const maxHp = masterId === 9 || masterId === 10 ? 15 : 13;
+      const maxHp = shipInitialMaxHp(master);
       const maxFuel = master?.api_fuel_max ?? 20;
       const maxAmmo = master?.api_bull_max ?? 20;
       db.prepare(
@@ -1017,13 +1030,19 @@ function createSlotItem(db: Database.Database, masterId: number): SlotItem {
 
 function createShip(db: Database.Database, masterId: number): Ship {
   const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
-  const maxHp = masterId === 89 ? 74 : masterId === 45 ? 26 : 15;
+  const maxHp = shipInitialMaxHp(master);
   const maxFuel = master?.api_fuel_max ?? 20;
   const maxAmmo = master?.api_bull_max ?? 20;
   const info = db.prepare(
     "INSERT INTO ships (master_id, level, exp, hp, max_hp, condition, fuel, max_fuel, ammo, max_ammo, locked, slot_ids_json, ex_slot_id, stats_json) VALUES (?, 1, 0, ?, ?, 49, ?, ?, ?, ?, 0, ?, -1, '{}')"
   ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]));
   return mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
+}
+
+function shipInitialMaxHp(master: (typeof masterData.api_mst_ship)[number] | undefined, fallback = 15) {
+  const value = Array.isArray(master?.api_taik) ? master.api_taik[0] : master?.api_taik;
+  const hp = Number(value);
+  return Number.isFinite(hp) && hp > 0 ? Math.trunc(hp) : fallback;
 }
 
 function consumeMaterials(db: Database.Database, delta: MaterialDelta) {

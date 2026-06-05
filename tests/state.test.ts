@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createPracticeBattle } from "../src/kcsapi/battle.js";
+import { masterData } from "../src/master/data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
 describe("SQLite state store", () => {
@@ -43,6 +44,30 @@ describe("SQLite state store", () => {
     expect(save.ships.length).toBeGreaterThan(0);
     expect(save.slotItems.length).toBeGreaterThan(0);
     expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
+  });
+
+  it("creates ship instances with initial max HP from ship master data", () => {
+    store.registerAccount(15);
+
+    const nagato = store.createShip(80);
+    const nagatoMaster = masterData.api_mst_ship.find((ship) => ship.api_id === 80)!;
+
+    expect(nagatoMaster.api_taik).toEqual([80, 94]);
+    expect(nagato.maxHp).toBe(nagatoMaster.api_taik[0]);
+    expect(nagato.hp).toBe(nagato.maxHp);
+  });
+
+  it("repairs legacy ship max HP values that were seeded from placeholders", () => {
+    store.registerAccount(15);
+    const nagato = store.createShip(80);
+    store.db.prepare("UPDATE ships SET hp = 15, max_hp = 15 WHERE id = ?").run(nagato.id);
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const repaired = store.getSave().ships.find((ship) => ship.id === nagato.id)!;
+
+    expect(repaired.maxHp).toBe(80);
+    expect(repaired.hp).toBe(80);
   });
 
   it("resets legacy saves that used ship master ids mismatched with cached art", () => {
