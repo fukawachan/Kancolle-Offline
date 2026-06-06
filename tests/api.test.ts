@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
@@ -107,11 +108,22 @@ describe("local kcsapi endpoints", () => {
       api_name: "駆逐ロ級",
       api_stype: 2
     });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1503)).toMatchObject({
+      api_name: "駆逐ハ級",
+      api_stype: 2
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1505)).toMatchObject({
+      api_name: "軽巡ホ級",
+      api_stype: 3
+    });
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1501)).toMatchObject({
       api_filename: "mtjmdcwtvhdr"
     });
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1502)).toMatchObject({
       api_filename: "pbgkfylkbjuy"
+    });
+    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1505)).toMatchObject({
+      api_filename: "itslcqtmrxtf"
     });
     const battleBgmIds = new Set(
       start2Data.api_mst_bgm
@@ -138,6 +150,28 @@ describe("local kcsapi endpoints", () => {
     const slotById = new Map(start2Data.api_mst_slotitem.map((slot: any) => [slot.api_id, slot]));
     expect(slotById.get(1)).toMatchObject({ api_name: "12cm単装砲", api_yomi: "12cm Single Gun Mount" });
     expect(slotById.get(2)).toMatchObject({ api_name: "12.7cm連装砲", api_yomi: "12.7cm Twin Gun Mount" });
+    expect(slotById.get(1501)).toMatchObject({ api_name: "5inch単装砲" });
+    expect(slotById.get(1502)).toMatchObject({ api_name: "5inch連装砲" });
+    expect(slotById.get(1504)).toMatchObject({ api_name: "5inch単装高射砲" });
+    expect(slotById.get(1513)).toMatchObject({ api_name: "21inch魚雷前期型" });
+    expect(slotById.get(1525)).toMatchObject({ api_name: "深海棲艦偵察機" });
+    const sortieEnemyIds = new Set(sortieNodes().flatMap((node) => node.encounters.flatMap((encounter) => encounter.shipIds)));
+    for (const shipId of sortieEnemyIds) {
+      expect(shipById.has(shipId), `api_mst_ship contains sortie enemy ${shipId}`).toBe(true);
+    }
+    for (const [shipId, template] of Object.entries(ENEMY_UNIT_TEMPLATES)) {
+      expect(shipById.has(Number(shipId)), `api_mst_ship contains enemy template ${shipId}`).toBe(true);
+      for (const slotId of template.slots) {
+        if (slotId > 0) {
+          expect(slotById.has(slotId), `api_mst_slotitem contains enemy slot ${slotId}`).toBe(true);
+        }
+      }
+    }
+    for (const node of sortieNodes()) {
+      for (const drop of node.dropPool) {
+        if (drop.shipId != null) expect(shipById.has(drop.shipId), `api_mst_ship contains drop ${drop.shipName}`).toBe(true);
+      }
+    }
     expect(slotById.get(3)).toMatchObject({ api_name: "10cm連装高角砲", api_yomi: "10cm Twin High-angle Gun Mount" });
     expect(slotById.get(4)).toMatchObject({ api_name: "14cm単装砲", api_yomi: "14cm Single Gun Mount" });
     expect(slotById.get(10)).toMatchObject({ api_name: "12.7cm連装高角砲", api_yomi: "12.7cm Twin High-angle Gun Mount" });
@@ -651,7 +685,7 @@ describe("local kcsapi endpoints", () => {
     expect(result.json().api_data).toMatchObject({
       api_win_rank: expect.stringMatching(/[SABC]/),
       api_get_exp: expect.any(Number),
-      api_get_ship: expect.any(Object)
+      api_get_ship_exp: expect.any(Array)
     });
 
     const missionResult = await post("api_req_mission/result", { api_deck_id: 2 });
@@ -684,17 +718,12 @@ describe("local kcsapi endpoints", () => {
       api_deck_id: 1,
       api_dock_id: 1,
       api_formation: [2, 1, 1],
-      api_ship_ke: [1501, 1502, -1, -1, -1, -1],
-      api_ship_lv: [1, 1, 0, 0, 0, 0],
-      api_eSlot: [
-        [1, -1, -1, -1, -1],
-        [1, -1, -1, -1, -1],
-        [],
-        [],
-        [],
-        []
-      ]
+      api_ship_lv: [1, 1, 0, 0, 0, 0]
     });
+    const nodeBEnemyIds = battleData.api_ship_ke.filter((id: number) => id > 0);
+    expect(nodeBEnemyIds).toHaveLength(2);
+    expect(nodeBEnemyIds[0]).toBe(nodeBEnemyIds[1]);
+    expect([1501, 1502, 1503]).toContain(nodeBEnemyIds[0]);
     for (const key of ["api_ship_ke", "api_ship_lv", "api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
       expect(battleData[key], key).toHaveLength(6);
     }
@@ -800,7 +829,7 @@ describe("local kcsapi endpoints", () => {
     expect(akagiAfter.api_onslot[0] + akagiAfter.api_onslot[2]).toBeLessThan(52);
   });
 
-  it("exposes enemy carrier aircraft through battle payload and start2 master data", async () => {
+  it("exposes official 1-1 boss enemy fleet through battle payload and start2 master data", async () => {
     const start2Data = (await post("api_start2/getData")).json().api_data;
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     await post("api_req_map/next");
@@ -809,16 +838,23 @@ describe("local kcsapi endpoints", () => {
     const battle = await post("api_req_sortie/battle", { api_formation: 1 });
     const battleData = battle.json().api_data;
 
-    expect(battleData.api_ship_ke).toEqual([1503, 1501, -1, -1, -1, -1]);
+    expect(battleData.api_ship_ke[0]).toBe(1505);
+    expect(battleData.api_ship_ke.filter((id: number) => id > 0).length).toBeGreaterThanOrEqual(3);
     expect(battleData.api_kouku.api_plane_from).toEqual([[], [1]]);
     expect(battleData.api_kouku.api_stage1.api_e_count).toBeGreaterThan(0);
-    expect(battleData.api_eSlot[0]).toEqual(expect.arrayContaining([20, 23]));
+    expect(battleData.api_eSlot[0]).toEqual(expect.arrayContaining([1504, 1525]));
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1503)).toMatchObject({
-      api_name: "空母ヲ級"
+      api_name: "駆逐ハ級"
     });
-    expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 1503)).toMatchObject({
-      api_id: 1503
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1505)).toMatchObject({
+      api_name: "軽巡ホ級"
     });
+    const slotIds = new Set(start2Data.api_mst_slotitem.map((slot: any) => slot.api_id));
+    for (const slotIdsForEnemy of battleData.api_eSlot) {
+      for (const slotId of slotIdsForEnemy) {
+        if (slotId > 0) expect(slotIds.has(slotId), `api_mst_slotitem contains ${slotId}`).toBe(true);
+      }
+    }
   });
 
   it("returns combined airbattle payloads with combined stage3 arrays", async () => {
@@ -850,6 +886,7 @@ describe("local kcsapi endpoints", () => {
   it("applies sortie battle results once and exposes night battle fields", async () => {
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     await post("api_req_map/next");
+    store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(1300);
 
     const battle = await post("api_req_sortie/battle", { api_formation: 1 });
     const night = await post("api_req_battle_midnight/battle");
@@ -891,6 +928,22 @@ describe("local kcsapi endpoints", () => {
     }
     expect(afterRepeat.player.exp).toBeGreaterThan(0);
     expect((afterRepeat.sortieSession?.state as any).lastBattle.resultClaimed).toBe(true);
+    expect(result.json().api_data.api_get_ship.api_ship_id).not.toBe(1);
+    expect(afterRepeat.ships.some((ship) => ship.masterId === result.json().api_data.api_get_ship.api_ship_id)).toBe(true);
+  });
+
+  it("does not create a dropped ship when the sortie drop table rolls no drop", async () => {
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+    await post("api_req_map/next");
+    store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(0);
+    const beforeShipCount = store.getSave().ships.length;
+
+    await post("api_req_sortie/battle", { api_formation: 1 });
+    const result = await post("api_req_sortie/battleresult");
+
+    expect(result.json().api_data.api_get_ship).toBeNull();
+    expect(store.getSave().ships).toHaveLength(beforeShipCount);
   });
 
   it("supports a playable practice battle loop with settlement fields", async () => {

@@ -1,4 +1,12 @@
 import { masterData } from "../master/data.js";
+import {
+  DEEP_SEA_SLOT_MASTERS,
+  ENEMY_UNIT_TEMPLATES,
+  fallbackEnemyShipIds,
+  selectSortieDrop,
+  selectSortieEncounter,
+  type SelectedSortieEncounter
+} from "../master/sortie-data.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
 import { isAircraftSlotItem } from "./serializers.js";
 import {
@@ -17,6 +25,10 @@ export type BattleInput = {
 export type BattleMode = "sortie" | "practice" | "combined";
 
 type Side = 0 | 1;
+
+type BattleSortieContext = SelectedSortieEncounter & {
+  seed: number;
+};
 
 type AirSlot = {
   shipPosition: number;
@@ -210,6 +222,7 @@ export type BattleRecord = {
     escort?: BattleUnitSnapshot[];
     enemyCombined?: BattleUnitSnapshot[];
   };
+  sortie?: BattleSortieContext;
   result: BattleResultRecord;
   aircraftLosses?: {
     friendly: Record<number, number>;
@@ -293,66 +306,9 @@ const AP_SHELL_TYPE = 19;
 const HIGH_ANGLE_GUN_TYPES = new Set([16]);
 const AA_GUN_TYPES = new Set([21]);
 const RADAR_TYPES = new Set([12, 13]);
-
-type EnemyTemplate = {
-  masterId: number;
-  level: number;
-  hp: number;
-  shipType: number;
-  firepower: number;
-  torpedo: number;
-  aa: number;
-  armor: number;
-  luck: number;
-  range: number;
-  slots: number[];
-  onSlot: number[];
-};
-
-const ENEMY_TEMPLATES: Record<number, EnemyTemplate> = {
-  1501: {
-    masterId: 1501,
-    level: 1,
-    hp: 20,
-    shipType: 2,
-    firepower: 5,
-    torpedo: 0,
-    aa: 0,
-    armor: 5,
-    luck: 0,
-    range: 1,
-    slots: [1],
-    onSlot: [0, 0, 0, 0, 0]
-  },
-  1502: {
-    masterId: 1502,
-    level: 1,
-    hp: 20,
-    shipType: 2,
-    firepower: 6,
-    torpedo: 0,
-    aa: 0,
-    armor: 6,
-    luck: 0,
-    range: 1,
-    slots: [1],
-    onSlot: [0, 0, 0, 0, 0]
-  },
-  1503: {
-    masterId: 1503,
-    level: 1,
-    hp: 85,
-    shipType: 11,
-    firepower: 25,
-    torpedo: 0,
-    aa: 35,
-    armor: 40,
-    luck: 10,
-    range: 2,
-    slots: [20, 23],
-    onSlot: [24, 24, 0, 0, 0]
-  }
-};
+const SLOT_MASTER_BY_ID = new Map<number, (typeof masterData.api_mst_slotitem)[number]>(
+  [...masterData.api_mst_slotitem, ...DEEP_SEA_SLOT_MASTERS].map((slot) => [slot.api_id, slot] as const)
+);
 
 const PRACTICE_RIVALS: PracticeRival[] = [
   {
@@ -442,11 +398,13 @@ export function resolveDamage(input: DamageInput) {
 
 export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const deck = sortieDeck(save);
-  const formation: [number, number, number] = [battleFormation(input), 1, 1];
-  const seed = (save.sortieSession?.seed ?? 1) + safeNum(save.sortieSession?.state.battles, 0) * 9973 + formation[0] * 101;
+  const friendlyFormation = battleFormation(input);
+  const seed = (save.sortieSession?.seed ?? 1) + safeNum(save.sortieSession?.state.battles, 0) * 9973 + friendlyFormation * 101;
   const rng = new BattleRng(seed);
   const friendly = friendlyUnits(save, deck.shipIds);
-  const enemy = enemyUnits(save.sortieSession?.node ?? 1);
+  const sortie = sortieBattleContext(save, seed);
+  const formation: [number, number, number] = [friendlyFormation, sortie?.formation ?? 1, 1];
+  const enemy = enemyUnits(sortie?.shipIds ?? fallbackEnemyShipIds(save.sortieSession?.node ?? 1));
   const beforeF = fixedHp(friendly);
   const beforeE = fixedHp(enemy);
 
@@ -456,7 +414,7 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
 
   const afterF = fixedHp(friendly);
   const afterE = fixedHp(enemy);
-  const result = battleResult(friendly, enemy);
+  const result = battleResult(friendly, enemy, "sortie", sortie);
   const record: BattleRecord = {
     mode: "sortie",
     deckId: deck.id,
@@ -477,6 +435,7 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
       friendly: snapshotUnits(friendly),
       enemy: snapshotUnits(enemy)
     },
+    sortie,
     result,
     aircraftLosses: aircraftLosses(friendly, enemy)
   };
@@ -538,12 +497,14 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
 export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const deck = save.decks.find((item) => item.id === 1) ?? save.decks[0];
   const escortDeck = save.decks.find((item) => item.id === 2) ?? save.decks[1] ?? deck;
-  const formation: [number, number, number] = [battleFormation(input), 1, 1];
-  const seed = (save.sortieSession?.seed ?? 1) + 424242 + formation[0] * 101;
+  const friendlyFormation = battleFormation(input);
+  const seed = (save.sortieSession?.seed ?? 1) + 424242 + friendlyFormation * 101;
   const rng = new BattleRng(seed);
   const friendly = friendlyUnits(save, deck.shipIds);
   const escort = friendlyUnits(save, escortDeck.shipIds);
-  const enemy = enemyUnits(save.sortieSession?.node ?? 1);
+  const sortie = sortieBattleContext(save, seed);
+  const formation: [number, number, number] = [friendlyFormation, sortie?.formation ?? 1, 1];
+  const enemy = enemyUnits(sortie?.shipIds ?? fallbackEnemyShipIds(save.sortieSession?.node ?? 1));
   const enemyCombined: BattleUnit[] = [];
   const beforeF = fixedHp(friendly);
   const beforeEscort = fixedHp(escort);
@@ -557,7 +518,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const afterEscort = fixedHp(escort);
   const afterE = fixedHp(enemy);
   const afterECombined = fixedHp(enemyCombined);
-  const result = battleResult(friendly, enemy, "combined");
+  const result = battleResult(friendly, enemy, "combined", sortie);
   result.mvpCombined = escortMvp(escort);
   const record: BattleRecord = {
     mode: "combined",
@@ -591,6 +552,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
       escort: snapshotUnits(escort),
       enemyCombined: snapshotUnits(enemyCombined)
     },
+    sortie,
     result,
     aircraftLosses: aircraftLosses([...friendly, ...escort], enemy)
   };
@@ -617,7 +579,7 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
       ...record.phases,
       night: hougeki
     },
-    result: { ...battleResult(friendly, enemy, record.mode), mvpCombined: record.result.mvpCombined }
+    result: { ...battleResult(friendly, enemy, record.mode, record.sortie), mvpCombined: record.result.mvpCombined }
   };
   const payload: Record<string, unknown> = {
     api_deck_id: record.deckId,
@@ -1002,7 +964,7 @@ function airstrikeDamage(slot: AirSlot, target: BattleUnit, ammoModifier: number
 
 function contactModifier(touchPlane: number, slot: AirSlot) {
   if (touchPlane <= 0) return 1;
-  const contactMaster = masterData.api_mst_slotitem.find((item) => item.api_id === touchPlane);
+  const contactMaster = slotMasterById(touchPlane);
   const accuracy = safeNum(contactMaster?.api_houm ?? slot.slotMaster.api_houm);
   if (accuracy >= 3) return 1.2;
   if (accuracy >= 2) return 1.17;
@@ -1251,7 +1213,7 @@ function applyDamage(
   return damage;
 }
 
-function battleResult(friendly: BattleUnit[], enemy: BattleUnit[], mode: BattleMode = "sortie"): BattleResultRecord {
+function battleResult(friendly: BattleUnit[], enemy: BattleUnit[], mode: BattleMode = "sortie", sortie?: BattleSortieContext): BattleResultRecord {
   const enemyTotalHp = enemy.reduce((sum, unit) => sum + unit.maxHp, 0);
   const enemyRemainingHp = enemy.reduce((sum, unit) => sum + Math.max(0, unit.hp), 0);
   const sunk = enemy.filter((unit) => unit.hp <= 0).length;
@@ -1259,15 +1221,22 @@ function battleResult(friendly: BattleUnit[], enemy: BattleUnit[], mode: BattleM
   const rank = sunk === enemy.length ? "S" : damageRatio >= 0.7 ? "A" : damageRatio >= 0.4 ? "B" : "C";
   const mvp = [...friendly].sort((a, b) => b.damageDealt - a.damageDealt || a.position - b.position)[0]?.position ?? 1;
   const baseExp = rank === "S" ? 40 : rank === "A" ? 35 : rank === "B" ? 30 : 20;
+  const drop = mode === "practice" || !sortie ? null : selectSortieDrop({
+    mapId: sortie.mapId,
+    node: sortie.node,
+    rank,
+    seed: sortie.seed,
+    enemyFleetKey: sortie.enemyFleetKey
+  });
   return {
     rank,
     mvp,
     baseExp,
     getExp: baseExp * 2,
     memberExp: baseExp * 2,
-    dropShipId: mode === "practice" ? 0 : 1,
-    dropShipName: mode === "practice" ? "" : "Mutsuki",
-    dropShipType: mode === "practice" ? "" : "Destroyer"
+    dropShipId: drop?.shipId ?? 0,
+    dropShipName: drop?.shipName ?? "",
+    dropShipType: drop?.shipType ?? ""
   };
 }
 
@@ -1288,7 +1257,7 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     .map((id, index) => {
       if (id <= 0) return null;
       const item = slotItems.find((slotItem) => slotItem.id === id);
-      const slotMaster = item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
+      const slotMaster = item ? slotMasterById(item.masterId) : undefined;
       if (!item || !slotMaster) return null;
       const maxCount = Math.max(0, safeNum(maxeq[index]));
       const count = isAircraftSlotItem(slotMaster) ? Math.min(maxCount, currentOnSlot[index]) : 0;
@@ -1355,18 +1324,24 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
   };
 }
 
-function enemyUnits(node: number) {
-  const ids = node > 2 ? [1503, 1501] : [1501, 1502];
-  return ids.map((id, index) => enemyUnit(id, index + 1));
+function sortieBattleContext(save: SaveState, seed: number): BattleSortieContext | undefined {
+  const session = save.sortieSession;
+  if (!session) return undefined;
+  const encounter = selectSortieEncounter(session.areaId, session.mapNo, session.node, seed);
+  return encounter ? { ...encounter, seed } : undefined;
+}
+
+function enemyUnits(shipIds: readonly number[]) {
+  return shipIds.slice(0, 6).map((id, index) => enemyUnit(id, index + 1));
 }
 
 function enemyUnit(masterId: number, position: number): BattleUnit {
-  const template = ENEMY_TEMPLATES[masterId] ?? ENEMY_TEMPLATES[1501];
+  const template = ENEMY_UNIT_TEMPLATES[masterId] ?? ENEMY_UNIT_TEMPLATES[1501];
   const onSlot = normalizeFixed(template.onSlot, 5, 0).map((count) => Math.max(0, safeNum(count)));
   const equippedSlots = normalizeFixed(template.slots, 5, -1)
     .map((slotMasterId, index) => {
       if (slotMasterId <= 0) return null;
-      const slotMaster = masterData.api_mst_slotitem.find((slot) => slot.api_id === slotMasterId);
+      const slotMaster = slotMasterById(slotMasterId);
       if (!slotMaster) return null;
       const maxCount = onSlot[index] ?? 0;
       return {
@@ -1411,7 +1386,7 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     range: template.range,
     ammoModifier: 1,
     shipType: template.shipType,
-    slots: template.slots.length ? [...template.slots] : [1],
+    slots: template.slots.length ? [...template.slots] : [1501],
     equippedSlots,
     airSlots,
     onSlot,
@@ -1536,7 +1511,7 @@ function snapshotUnits(units: BattleUnit[]): BattleUnitSnapshot[] {
 function unitFromSnapshot(snapshot: BattleUnitSnapshot, hp: number): BattleUnit {
   const equippedSlots = snapshot.equippedSlots
     .map((slot) => {
-      const slotMaster = masterData.api_mst_slotitem.find((item) => item.api_id === slot.slotMasterId);
+      const slotMaster = slotMasterById(slot.slotMasterId);
       return slotMaster
         ? {
           index: slot.index,
@@ -1676,7 +1651,7 @@ function fixedShipIds(shipIds: number[]) {
   return [...shipIds, ...Array(6).fill(-1)].slice(0, 6).map((id) => (id > 0 ? id : -1));
 }
 
-function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {
+function normalizeFixed<T>(values: readonly T[], length: number, fill: T): T[] {
   return [...values, ...Array(length).fill(fill)].slice(0, length);
 }
 
@@ -1713,6 +1688,10 @@ function fixedUnitValues<T>(units: BattleUnit[], pick: (unit: BattleUnit) => T, 
 function statValue(value: unknown, fallback = 0) {
   if (Array.isArray(value)) return safeNum(value[0], fallback);
   return safeNum(value, fallback);
+}
+
+function slotMasterById(id: number) {
+  return SLOT_MASTER_BY_ID.get(id);
 }
 
 function safeNum(value: unknown, fallback = 0) {

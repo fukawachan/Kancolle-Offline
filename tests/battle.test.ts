@@ -30,9 +30,11 @@ describe("sortie battle simulation", () => {
   it("builds a deterministic day battle with shelling, torpedo, and result records", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 2 });
     const payload = battle.payload;
+    const enemyIds = payload.api_ship_ke.filter((id: number) => id > 0);
 
     expect(payload.api_formation).toEqual([2, expect.any(Number), expect.any(Number)]);
-    expect(payload.api_ship_ke).toEqual([1501, 1502, -1, -1, -1, -1]);
+    expect(enemyIds).toHaveLength(1);
+    expect([1501, 1502, 1503]).toContain(enemyIds[0]);
     for (const key of ["api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
       expect(payload[key], key).toHaveLength(6);
     }
@@ -51,7 +53,7 @@ describe("sortie battle simulation", () => {
         expect(defender).toBeLessThan(attackerIsEnemy ? activeFriendCount : activeEnemyCount);
       }
     }
-    for (const slotIds of payload.api_eSlot.slice(0, 2)) {
+    for (const slotIds of payload.api_eSlot.slice(0, enemyIds.length)) {
       expect(slotIds[0]).toBeGreaterThan(0);
     }
     for (const slotIds of payload.api_hougeki1.api_si_list) {
@@ -91,6 +93,7 @@ describe("sortie battle simulation", () => {
     store.equipSlotItem(akagi.id, 0, fighter.id);
     store.equipSlotItem(akagi.id, 2, bomber.id);
     store.changeDeckShip(1, 0, akagi.id);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
 
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const kouku = battle.payload.api_kouku;
@@ -124,18 +127,26 @@ describe("sortie battle simulation", () => {
     }
   });
 
-  it("includes enemy carrier aircraft in later-node air battles", () => {
-    store.nextSortieNode();
+  it("uses official 1-1 node encounters for later nodes", () => {
     store.nextSortieNode();
 
-    const battle = createSortieBattle(store.getSave(), { formation: 1 });
-    const kouku = battle.payload.api_kouku;
+    const nodeB = createSortieBattle(store.getSave(), { formation: 1 });
+    const nodeBEnemyIds = nodeB.payload.api_ship_ke.filter((id: number) => id > 0);
 
-    expect(battle.payload.api_ship_ke).toEqual([1503, 1501, -1, -1, -1, -1]);
-    expect(kouku).not.toBeNull();
-    expect(kouku!.api_plane_from).toEqual([[], [1]]);
-    expect(kouku!.api_stage1.api_e_count).toBeGreaterThan(0);
-    expect(battle.payload.api_eSlot[0]).toEqual(expect.arrayContaining([20, 23]));
+    expect(nodeBEnemyIds).toHaveLength(2);
+    expect(nodeBEnemyIds[0]).toBe(nodeBEnemyIds[1]);
+    expect([1501, 1502, 1503]).toContain(nodeBEnemyIds[0]);
+
+    store.nextSortieNode();
+
+    const boss = createSortieBattle(store.getSave(), { formation: 1 });
+    const bossEnemyIds = boss.payload.api_ship_ke.filter((id: number) => id > 0);
+
+    expect(bossEnemyIds[0]).toBe(1505);
+    expect(bossEnemyIds.length).toBeGreaterThanOrEqual(3);
+    expect(boss.payload.api_kouku).not.toBeNull();
+    expect(boss.payload.api_kouku!.api_plane_from[1]).toEqual([1]);
+    expect(boss.payload.api_eSlot[0]).toEqual(expect.arrayContaining([1504, 1525]));
   });
 
   it("adds client-required night shelling fields", () => {

@@ -12,6 +12,7 @@ import {
   type ShipMaster
 } from "../master/catalog.js";
 import { mapMasterId, masterData } from "../master/data.js";
+import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import type { ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
@@ -646,13 +647,13 @@ function firstExistingBattleBgm(resourceManifest: ResourceManifest, ids: number[
 function mapCellMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
   return mapInfos.flatMap((map) => {
     const spots = mapSpots(resourceManifest, map.api_maparea_id, map.api_no);
-    const bossCellNo = lastCellNo(spots);
+    const fallbackBossCellNo = lastCellNo(spots);
     return spots.map((spot) => ({
       api_id: map.api_id * 100 + spot.no,
       api_maparea_id: map.api_maparea_id,
       api_mapinfo_no: map.api_no,
       api_no: spot.no,
-      api_color_no: mapCellColor(spot.no, bossCellNo)
+      api_color_no: mapCellColorFor(map.api_maparea_id, map.api_no, spot.no, fallbackBossCellNo)
     }));
   });
 }
@@ -668,10 +669,12 @@ function recipeDelta(body: Record<string, unknown>) {
 
 function mapNode(resourceManifest: ResourceManifest, areaId: number, mapNo: number, node: number, fromNo: number, includeCells = false) {
   const spots = mapSpots(resourceManifest, areaId, mapNo);
-  const bossCellNo = lastCellNo(spots);
-  const currentNode = spots.some((spot) => spot.no === node) ? node : node > bossCellNo ? bossCellNo : firstSortieCellNo(spots);
+  const lastMapCellNo = lastCellNo(spots);
+  const bossCellNo = sortieBossNodeNo(areaId, mapNo) ?? lastMapCellNo;
+  const currentNode = spots.some((spot) => spot.no === node) ? node : node > lastMapCellNo ? lastMapCellNo : firstSortieCellNo(spots);
   const next = nextCellNo(spots, currentNode);
-  const colorNo = mapCellColor(currentNode, bossCellNo);
+  const sortieNode = sortieNodeData(areaId, mapNo, currentNode);
+  const colorNo = sortieNode?.colorNo ?? mapCellColor(currentNode, lastMapCellNo);
   return {
     api_rashin_flg: 1,
     api_rashin_id: 1,
@@ -680,12 +683,12 @@ function mapNode(resourceManifest: ResourceManifest, areaId: number, mapNo: numb
     api_no: currentNode,
     api_from_no: fromNo,
     api_color_no: colorNo,
-    api_event_id: currentNode === bossCellNo ? 5 : 4,
-    api_event_kind: currentNode === 0 ? 0 : 1,
+    api_event_id: sortieNode?.eventId ?? (currentNode === lastMapCellNo ? 5 : 4),
+    api_event_kind: currentNode === 0 ? 0 : sortieNode?.combat === false ? 0 : 1,
     api_next: next,
     api_bosscell_no: bossCellNo,
     api_select_route: null,
-    ...(includeCells ? { api_cell_data: cellData(spots, bossCellNo) } : {})
+    ...(includeCells ? { api_cell_data: cellData(spots, areaId, mapNo, lastMapCellNo) } : {})
   };
 }
 
@@ -696,10 +699,10 @@ function mapSpots(resourceManifest: ResourceManifest, areaId: number, mapNo: num
   return [{ no: 0 }, { no: 1 }];
 }
 
-function cellData(spots: { no: number }[], bossCellNo: number) {
+function cellData(spots: { no: number }[], areaId: number, mapNo: number, bossCellNo: number) {
   return spots.map((spot) => ({
     api_no: spot.no,
-    api_color_no: mapCellColor(spot.no, bossCellNo)
+    api_color_no: mapCellColorFor(areaId, mapNo, spot.no, bossCellNo)
   }));
 }
 
@@ -718,6 +721,10 @@ function nextCellNo(spots: { no: number }[], currentNode: number) {
 function mapCellColor(cellNo: number, bossCellNo: number) {
   if (cellNo <= 0) return 0;
   return cellNo === bossCellNo ? 6 : 5;
+}
+
+function mapCellColorFor(areaId: number, mapNo: number, cellNo: number, bossCellNo: number) {
+  return sortieNodeData(areaId, mapNo, cellNo)?.colorNo ?? mapCellColor(cellNo, bossCellNo);
 }
 
 function recordedBattlePayload(input: HandlerInput, context: HandlerContext) {

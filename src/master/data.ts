@@ -50,7 +50,6 @@ const NORMAL_MAP_INFOS = [
   mapMaster(5, 3, "サブ島沖海域", 9, "第一次サーモン沖海戦", undefined, 5),
   mapMaster(5, 4, "サーモン海域", 10, "東京急行", undefined, 5),
   mapMaster(5, 5, "サーモン海域北方", 12, "第二次サーモン海戦", undefined, 5),
-  mapMaster(5, 6, "ラバウル方面海域", 13, "ラバウル空襲艦隊を討て", undefined, 280),
   mapMaster(6, 1, "中部海域哨戒線", 8, "潜水艦作戦"),
   mapMaster(6, 2, "MS諸島沖", 9, "MS諸島防衛戦", undefined, 3),
   mapMaster(6, 3, "グアノ環礁沖海域", 7, "K作戦", undefined, 4),

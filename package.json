@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/cli.ts",
     "start": "tsx src/cli.ts",
+    "generate:sortie-data": "node scripts/generate-sortie-data.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
