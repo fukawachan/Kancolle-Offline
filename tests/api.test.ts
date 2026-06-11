@@ -81,7 +81,8 @@ describe("local kcsapi endpoints", () => {
     });
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 11)).toMatchObject({
       api_name: "深雪",
-      api_yomi: "Miyuki"
+      api_yomi: "Miyuki",
+      api_soku: 10
     });
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 54)).toMatchObject({
       api_name: "川内",
@@ -90,6 +91,10 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 77)).toMatchObject({
       api_name: "伊勢",
       api_yomi: "Ise"
+    });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 277)).toMatchObject({
+      api_name: "赤城改",
+      api_soku: 10
     });
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 9)).toMatchObject({
       api_filename: "gyckjmemgqoe"

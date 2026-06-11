@@ -138,6 +138,7 @@ function mapShip(entry) {
     api_raig: [entry._torpedo || 0, entry._torpedo_max || 0],
     api_tyku: [entry._aa || 0, entry._aa_max || 0],
     api_luck: [entry._luck || 0, entry._luck_max || 0],
+    api_soku: num(entry._speed, 10),
     api_leng: num(entry._range, 1),
     api_slot_num: equipSlots.filter((s) => s > 0).length || 1,
     api_maxeq: equipSlots,

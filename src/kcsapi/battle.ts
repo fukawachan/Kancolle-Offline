@@ -162,9 +162,9 @@ export type KoukuPayload = {
     api_f_lostcount: number;
     api_e_count: number;
     api_e_lostcount: number;
-  };
-  api_stage3: KoukuStage3Payload;
-  api_stage3_combined?: KoukuStage3Payload;
+  } | null;
+  api_stage3: KoukuStage3Payload | null;
+  api_stage3_combined?: KoukuStage3Payload | null;
   api_air_fire?: {
     api_idx: number;
     api_kind: number;
@@ -661,7 +661,9 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
   const fMaxHps = fixedMaxHp(friendly);
   const eMaxHps = fixedMaxHp(enemy);
   const kouku = record.phases.kouku ?? null;
-  const stageFlag: [number, number, number] = kouku ? [1, 1, 1] : [0, 0, 0];
+  const stageFlag: [number, number, number] = kouku
+    ? [1, kouku.api_stage2 ? 1 : 0, kouku.api_stage3 ? 1 : 0]
+    : [0, 0, 0];
   return {
     api_deck_id: record.deckId,
     api_dock_id: record.deckId,
@@ -763,10 +765,16 @@ function airPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number
   const eStage1Lost = applyStage1Loss(enemyAir, state.code, "enemy", rng);
   const fAfterStage1 = airCount(friendlyAir);
   const eAfterStage1 = airCount(enemyAir);
-  const airFire = antiAirCutIn(friendly, rng);
-  const fStage2Lost = applyStage2Loss(friendlyAir, enemy, 1, undefined, rng);
-  const eStage2Lost = applyStage2Loss(enemyAir, friendly, formation, airFire, rng);
-  const stage3 = openingAirstrike(friendly, enemy, contact[0], contact[1], rng);
+  const friendlyInterception = hasOpeningAirstrikeSlots(friendlyAir) && enemy.some((unit) => unit.hp > 0);
+  const enemyInterception = hasOpeningAirstrikeSlots(enemyAir) && friendly.some((unit) => unit.hp > 0);
+  const hasStage2 = friendlyInterception || enemyInterception;
+  const airFire = enemyInterception ? antiAirCutIn(friendly, rng) : undefined;
+  const fStage2Lost = friendlyInterception ? applyStage2Loss(friendlyAir, enemy, 1, undefined, rng) : 0;
+  const eStage2Lost = enemyInterception ? applyStage2Loss(enemyAir, friendly, formation, airFire, rng) : 0;
+  const hasStage3 =
+    (hasOpeningAirstrikeSlots(friendlyAir) && enemy.some((unit) => unit.hp > 0)) ||
+    (hasOpeningAirstrikeSlots(enemyAir) && friendly.some((unit) => unit.hp > 0));
+  const stage3 = hasStage3 ? openingAirstrike(friendly, enemy, contact[0], contact[1], rng) : null;
   syncOnSlotFromAirSlots(friendly);
   syncOnSlotFromAirSlots(enemy);
   return {
@@ -779,12 +787,14 @@ function airPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number
       api_disp_seiku: state.code,
       api_touch_plane: contact
     },
-    api_stage2: {
-      api_f_count: fAfterStage1,
-      api_f_lostcount: fStage2Lost,
-      api_e_count: eAfterStage1,
-      api_e_lostcount: eStage2Lost
-    },
+    api_stage2: hasStage2
+      ? {
+          api_f_count: fAfterStage1,
+          api_f_lostcount: fStage2Lost,
+          api_e_count: eAfterStage1,
+          api_e_lostcount: eStage2Lost
+        }
+      : null,
     api_stage3: stage3,
     ...(airFire ? { api_air_fire: airFire } : {})
   };
@@ -794,6 +804,10 @@ function activeAirSlots(units: BattleUnit[]) {
   return units
     .filter((unit) => unit.hp > 0)
     .flatMap((unit) => unit.airSlots.filter((slot) => slot.count > 0));
+}
+
+function hasOpeningAirstrikeSlots(slots: AirSlot[]) {
+  return slots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId));
 }
 
 function airCount(slots: AirSlot[]) {
@@ -928,17 +942,16 @@ function appendAirstrikes(stage3: KoukuStage3Payload, attacker: BattleUnit, targ
       target.hp = Math.max(target.side === 0 ? 1 : 0, target.hp - damage);
       attacker.damageDealt += damage;
     }
-    const attackerIndex = attacker.position - 1;
     const targetIndex = target.position - 1;
     const torpedo = TORPEDO_BOMBER_TYPES.has(slot.equipTypeId);
     if (attacker.side === 0) {
-      if (torpedo) stage3.api_frai_flag[attackerIndex] = 1;
-      else stage3.api_fbak_flag[attackerIndex] = 1;
+      if (torpedo) stage3.api_erai_flag[targetIndex] = 1;
+      else stage3.api_ebak_flag[targetIndex] = 1;
       stage3.api_edam[targetIndex] += damage;
       stage3.api_ecl_flag[targetIndex] = Math.max(stage3.api_ecl_flag[targetIndex], critical ? 2 : hit ? 1 : 0);
     } else {
-      if (torpedo) stage3.api_erai_flag[attackerIndex] = 1;
-      else stage3.api_ebak_flag[attackerIndex] = 1;
+      if (torpedo) stage3.api_frai_flag[targetIndex] = 1;
+      else stage3.api_fbak_flag[targetIndex] = 1;
       stage3.api_fdam[targetIndex] += damage;
       stage3.api_fcl_flag[targetIndex] = Math.max(stage3.api_fcl_flag[targetIndex], critical ? 2 : hit ? 1 : 0);
     }
@@ -1057,20 +1070,22 @@ function shellingProfile(attacker: BattleUnit, formation: number, phase: "day" |
 
   const apShell = attacker.equippedSlots.some((slot) => safeNum(slot.slotMaster.api_type?.[2]) === AP_SHELL_TYPE);
   const seaplane = countEquipTypes(attacker, SEAPLANE_TYPES) > 0;
-  const mainGun = countEquipTypes(attacker, MAIN_GUN_TYPES) > 0;
+  const mainGunCount = countEquipTypes(attacker, MAIN_GUN_TYPES);
+  const mainGun = mainGunCount > 0;
+  const doubleAttack = !apShell && seaplane && mainGunCount >= 2;
   const isCarrierShelling = CARRIER_TYPES.has(attacker.shipType) && attacker.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId));
   const base = isCarrierShelling
     ? 55 + Math.floor(1.5 * (attacker.firepower + airstrikeStatSum(attacker)))
     : attacker.firepower + 5;
-  const postCapModifier = apShell && mainGun ? 1.3 : seaplane && mainGun ? 1.2 : 1;
+  const postCapModifier = apShell && mainGun ? 1.3 : doubleAttack ? 1.2 : 1;
   return {
     preCapPower: base * formationModifier(formation, "shelling") * damageStateModifier(attacker),
     cap: 220,
-    atType: apShell && mainGun ? 3 : seaplane && mainGun ? 2 : 0,
+    atType: apShell && mainGun ? 3 : doubleAttack ? 2 : 0,
     spType: 0,
-    hits: 1,
+    hits: doubleAttack ? 2 : 1,
     postCapModifier,
-    slotIds
+    slotIds: doubleAttack ? equippedSlotMasterIds(attacker, MAIN_GUN_TYPES, 2) : slotIds
   };
 }
 
@@ -1083,10 +1098,17 @@ function specialAttackSlotIds(unit: BattleUnit) {
   return ids.length ? ids : [primarySlotId(unit)];
 }
 
+function equippedSlotMasterIds(unit: BattleUnit, typeIds: Set<number>, limit: number) {
+  return unit.equippedSlots
+    .filter((slot) => typeIds.has(safeNum(slot.slotMaster.api_type?.[2])))
+    .map((slot) => slot.slotMaster.api_id)
+    .slice(0, limit);
+}
+
 function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng, phase: "day" | "night"): HougekiPayload {
   const payload = emptyHougeki(phase === "night");
-  const friendlyOrder = attackOrder(friendly);
-  const enemyOrder = attackOrder(enemy);
+  const friendlyOrder = attackOrder(friendly, phase);
+  const enemyOrder = attackOrder(enemy, phase);
   const turns = Math.max(friendlyOrder.length, enemyOrder.length);
   for (let turn = 0; turn < turns; turn += 1) {
     if (friendlyOrder[turn]) appendShellingAttack(payload, friendlyOrder[turn], enemy, formation, rng, phase);
@@ -1103,7 +1125,7 @@ function appendShellingAttack(
   rng: BattleRng,
   phase: "day" | "night"
 ) {
-  if (attacker.hp <= 0) return;
+  if (!canShell(attacker, phase)) return;
   const target = randomAlive(targets, rng);
   if (!target) return;
 
@@ -1121,7 +1143,6 @@ function appendShellingAttack(
     if (damage > 0) attacker.damageDealt += damage;
     damages.push(damage);
     cls.push(critical ? 2 : landed ? 1 : 0);
-    if (target.hp <= 0) break;
   }
 
   payload.api_at_eflag.push(attacker.side);
@@ -1578,8 +1599,20 @@ function emptyHougeki(night: boolean): HougekiPayload {
   };
 }
 
-function attackOrder(units: BattleUnit[]) {
-  return units.filter((unit) => unit.hp > 0).sort((a, b) => b.range - a.range || a.position - b.position);
+function attackOrder(units: BattleUnit[], phase: "day" | "night") {
+  return units.filter((unit) => canShell(unit, phase)).sort((a, b) => b.range - a.range || a.position - b.position);
+}
+
+function canShell(unit: BattleUnit, phase: "day" | "night") {
+  if (unit.hp <= 0) return false;
+  if (!CARRIER_TYPES.has(unit.shipType)) return true;
+
+  const state = damageState(unit);
+  if (unit.shipType === 18 ? state >= 3 : state >= 2) return false;
+  if (phase === "day" && !unit.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId))) {
+    return false;
+  }
+  return true;
 }
 
 function randomAlive(units: BattleUnit[], rng: BattleRng) {

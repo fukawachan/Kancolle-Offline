@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createSortieBattle, createNightBattlePayload, resolveDamage } from "../src/kcsapi/battle.js";
+import { ENEMY_UNIT_TEMPLATES } from "../src/master/sortie-data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
 describe("sortie battle simulation", () => {
@@ -118,13 +119,147 @@ describe("sortie battle simulation", () => {
       }
     });
     expect(kouku!.api_stage1.api_f_lostcount).toBeGreaterThan(0);
-    expect(kouku!.api_stage2.api_f_count).toBeLessThan(52);
-    expect(kouku!.api_stage3.api_edam.some((damage) => damage > 0)).toBe(true);
+    if (!kouku?.api_stage2 || !kouku.api_stage3) {
+      throw new Error("expected interception and airstrike stages");
+    }
+    expect(kouku.api_stage2.api_f_count).toBeLessThan(52);
+    expect(kouku.api_stage3.api_edam.some((damage) => damage > 0)).toBe(true);
     expect(battle.record.aircraftLosses?.friendly[akagi.id]).toBeGreaterThan(0);
-    const stage3 = kouku!.api_stage3;
+    const stage3 = kouku.api_stage3;
     for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
       expect(stage3[key as keyof typeof stage3], key).toHaveLength(6);
     }
+    expect(stage3.api_frai_flag).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(stage3.api_fbak_flag).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(stage3.api_fdam).toEqual([0, 0, 0, 0, 0, 0]);
+    expect(stage3.api_erai_flag.some((flag) => flag > 0) || stage3.api_ebak_flag.some((flag) => flag > 0)).toBe(true);
+  });
+
+  it("reports fighter-only aerial combat without interception or airstrike stages", () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.changeDeckShip(1, 0, akagi.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+    expect(battle.payload.api_stage_flag).toEqual([1, 0, 0]);
+    expect(battle.payload.api_kouku?.api_stage2).toBeNull();
+    expect(battle.payload.api_kouku?.api_stage3).toBeNull();
+  });
+
+  it("reports interception without an airstrike when all attack aircraft are shot down", () => {
+    const akagi = store.createShip(277);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([0, 0, 2, 0, 0]), akagi.id);
+
+    const enemies = [1501, 1502, 1503].map((id) => ENEMY_UNIT_TEMPLATES[id]);
+    const originalAa = enemies.map((enemy) => enemy.aa);
+    for (const enemy of enemies) enemy.aa = 100;
+    try {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_stage_flag).toEqual([1, 1, 0]);
+      expect(battle.payload.api_kouku?.api_stage2?.api_f_lostcount).toBeGreaterThan(0);
+      expect(battle.payload.api_kouku?.api_stage3).toBeNull();
+    } finally {
+      enemies.forEach((enemy, index) => {
+        enemy.aa = originalAa[index];
+      });
+    }
+  });
+
+  it("emits complete two-hit arrays for daytime double attacks after the first hit sinks", () => {
+    const nagato = store.createShip(80);
+    const mainGunA = store.createSlotItem(7);
+    const mainGunB = store.createSlotItem(8);
+    const seaplane = store.createSlotItem(25);
+    store.equipSlotItem(nagato.id, 0, mainGunA.id);
+    store.equipSlotItem(nagato.id, 1, mainGunB.id);
+    store.equipSlotItem(nagato.id, 2, seaplane.id);
+    store.changeDeckShip(1, 0, nagato.id);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const hougeki = battle.payload.api_hougeki1;
+    const attackIndex = hougeki.api_at_type.indexOf(2);
+
+    expect(attackIndex).toBeGreaterThanOrEqual(0);
+    expect(hougeki.api_damage[attackIndex][0]).toBe(20);
+    expect(hougeki.api_df_list[attackIndex]).toEqual([0, 0]);
+    expect(hougeki.api_damage[attackIndex]).toHaveLength(2);
+    expect(hougeki.api_damage[attackIndex][1]).toBe(0);
+    expect(hougeki.api_cl_list[attackIndex]).toHaveLength(2);
+    expect(hougeki.api_si_list[attackIndex]).toEqual([7, 8]);
+  });
+
+  it("does not encode a single main gun and seaplane as a double attack", () => {
+    const nagato = store.createShip(80);
+    const mainGun = store.createSlotItem(7);
+    const seaplane = store.createSlotItem(25);
+    store.equipSlotItem(nagato.id, 0, mainGun.id);
+    store.equipSlotItem(nagato.id, 2, seaplane.id);
+    store.changeDeckShip(1, 0, nagato.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+    expect(battle.payload.api_hougeki1.api_at_type).not.toContain(2);
+  });
+
+  it("prevents standard carriers from shelling at moderate or heavy damage", () => {
+    const akagi = store.createShip(277);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 0, bomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.db.prepare("UPDATE ships SET hp = 30 WHERE id = ?").run(akagi.id);
+    store.nextSortieNode();
+    store.nextSortieNode();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const friendlyAttackers = battle.payload.api_hougeki1.api_at_list.filter(
+      (_attacker, index) => battle.payload.api_hougeki1.api_at_eflag[index] === 0
+    );
+
+    expect(friendlyAttackers).not.toContain(0);
+  });
+
+  it("allows moderately damaged armored carriers to shell but blocks them when heavily damaged", () => {
+    const taihou = store.createShip(153);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(taihou.id, 0, bomber.id);
+    store.changeDeckShip(1, 0, taihou.id);
+    store.nextSortieNode();
+    store.nextSortieNode();
+
+    store.db.prepare("UPDATE ships SET hp = 25 WHERE id = ?").run(taihou.id);
+    const moderate = createSortieBattle(store.getSave(), { formation: 1 });
+    const moderateAttackers = moderate.payload.api_hougeki1.api_at_list.filter(
+      (_attacker, index) => moderate.payload.api_hougeki1.api_at_eflag[index] === 0
+    );
+    expect(moderateAttackers).toContain(0);
+
+    store.db.prepare("UPDATE ships SET hp = 10 WHERE id = ?").run(taihou.id);
+    const heavy = createSortieBattle(store.getSave(), { formation: 1 });
+    const heavyAttackers = heavy.payload.api_hougeki1.api_at_list.filter(
+      (_attacker, index) => heavy.payload.api_hougeki1.api_at_eflag[index] === 0
+    );
+    expect(heavyAttackers).not.toContain(0);
+  });
+
+  it("prevents carriers without surviving attack aircraft from daytime shelling", () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.changeDeckShip(1, 0, akagi.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const friendlyAttackers = battle.payload.api_hougeki1.api_at_list.filter(
+      (_attacker, index) => battle.payload.api_hougeki1.api_at_eflag[index] === 0
+    );
+
+    expect(friendlyAttackers).not.toContain(0);
   });
 
   it("uses official 1-1 node encounters for later nodes", () => {

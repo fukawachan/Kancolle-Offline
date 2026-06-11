@@ -794,7 +794,10 @@ function combinedAirBattlePayload(input: HandlerInput, context: HandlerContext) 
   return {
     ...payload,
     api_kouku: payload.api_kouku
-      ? { ...payload.api_kouku, api_stage3_combined: emptyKoukuStage3Payload() }
+      ? {
+          ...payload.api_kouku,
+          ...(payload.api_kouku.api_stage3 ? { api_stage3_combined: emptyKoukuStage3Payload() } : {})
+        }
       : null
   };
 }
