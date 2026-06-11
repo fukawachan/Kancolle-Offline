@@ -1044,18 +1044,6 @@ function shellingProfile(attacker: BattleUnit, formation: number, phase: "day" |
     const torpedoes = countEquipTypes(attacker, TORPEDO_TYPES);
     const mainGuns = countEquipTypes(attacker, MAIN_GUN_TYPES);
     const secondaries = countEquipTypes(attacker, SECONDARY_GUN_TYPES);
-    const nightAircraft = attacker.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId));
-    if (nightAircraft && CARRIER_TYPES.has(attacker.shipType)) {
-      return {
-        preCapPower: (attacker.firepower + attacker.torpedo + airstrikeStatSum(attacker) + 10) * damageStateModifier(attacker),
-        cap: 360,
-        atType: 0,
-        spType: 7,
-        hits: 1,
-        postCapModifier: 1.2,
-        slotIds
-      };
-    }
     if (torpedoes >= 2) {
       return {
         preCapPower: (attacker.firepower + attacker.torpedo) * damageStateModifier(attacker),
@@ -1128,14 +1116,30 @@ function equippedSlotMasterIds(unit: BattleUnit, typeIds: Set<number>, limit: nu
 
 function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng, phase: "day" | "night"): HougekiPayload {
   const payload = emptyHougeki(phase === "night");
-  const friendlyOrder = attackOrder(friendly, phase);
-  const enemyOrder = attackOrder(enemy, phase);
+  if (phase === "night") {
+    const friendlyByPosition = unitsByPosition(friendly);
+    const enemyByPosition = unitsByPosition(enemy);
+    for (let turn = 0; turn < 6; turn += 1) {
+      const friendlyAttacker = friendlyByPosition[turn];
+      const enemyAttacker = enemyByPosition[turn];
+      if (friendlyAttacker) appendShellingAttack(payload, friendlyAttacker, enemy, formation, rng, phase);
+      if (enemyAttacker) appendShellingAttack(payload, enemyAttacker, friendly, 1, rng, phase);
+    }
+    return payload;
+  }
+
+  const friendlyOrder = attackOrder(friendly);
+  const enemyOrder = attackOrder(enemy);
   const turns = Math.max(friendlyOrder.length, enemyOrder.length);
   for (let turn = 0; turn < turns; turn += 1) {
     if (friendlyOrder[turn]) appendShellingAttack(payload, friendlyOrder[turn], enemy, formation, rng, phase);
     if (enemyOrder[turn]) appendShellingAttack(payload, enemyOrder[turn], friendly, 1, rng, phase);
   }
   return payload;
+}
+
+function unitsByPosition(units: BattleUnit[]) {
+  return Array.from({ length: 6 }, (_, index) => units.find((unit) => unit.position === index + 1));
 }
 
 function appendShellingAttack(
@@ -1477,7 +1481,7 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
   if (snapshots?.length) {
     return snapshots
       .filter((snapshot) => snapshot.position <= 6)
-      .map((snapshot, index) => unitFromSnapshot(snapshot, hps[index] ?? snapshot.maxHp))
+      .map((snapshot) => unitFromSnapshot(snapshot, hps[snapshot.position - 1] ?? snapshot.maxHp))
       .filter((unit): unit is BattleUnit => Boolean(unit));
   }
   return ids
@@ -1620,17 +1624,18 @@ function emptyHougeki(night: boolean): HougekiPayload {
   };
 }
 
-function attackOrder(units: BattleUnit[], phase: "day" | "night") {
-  return units.filter((unit) => canShell(unit, phase)).sort((a, b) => b.range - a.range || a.position - b.position);
+function attackOrder(units: BattleUnit[]) {
+  return units.filter((unit) => canShell(unit, "day")).sort((a, b) => b.range - a.range || a.position - b.position);
 }
 
 function canShell(unit: BattleUnit, phase: "day" | "night") {
   if (unit.hp <= 0) return false;
   if (!CARRIER_TYPES.has(unit.shipType)) return true;
+  if (phase === "night") return false;
 
   const state = damageState(unit);
   if (unit.shipType === 18 ? state >= 3 : state >= 2) return false;
-  if (phase === "day" && !unit.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId))) {
+  if (!unit.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId))) {
     return false;
   }
   return true;

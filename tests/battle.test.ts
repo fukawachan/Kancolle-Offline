@@ -325,6 +325,125 @@ describe("sortie battle simulation", () => {
     }
   });
 
+  it("uses fleet position instead of range for night battle attack order", () => {
+    const nagato = store.createShip(80);
+    store.changeDeckShip(1, 1, nagato.id);
+    store.nextSortieNode();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 999, 0, 0, 0, 0],
+        eNowHps: [999, 999, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit) => ({ ...unit, maxHp: 999, armor: 999 })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+
+    expect(hougeki.api_at_eflag).toEqual([0, 1, 0, 1]);
+    expect(hougeki.api_at_list).toEqual([0, 0, 1, 1]);
+  });
+
+  it("keeps a carrier flagship turn empty instead of advancing the second ship", () => {
+    const akagi = store.createShip(277);
+    const nagato = store.createShip(80);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.changeDeckShip(1, 1, nagato.id);
+    store.nextSortieNode();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 999, 0, 0, 0, 0],
+        eNowHps: [999, 999, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit) => ({ ...unit, maxHp: 999, armor: 999 })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+
+    expect(hougeki.api_at_eflag).toEqual([1, 0, 1]);
+    expect(hougeki.api_at_list).toEqual([0, 1, 1]);
+  });
+
+  it("preserves empty fleet positions during night battle rounds", () => {
+    const nagato = store.createShip(80);
+    store.changeDeckShip(1, 1, nagato.id);
+    store.nextSortieNode();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 0, 999, 0, 0, 0],
+        eNowHps: [999, 999, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          position: index === 1 ? 3 : unit.position,
+          maxHp: 999,
+          armor: 999
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+
+    expect(hougeki.api_at_eflag).toEqual([0, 1, 1, 0]);
+    expect(hougeki.api_at_list).toEqual([0, 0, 1, 2]);
+  });
+
+  it("prevents light, standard, and armored carriers on both sides from attacking at night", () => {
+    const thirdShip = store.createShip(1);
+    store.changeDeckShip(1, 2, thirdShip.id);
+    store.nextSortieNode();
+    store.nextSortieNode();
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const carrierTypes = [7, 11, 18];
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 999, 999, 0, 0, 0],
+        eNowHps: [999, 999, 999, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          shipType: carrierTypes[index]
+        })),
+        enemy: battle.record.units!.enemy.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          shipType: carrierTypes[index]
+        }))
+      }
+    };
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+
+    expect(hougeki.api_at_list).toEqual([]);
+    expect(hougeki.api_at_eflag).toEqual([]);
+  });
+
   it("encodes night double attacks with api_sp_list type 1", () => {
     const nagato = store.createShip(80);
     const mainGunA = store.createSlotItem(7);

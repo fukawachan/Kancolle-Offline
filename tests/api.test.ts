@@ -471,18 +471,35 @@ describe("local kcsapi endpoints", () => {
     expect(furniture.api_set).toMatchObject({ api_floor: 1, api_wall: 2, api_window: 3 });
   });
 
-  it("returns api_fuel_max and api_bull_max in ship data matching master values", async () => {
+  it("returns ship capacities, speed, and star rating with their protocol meanings", async () => {
     const port = (await post("api_port/port")).json().api_data;
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const ship3 = (await post("api_get_member/ship3")).json().api_data.api_ship_data;
     const start2 = (await post("api_start2/getData")).json().api_data;
     const shipMasterById = new Map(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));
 
-    for (const ship of port.api_ship) {
-      const master: any = shipMasterById.get(ship.api_ship_id);
-      expect(ship).toHaveProperty("api_fuel_max");
-      expect(ship).toHaveProperty("api_bull_max");
-      expect(ship.api_fuel_max).toBe(master.api_fuel_max);
-      expect(ship.api_bull_max).toBe(master.api_bull_max);
-      expect(ship.api_srate).toBe(master.api_soku);
+    for (const ships of [port.api_ship, ship2, ship3]) {
+      for (const ship of ships) {
+        const master: any = shipMasterById.get(ship.api_ship_id);
+        expect(ship).toHaveProperty("api_fuel_max");
+        expect(ship).toHaveProperty("api_bull_max");
+        expect(ship.api_fuel_max).toBe(master.api_fuel_max);
+        expect(ship.api_bull_max).toBe(master.api_bull_max);
+        expect(ship.api_soku).toBe(master.api_soku);
+        expect(ship.api_srate).toBe(0);
+      }
+    }
+  });
+
+  it("preserves HP values at the client damage-state thresholds", async () => {
+    for (const hp of [75, 50, 25]) {
+      store.db.prepare("UPDATE ships SET hp = ?, max_hp = 100 WHERE id = 1").run(hp);
+
+      const port = (await post("api_port/port")).json().api_data;
+      const ship = port.api_ship.find((item: any) => item.api_id === 1);
+
+      expect(ship.api_nowhp).toBe(hp);
+      expect(ship.api_maxhp).toBe(100);
     }
   });
 
