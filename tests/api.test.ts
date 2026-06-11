@@ -482,6 +482,7 @@ describe("local kcsapi endpoints", () => {
       expect(ship).toHaveProperty("api_bull_max");
       expect(ship.api_fuel_max).toBe(master.api_fuel_max);
       expect(ship.api_bull_max).toBe(master.api_bull_max);
+      expect(ship.api_srate).toBe(master.api_soku);
     }
   });
 
@@ -845,8 +846,8 @@ describe("local kcsapi endpoints", () => {
 
     expect(battleData.api_ship_ke[0]).toBe(1505);
     expect(battleData.api_ship_ke.filter((id: number) => id > 0).length).toBeGreaterThanOrEqual(3);
-    expect(battleData.api_kouku.api_plane_from).toEqual([[], [1]]);
-    expect(battleData.api_kouku.api_stage1.api_e_count).toBeGreaterThan(0);
+    expect(battleData.api_stage_flag).toEqual([0, 0, 0]);
+    expect(battleData.api_kouku).toBeNull();
     expect(battleData.api_eSlot[0]).toEqual(expect.arrayContaining([1504, 1525]));
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 1503)).toMatchObject({
       api_name: "駆逐ハ級"
@@ -905,7 +906,11 @@ describe("local kcsapi endpoints", () => {
       api_sp_list: expect.any(Array),
       api_n_mother_list: expect.any(Array)
     });
-    expect(night.json().api_data.api_hougeki.api_sp_list).toHaveLength(night.json().api_data.api_hougeki.api_df_list.length);
+    const nightData = night.json().api_data;
+    expect(nightData.api_hougeki.api_sp_list).toHaveLength(nightData.api_hougeki.api_df_list.length);
+    for (const key of ["api_ship_ke", "api_ship_lv", "api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
+      expect(nightData[key], key).toHaveLength(6);
+    }
     expect(result.json().api_data).toMatchObject({
       api_win_rank: expect.stringMatching(/[SABC]/),
       api_mvp: expect.any(Number),

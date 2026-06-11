@@ -566,6 +566,10 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
 export function createNightBattle(record: BattleRecord): { payload: Record<string, unknown>; record: BattleRecord } {
   const friendly = recordUnitsFrom(record, 0);
   const enemy = recordUnitsFrom(record, 1);
+  const fNowHps = fixedHp(friendly);
+  const eNowHps = fixedHp(enemy);
+  const fMaxHps = fixedMaxHp(friendly);
+  const eMaxHps = fixedMaxHp(enemy);
   const rng = new BattleRng(record.deckId * 8191 + record.before.fNowHps.reduce((sum, hp) => sum + hp, 0));
   const hougeki = shellingPhase(friendly, enemy, record.formation[0], rng, "night");
   const nextRecord: BattleRecord = {
@@ -584,6 +588,17 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
   const payload: Record<string, unknown> = {
     api_deck_id: record.deckId,
     api_formation: record.formation,
+    api_ship_ke: fixedEnemyIds(enemy),
+    api_ship_lv: fixedUnitValues(enemy, (unit) => unit.level, 0),
+    api_f_nowhps: fNowHps,
+    api_f_maxhps: fMaxHps,
+    api_e_nowhps: eNowHps,
+    api_e_maxhps: eMaxHps,
+    api_nowhps: [-1, ...fNowHps, ...eNowHps],
+    api_maxhps: [-1, ...fMaxHps, ...eMaxHps],
+    api_eSlot: fixedUnitValues(enemy, (unit) => fixedSlotIds(unit.slots), []),
+    api_fParam: fixedUnitValues(friendly, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
+    api_eParam: fixedUnitValues(enemy, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_touch_plane: [-1, -1],
     api_flare_pos: [-1, -1],
     api_hougeki: hougeki,
@@ -755,30 +770,32 @@ function fixedParamsFromMasters(masterIds: number[]) {
 function airPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng): KoukuPayload | null {
   const friendlyAir = activeAirSlots(friendly);
   const enemyAir = activeAirSlots(enemy);
-  if (friendlyAir.length === 0 && enemyAir.length === 0) return null;
+  const friendlyCombatAir = combatAirSlots(friendlyAir);
+  const enemyCombatAir = combatAirSlots(enemyAir);
+  if (friendlyCombatAir.length === 0 && enemyCombatAir.length === 0) return null;
 
-  const fCount = airCount(friendlyAir);
-  const eCount = airCount(enemyAir);
-  const state = resolveAirState(airPower(friendlyAir), airPower(enemyAir));
+  const fCount = airCount(friendlyCombatAir);
+  const eCount = airCount(enemyCombatAir);
+  const state = resolveAirState(airPower(friendlyCombatAir), airPower(enemyCombatAir));
   const contact = contactPlanes(friendlyAir, enemyAir, state.code, rng);
-  const fStage1Lost = applyStage1Loss(friendlyAir, state.code, "friendly", rng);
-  const eStage1Lost = applyStage1Loss(enemyAir, state.code, "enemy", rng);
-  const fAfterStage1 = airCount(friendlyAir);
-  const eAfterStage1 = airCount(enemyAir);
-  const friendlyInterception = hasOpeningAirstrikeSlots(friendlyAir) && enemy.some((unit) => unit.hp > 0);
-  const enemyInterception = hasOpeningAirstrikeSlots(enemyAir) && friendly.some((unit) => unit.hp > 0);
+  const fStage1Lost = applyStage1Loss(friendlyCombatAir, state.code, "friendly", rng);
+  const eStage1Lost = applyStage1Loss(enemyCombatAir, state.code, "enemy", rng);
+  const fAfterStage1 = airCount(friendlyCombatAir);
+  const eAfterStage1 = airCount(enemyCombatAir);
+  const friendlyInterception = hasOpeningAirstrikeSlots(friendlyCombatAir) && enemy.some((unit) => unit.hp > 0);
+  const enemyInterception = hasOpeningAirstrikeSlots(enemyCombatAir) && friendly.some((unit) => unit.hp > 0);
   const hasStage2 = friendlyInterception || enemyInterception;
   const airFire = enemyInterception ? antiAirCutIn(friendly, rng) : undefined;
-  const fStage2Lost = friendlyInterception ? applyStage2Loss(friendlyAir, enemy, 1, undefined, rng) : 0;
-  const eStage2Lost = enemyInterception ? applyStage2Loss(enemyAir, friendly, formation, airFire, rng) : 0;
+  const fStage2Lost = friendlyInterception ? applyStage2Loss(friendlyCombatAir, enemy, 1, undefined, rng) : 0;
+  const eStage2Lost = enemyInterception ? applyStage2Loss(enemyCombatAir, friendly, formation, airFire, rng) : 0;
   const hasStage3 =
-    (hasOpeningAirstrikeSlots(friendlyAir) && enemy.some((unit) => unit.hp > 0)) ||
-    (hasOpeningAirstrikeSlots(enemyAir) && friendly.some((unit) => unit.hp > 0));
+    (hasOpeningAirstrikeSlots(friendlyCombatAir) && enemy.some((unit) => unit.hp > 0)) ||
+    (hasOpeningAirstrikeSlots(enemyCombatAir) && friendly.some((unit) => unit.hp > 0));
   const stage3 = hasStage3 ? openingAirstrike(friendly, enemy, contact[0], contact[1], rng) : null;
   syncOnSlotFromAirSlots(friendly);
   syncOnSlotFromAirSlots(enemy);
   return {
-    api_plane_from: [airShipPositions(friendlyAir), airShipPositions(enemyAir)],
+    api_plane_from: [airShipPositions(friendlyCombatAir), airShipPositions(enemyCombatAir)],
     api_stage1: {
       api_f_count: fCount,
       api_f_lostcount: fStage1Lost,
@@ -804,6 +821,10 @@ function activeAirSlots(units: BattleUnit[]) {
   return units
     .filter((unit) => unit.hp > 0)
     .flatMap((unit) => unit.airSlots.filter((slot) => slot.count > 0));
+}
+
+function combatAirSlots(slots: AirSlot[]) {
+  return slots.filter((slot) => FIGHTER_COMBAT_TYPES.has(slot.equipTypeId));
 }
 
 function hasOpeningAirstrikeSlots(slots: AirSlot[]) {
@@ -1051,7 +1072,7 @@ function shellingProfile(attacker: BattleUnit, formation: number, phase: "day" |
         preCapPower: (attacker.firepower + attacker.torpedo) * damageStateModifier(attacker),
         cap: 360,
         atType: 0,
-        spType: 3,
+        spType: 1,
         hits: 2,
         postCapModifier: 1.2,
         slotIds

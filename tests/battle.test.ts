@@ -279,18 +279,79 @@ describe("sortie battle simulation", () => {
 
     expect(bossEnemyIds[0]).toBe(1505);
     expect(bossEnemyIds.length).toBeGreaterThanOrEqual(3);
-    expect(boss.payload.api_kouku).not.toBeNull();
-    expect(boss.payload.api_kouku!.api_plane_from[1]).toEqual([1]);
+    expect(boss.payload.api_stage_flag).toEqual([0, 0, 0]);
+    expect(boss.payload.api_kouku).toBeNull();
     expect(boss.payload.api_eSlot[0]).toEqual(expect.arrayContaining([1504, 1525]));
   });
 
-  it("adds client-required night shelling fields", () => {
+  it("does not show a recon-only enemy as an aerial battle attacker", () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.nextSortieNode();
+    store.nextSortieNode();
+
+    const boss = createSortieBattle(store.getSave(), { formation: 1 });
+
+    expect(boss.payload.api_kouku).not.toBeNull();
+    expect(boss.payload.api_kouku?.api_plane_from).toEqual([[1], []]);
+  });
+
+  it("adds client-required fleet and shelling fields to night battles", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const night = createNightBattlePayload(battle.record);
     const hougeki = night.api_hougeki as any;
+    const enemyShipIds = night.api_ship_ke as number[];
 
+    expect(enemyShipIds).toEqual(battle.record.enemyIds);
+    expect(night.api_f_nowhps).toEqual(battle.record.after.fNowHps);
+    expect(night.api_e_nowhps).toEqual(battle.record.after.eNowHps);
+    for (const key of ["api_ship_lv", "api_f_maxhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
+      expect(night[key], key).toHaveLength(6);
+    }
     expect(hougeki.api_sp_list).toHaveLength(hougeki.api_df_list.length);
     expect(hougeki.api_n_mother_list).toHaveLength(hougeki.api_df_list.length);
+    for (const [index, attacker] of hougeki.api_at_list.entries()) {
+      const attackerIsEnemy = hougeki.api_at_eflag[index] === 1;
+      const attackerFleet = attackerIsEnemy ? enemyShipIds : battle.record.shipIds;
+      const defenderFleet = attackerIsEnemy ? battle.record.shipIds : enemyShipIds;
+      expect(attackerFleet[attacker]).toBeGreaterThan(0);
+      for (const defender of hougeki.api_df_list[index]) {
+        expect(defenderFleet[defender]).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("encodes night double attacks with api_sp_list type 1", () => {
+    const nagato = store.createShip(80);
+    const mainGunA = store.createSlotItem(7);
+    const mainGunB = store.createSlotItem(8);
+    store.equipSlotItem(nagato.id, 0, mainGunA.id);
+    store.equipSlotItem(nagato.id, 1, mainGunB.id);
+    store.changeDeckShip(1, 0, nagato.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [...battle.record.before.fNowHps],
+        eNowHps: [20, 0, 0, 0, 0, 0]
+      }
+    };
+    const night = createNightBattlePayload(record);
+    const hougeki = night.api_hougeki as any;
+    const attackIndex = hougeki.api_at_list.findIndex(
+      (attacker: number, index: number) => attacker === 0 && hougeki.api_at_eflag[index] === 0
+    );
+
+    expect(attackIndex).toBeGreaterThanOrEqual(0);
+    expect(hougeki.api_sp_list[attackIndex]).toBe(1);
+    expect(hougeki.api_df_list[attackIndex]).toHaveLength(2);
+    expect(hougeki.api_damage[attackIndex]).toHaveLength(2);
   });
 
   it("uses daytime equipment snapshots for night torpedo cut-ins", () => {
