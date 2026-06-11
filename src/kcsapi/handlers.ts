@@ -275,7 +275,11 @@ register("api_req_furniture/set_portbgm", (input, context) =>
 register("api_req_furniture/radio_play", () => apiOk({ api_id: 0 }));
 
 register("api_req_nyukyo/start", (input, context) => {
-  const repair = context.stateStore.startRepair(num(input.body.api_ship_id, 1), num(input.body.api_highspeed, 0) === 1);
+  const repair = context.stateStore.startRepair(
+    num(input.body.api_ship_id, 1),
+    num(input.body.api_ndock_id, 1),
+    num(input.body.api_highspeed, 0) === 1
+  );
   return repair.ok ? apiOk({ api_ndock_id: repair.dock.id }) : apiError(repair.error, 400);
 });
 register("api_req_nyukyo/speedchange", (input, context) => {

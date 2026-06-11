@@ -48,6 +48,8 @@ export const LOCAL_WORLD_ID = 15;
 const SCHEMA_VERSION = 5;
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
+const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
+const REPAIR_COMPLETE_CONDITION = 40;
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -286,28 +288,30 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE furniture SET owned_json = ?, coins = max(0, coins - 10) WHERE id = 1").run(JSON.stringify(owned));
       return getSave(db).furniture;
     },
-    startRepair: (shipId: number, highspeed: boolean): RepairStartResult => {
+    startRepair: (shipId: number, dockId: number, highspeed: boolean): RepairStartResult => {
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
       if (!ship) return { ok: false, error: "Unknown ship" };
 
-      const dock = firstFreeDock(save.repairDocks);
-      if (!dock) return { ok: false, error: "No empty repair dock" };
+      const dock = save.repairDocks.find((item) => item.id === dockId);
+      if (!dock) return { ok: false, error: "Unknown repair dock" };
+      if (dock.state !== 0 || dock.shipId > 0) return { ok: false, error: "Repair dock is not empty" };
 
       const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
       const cost = repairCost(ship, master);
       if (cost.lostHp <= 0) return { ok: false, error: "Ship is not damaged" };
 
+      const repairTime = repairTimeMs(ship, master);
       const materialCost = { fuel: cost.fuel, steel: cost.steel, repairKit: highspeed ? 1 : 0 };
       if (!hasMaterials(save.materials, materialCost)) return { ok: false, error: "Insufficient repair materials" };
 
       const tx = db.transaction(() => {
         consumeMaterials(db, materialCost);
-        if (highspeed) {
-          db.prepare("UPDATE ships SET hp = max_hp WHERE id = ?").run(ship.id);
-          db.prepare("UPDATE repair_docks SET ship_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dock.id);
+        if (highspeed || repairTime <= IMMEDIATE_REPAIR_THRESHOLD_MS) {
+          restoreShipAfterRepair(db, ship.id);
+          clearRepairDock(db, dock.id);
         } else {
-          const completeTime = Date.now() + repairTimeMs(ship, master);
+          const completeTime = Date.now() + repairTime;
           db.prepare("UPDATE repair_docks SET ship_id = ?, complete_time = ?, state = 1 WHERE id = ?").run(ship.id, completeTime, dock.id);
         }
       });
@@ -318,14 +322,13 @@ export function createStateStore(options: StateStoreOptions) {
     },
     completeRepair: (dockId: number): RepairCompleteResult => {
       const save = getSave(db);
-      const dock = save.repairDocks.find((item) => item.id === dockId) ?? save.repairDocks[0];
+      const dock = save.repairDocks.find((item) => item.id === dockId);
       if (!dock) return { ok: false, error: "Unknown repair dock" };
       if (dock.state === 0 || dock.shipId <= 0) return { ok: true, dock };
       if (!hasMaterials(save.materials, { repairKit: 1 })) return { ok: false, error: "Insufficient repair materials" };
 
       const tx = db.transaction(() => {
-        db.prepare("UPDATE ships SET hp = max_hp WHERE id = ?").run(dock.shipId);
-        db.prepare("UPDATE repair_docks SET ship_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dock.id);
+        finishRepairDock(db, dock);
         consumeMaterials(db, { repairKit: 1 });
       });
       tx();
@@ -926,6 +929,7 @@ function getSave(db: Database.Database): SaveState {
   if (!player) {
     throw new Error("Local Kancolle account has not been registered. Select a world first.");
   }
+  settleCompletedRepairs(db);
 
   return {
     player: mapPlayer(player),
@@ -1163,12 +1167,35 @@ function hasMaterials(materials: Materials, delta: MaterialDelta) {
     .every(([key, value]) => materials[key] >= Math.max(0, value || 0));
 }
 
-function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {
-  return [...values, ...Array(length).fill(fill)].slice(0, length);
+function settleCompletedRepairs(db: Database.Database, now = Date.now()) {
+  const completedDocks = db.prepare(
+    "SELECT * FROM repair_docks WHERE state = 1 AND ship_id > 0 AND complete_time > 0 AND complete_time <= ?"
+  ).all(now) as Row[];
+  if (completedDocks.length === 0) return;
+
+  const tx = db.transaction(() => {
+    for (const row of completedDocks) finishRepairDock(db, mapRepairDock(row));
+  });
+  tx();
 }
 
-function firstFreeDock<T extends { id: number; state: number }>(docks: T[]): T | undefined {
-  return docks.find((dock) => dock.state === 0);
+function finishRepairDock(db: Database.Database, dock: RepairDock) {
+  restoreShipAfterRepair(db, dock.shipId);
+  clearRepairDock(db, dock.id);
+}
+
+function restoreShipAfterRepair(db: Database.Database, shipId: number) {
+  db.prepare(
+    "UPDATE ships SET hp = max_hp, condition = CASE WHEN condition < ? THEN ? ELSE condition END WHERE id = ?"
+  ).run(REPAIR_COMPLETE_CONDITION, REPAIR_COMPLETE_CONDITION, shipId);
+}
+
+function clearRepairDock(db: Database.Database, dockId: number) {
+  db.prepare("UPDATE repair_docks SET ship_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dockId);
+}
+
+function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {
+  return [...values, ...Array(length).fill(fill)].slice(0, length);
 }
 
 function consumeFleetSupply(db: Database.Database, shipIds: number[] | undefined) {

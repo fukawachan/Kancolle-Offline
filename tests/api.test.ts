@@ -410,7 +410,7 @@ describe("local kcsapi endpoints", () => {
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
     const before = store.getSave();
 
-    const start = await post("api_req_nyukyo/start", { api_ship_id: 1, api_highspeed: 0 });
+    const start = await post("api_req_nyukyo/start", { api_ship_id: 1, api_ndock_id: 1, api_highspeed: 0 });
 
     expect(start.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 1 } });
     const afterStart = store.getSave();
@@ -434,19 +434,106 @@ describe("local kcsapi endpoints", () => {
     expect(afterSpeedchange.repairDocks[0]).toMatchObject({ id: 1, shipId: 0, state: 0 });
   });
 
-  it("charges fuel, steel, and a bucket when starting high-speed repairs", async () => {
-    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 2);
+  it("settles expired repairs when the client refreshes ndock", async () => {
+    store.db.prepare("UPDATE ships SET hp = 10, condition = 20 WHERE id = 1").run();
+    const beforeKit = store.getSave().materials.repairKit;
+    await post("api_req_nyukyo/start", { api_ship_id: 1, api_ndock_id: 1, api_highspeed: 0 });
+    store.db.prepare("UPDATE repair_docks SET complete_time = ? WHERE id = 1").run(Date.now() - 1);
+
+    const ndock = (await post("api_get_member/ndock")).json().api_data;
+    const save = store.getSave();
+
+    expect(ndock[0]).toMatchObject({
+      api_id: 1,
+      api_state: 0,
+      api_ship_id: 0,
+      api_complete_time: 0
+    });
+    expect(save.ships.find((ship) => ship.id === 1)).toMatchObject({ hp: 15, condition: 40 });
+    expect(save.repairDocks[0]).toMatchObject({ shipId: 0, completeTime: 0, state: 0 });
+    expect(save.materials.repairKit).toBe(beforeKit);
+  });
+
+  it("settles expired repairs before returning the port aggregate", async () => {
+    store.db.prepare("UPDATE ships SET hp = 10, condition = 35 WHERE id = 1").run();
+    await post("api_req_nyukyo/start", { api_ship_id: 1, api_ndock_id: 2, api_highspeed: 0 });
+    store.db.prepare("UPDATE repair_docks SET complete_time = ? WHERE id = 2").run(Date.now() - 1);
+
+    const port = (await post("api_port/port")).json().api_data;
+    const ship = port.api_ship.find((item: any) => item.api_id === 1);
+
+    expect(port.api_ndock[1]).toMatchObject({
+      api_id: 2,
+      api_state: 0,
+      api_ship_id: 0,
+      api_complete_time: 0
+    });
+    expect(ship).toMatchObject({ api_nowhp: 15, api_cond: 40, api_ndock_time: 0, api_ndock_item: [0, 0] });
+  });
+
+  it("uses the requested repair dock and rejects occupied or unknown docks without side effects", async () => {
+    store.db.prepare("UPDATE ships SET hp = 10 WHERE id IN (1, 2)").run();
+
+    const started = await post("api_req_nyukyo/start", { api_ship_id: 1, api_ndock_id: 2, api_highspeed: 0 });
+
+    expect(started.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 2 } });
+    const afterStart = store.getSave();
+    expect(afterStart.repairDocks[0]).toMatchObject({ id: 1, shipId: 0, state: 0 });
+    expect(afterStart.repairDocks[1]).toMatchObject({ id: 2, shipId: 1, state: 1 });
+
+    const occupied = await post("api_req_nyukyo/start", { api_ship_id: 2, api_ndock_id: 2, api_highspeed: 0 });
+    const unknown = await post("api_req_nyukyo/start", { api_ship_id: 2, api_ndock_id: 99, api_highspeed: 0 });
+    const afterFailures = store.getSave();
+
+    expect(occupied.json()).toMatchObject({ api_result: 400, api_result_msg: "Repair dock is not empty" });
+    expect(unknown.json()).toMatchObject({ api_result: 400, api_result_msg: "Unknown repair dock" });
+    expect(afterFailures.materials).toEqual(afterStart.materials);
+    expect(afterFailures.repairDocks).toEqual(afterStart.repairDocks);
+    expect(afterFailures.ships.find((ship) => ship.id === 2)?.hp).toBe(10);
+  });
+
+  it("immediately completes repairs at the client minimum-time threshold without a bucket", async () => {
+    store.db.prepare("UPDATE ships SET hp = 12, condition = 10 WHERE id = 1").run();
     const before = store.getSave();
 
-    const start = await post("api_req_nyukyo/start", { api_ship_id: 2, api_highspeed: 1 });
+    const start = await post("api_req_nyukyo/start", { api_ship_id: 1, api_ndock_id: 2, api_highspeed: 0 });
+    const after = store.getSave();
 
-    expect(start.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 1 } });
+    expect(start.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 2 } });
+    expect(after.materials.fuel).toBe(before.materials.fuel - 1);
+    expect(after.materials.steel).toBe(before.materials.steel - 2);
+    expect(after.materials.repairKit).toBe(before.materials.repairKit);
+    expect(after.ships.find((ship) => ship.id === 1)).toMatchObject({ hp: 15, condition: 40 });
+    expect(after.repairDocks[1]).toMatchObject({ id: 2, shipId: 0, completeTime: 0, state: 0 });
+  });
+
+  it("charges fuel, steel, and a bucket when starting high-speed repairs", async () => {
+    store.db.prepare("UPDATE ships SET hp = 10, condition = 15 WHERE id = 2").run();
+    const before = store.getSave();
+
+    const start = await post("api_req_nyukyo/start", { api_ship_id: 2, api_ndock_id: 2, api_highspeed: 1 });
+
+    expect(start.json()).toMatchObject({ api_result: 1, api_data: { api_ndock_id: 2 } });
     const afterStart = store.getSave();
     expect(afterStart.materials.fuel).toBe(before.materials.fuel - 2);
     expect(afterStart.materials.steel).toBe(before.materials.steel - 4);
     expect(afterStart.materials.repairKit).toBe(before.materials.repairKit - 1);
-    expect(afterStart.ships.find((ship) => ship.id === 2)?.hp).toBe(15);
+    expect(afterStart.ships.find((ship) => ship.id === 2)).toMatchObject({ hp: 15, condition: 40 });
     expect(afterStart.repairDocks.every((dock) => dock.state === 0 && dock.shipId === 0)).toBe(true);
+  });
+
+  it("rejects speedchange for an unknown dock without completing another repair", async () => {
+    store.db.prepare("UPDATE ships SET hp = 10 WHERE id = 1").run();
+    await post("api_req_nyukyo/start", { api_ship_id: 1, api_ndock_id: 1, api_highspeed: 0 });
+    const before = store.getSave();
+
+    const speedchange = await post("api_req_nyukyo/speedchange", { api_ndock_id: 99 });
+    const after = store.getSave();
+
+    expect(speedchange.json()).toMatchObject({ api_result: 400, api_result_msg: "Unknown repair dock" });
+    expect(after.materials.repairKit).toBe(before.materials.repairKit);
+    expect(after.ships.find((ship) => ship.id === 1)?.hp).toBe(10);
+    expect(after.repairDocks[0]).toEqual(before.repairDocks[0]);
   });
 
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
