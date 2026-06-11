@@ -2,6 +2,13 @@ import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { mapMasterId, masterData } from "../master/data.js";
+import { normalRoutingMap } from "../master/routing-data.js";
+import {
+  buildRoutingFleet,
+  evaluateRoute,
+  type RouteEvaluation,
+  type RoutingFleet
+} from "../master/routing.js";
 import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
 import { playerLevelForExp, shipLevelForExp, shipLevelupInfo } from "../kcsapi/experience.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
@@ -45,11 +52,35 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
+
+type MapPhaseCondition = "sink" | "victory";
+type MapPhaseDefinition = {
+  point: string;
+  required: number;
+  condition: MapPhaseCondition;
+};
+
+const MULTI_STAGE_MAPS: Record<number, readonly MapPhaseDefinition[]> = {
+  72: [
+    { point: "G", required: 3, condition: "sink" },
+    { point: "M", required: 4, condition: "sink" }
+  ],
+  73: [
+    { point: "E", required: 3, condition: "sink" },
+    { point: "P", required: 4, condition: "sink" }
+  ],
+  75: [
+    { point: "K", required: 2, condition: "sink" },
+    { point: "M", required: 1, condition: "victory" },
+    { point: "Q", required: 3, condition: "sink" },
+    { point: "T", required: 3, condition: "sink" }
+  ]
+};
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -374,12 +405,32 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       const map = save.maps.find((item) => item.id === mapMasterId(areaId, mapNo));
       const deck = save.decks.find((item) => item.id === deckId);
-      if (!map || map.unlocked !== 1 || !deck) return null;
+      const routingMap = normalRoutingMap(areaId, mapNo);
+      if (!map || map.unlocked !== 1 || !deck || !routingMap) return null;
       const seed = Number(`${Date.now()}`.slice(-8));
+      const fleet = buildRoutingFleet(save, deckId);
+      const phase = map.phase || 1;
+      const initial = evaluateRoute(routingMap, {
+        fleet,
+        seed,
+        step: 0,
+        phase,
+        from: "Start",
+        playerLevel: save.player.level
+      });
+      if (initial.kind !== "route") throw new Error(`Map ${routingMap.mapId} cannot start with active route selection`);
       db.prepare("DELETE FROM sortie_sessions").run();
       db.prepare(
-        "INSERT INTO sortie_sessions (id, deck_id, area_id, map_no, node, seed, state_json) VALUES (1, ?, ?, ?, 1, ?, ?)"
-      ).run(deckId, areaId, mapNo, seed, JSON.stringify({ battles: 0 }));
+        "INSERT INTO sortie_sessions (id, deck_id, area_id, map_no, node, seed, state_json) VALUES (1, ?, ?, ?, ?, ?, ?)"
+      ).run(deckId, areaId, mapNo, initial.edgeNo, seed, JSON.stringify({
+        battles: 0,
+        point: initial.to,
+        routeStep: 1,
+        visited: ["Start", initial.to],
+        fleet,
+        playerLevel: save.player.level,
+        phase
+      }));
       consumeFleetSupply(db, deck.shipIds);
       if (deckId === 1 && save.player.combinedFleet > 0) {
         const escort = save.decks.find((item) => item.id === 2);
@@ -422,25 +473,83 @@ export function createStateStore(options: StateStoreOptions) {
     updateCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
     lastCombinedBattle: () => lastBattleSession(db, "combined"),
     applyCombinedBattleResult: () => applyBattleResult(db, "combined"),
-    nextSortieNode: () => {
-      const session = getSave(db).sortieSession;
-      if (!session) return null;
-      db.prepare("UPDATE sortie_sessions SET node = node + 1 WHERE id = ?").run(session.id);
-      return getSave(db).sortieSession;
-    },
+    previewSortieRoute: () => previewSortieRoute(db),
+    nextSortieNode: (selectedEdgeNo?: number) => advanceSortieRoute(db, selectedEdgeNo),
     clearSortie: () => {
       db.prepare("DELETE FROM sortie_sessions").run();
     },
-    completeSortieBattle: () => {
-      const session = getSave(db).sortieSession;
-      if (!session) return getSave(db);
-      db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = ?").run(mapMasterId(session.areaId, session.mapNo));
-      return getSave(db);
-    }
+    completeSortieBattle: () => getSave(db)
   };
 }
 
 type BattleMode = "sortie" | "practice" | "combined";
+
+function previewSortieRoute(db: Database.Database): RouteEvaluation | null {
+  const save = getSave(db);
+  const session = save.sortieSession;
+  if (!session) return null;
+  const routingMap = normalRoutingMap(session.areaId, session.mapNo);
+  const point = typeof session.state.point === "string" ? session.state.point : "";
+  if (!routingMap || !point || !routingMap.edges.some((edge) => edge.from === point)) return null;
+  const fleet = session.state.fleet as unknown as RoutingFleet;
+  if (!fleet || !Array.isArray(fleet.ships)) {
+    throw new Error("Sortie session is missing its routing fleet snapshot");
+  }
+  return evaluateRoute(routingMap, {
+    fleet,
+    seed: session.seed,
+    step: safeNum(session.state.routeStep),
+    phase: safeNum(session.state.phase) || 1,
+    from: point,
+    playerLevel: safeNum(session.state.playerLevel) || save.player.level,
+    visited: Array.isArray(session.state.visited)
+      ? session.state.visited.filter((value): value is string => typeof value === "string")
+      : []
+  });
+}
+
+function advanceSortieRoute(db: Database.Database, selectedEdgeNo?: number) {
+  const save = getSave(db);
+  const session = save.sortieSession;
+  if (!session) return null;
+  const preview = previewSortieRoute(db);
+  if (!preview) return session;
+
+  const point = String(session.state.point ?? "");
+  const routingMap = normalRoutingMap(session.areaId, session.mapNo)!;
+  let next = preview;
+  if (preview.kind === "select") {
+    if (selectedEdgeNo == null) throw new Error("api_cell_id is required at an active route selection");
+    next = evaluateRoute(routingMap, {
+      fleet: session.state.fleet as unknown as RoutingFleet,
+      seed: session.seed,
+      step: safeNum(session.state.routeStep),
+      phase: safeNum(session.state.phase) || 1,
+      from: point,
+      playerLevel: safeNum(session.state.playerLevel) || save.player.level,
+      selectedEdgeNo,
+      visited: Array.isArray(session.state.visited)
+        ? session.state.visited.filter((value): value is string => typeof value === "string")
+        : []
+    });
+  } else if (selectedEdgeNo != null) {
+    throw new Error(`api_cell_id is not available from ${point}`);
+  }
+  if (next.kind !== "route") throw new Error(`Route selection at ${point} did not resolve to an edge`);
+
+  const visited = Array.isArray(session.state.visited)
+    ? session.state.visited.filter((value): value is string => typeof value === "string")
+    : [];
+  const state = {
+    ...session.state,
+    point: next.to,
+    routeStep: safeNum(session.state.routeStep) + 1,
+    visited: [...visited, next.to]
+  };
+  db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = ?")
+    .run(next.edgeNo, JSON.stringify(state), session.id);
+  return getSave(db).sortieSession;
+}
 
 function applyBattleResult(db: Database.Database, mode: BattleMode) {
   const save = getSave(db);
@@ -465,13 +574,56 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     db.prepare("UPDATE players SET exp = ?, level = ? WHERE id = 1").run(settlement.memberExp, settlement.memberLevel);
     if (mode !== "practice" && settlement.dropShipId > 0) createShip(db, settlement.dropShipId);
     if (mode === "practice") markPracticeState(db, record.practiceEnemyId, record.result?.rank);
-    if ((mode === "sortie" || mode === "combined") && save.sortieSession) {
-      db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = ?").run(mapMasterId(save.sortieSession.areaId, save.sortieSession.mapNo));
-    }
+    if (mode === "sortie" || mode === "combined") applyMapProgress(db, record);
     loaded.saveRecord(nextBattle as unknown as JsonObject);
   });
   tx();
   return { save: getSave(db), record: nextBattle, applied: true };
+}
+
+function applyMapProgress(db: Database.Database, record: BattleRecord) {
+  const sortie = record.sortie;
+  if (!sortie) return;
+  const map = db.prepare("SELECT * FROM maps WHERE id = ?").get(sortie.mapId) as Row | undefined;
+  if (!map || Number(map.cleared) === 1) return;
+
+  const stages = MULTI_STAGE_MAPS[sortie.mapId];
+  if (!stages) {
+    if (!sortie.isBoss || !enemyFlagshipSunk(record)) return;
+    const nextGauge = Math.max(0, Number(map.gauge) - 1);
+    db.prepare("UPDATE maps SET cleared = ?, gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
+      .run(nextGauge === 0 ? 1 : 0, nextGauge, nextGauge === 0 ? 2 : 1, sortie.mapId);
+    return;
+  }
+
+  const phase = Math.max(1, Number(map.phase));
+  const stage = stages[phase - 1];
+  if (!stage || sortie.point !== stage.point || !phaseConditionMet(stage.condition, record)) return;
+
+  const progress = Math.max(0, Number(map.phase_progress)) + 1;
+  if (progress < stage.required) {
+    db.prepare("UPDATE maps SET gauge = ?, phase_progress = ? WHERE id = ?")
+      .run(stage.required - progress, progress, sortie.mapId);
+    return;
+  }
+
+  const nextStage = stages[phase];
+  if (!nextStage) {
+    db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = ?, phase_progress = 0 WHERE id = ?")
+      .run(stages.length + 1, sortie.mapId);
+    return;
+  }
+  db.prepare("UPDATE maps SET gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
+    .run(nextStage.required, phase + 1, sortie.mapId);
+}
+
+function phaseConditionMet(condition: MapPhaseCondition, record: BattleRecord) {
+  if (condition === "sink") return enemyFlagshipSunk(record);
+  return record.result?.rank === "S" || record.result?.rank === "A" || record.result?.rank === "B";
+}
+
+function enemyFlagshipSunk(record: BattleRecord) {
+  return safeNum(record.after?.eNowHps?.[0], 1) <= 0;
 }
 
 function loadBattleRecord(save: SaveState, db: Database.Database, mode: BattleMode) {
@@ -624,6 +776,7 @@ function migrate(db: Database.Database) {
   createSchema(db);
   if (currentVersion < 4) migrateToV4(db);
   if (currentVersion < 5) migrateToV5(db);
+  if (currentVersion < 6) migrateToV6(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -640,6 +793,23 @@ function migrateToV5(db: Database.Database) {
   if (!columnExists(db, "ships", "onslot_json")) {
     db.prepare("ALTER TABLE ships ADD COLUMN onslot_json TEXT NOT NULL DEFAULT '[0,0,0,0,0]'").run();
     backfillShipOnSlotValues(db, true);
+  }
+}
+
+function migrateToV6(db: Database.Database) {
+  if (!columnExists(db, "maps", "phase")) {
+    db.prepare("ALTER TABLE maps ADD COLUMN phase INTEGER NOT NULL DEFAULT 1").run();
+  }
+  if (!columnExists(db, "maps", "phase_progress")) {
+    db.prepare("ALTER TABLE maps ADD COLUMN phase_progress INTEGER NOT NULL DEFAULT 0").run();
+  }
+
+  const maps = db.prepare("SELECT id, cleared FROM maps").all() as Row[];
+  const update = db.prepare("UPDATE maps SET gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?");
+  for (const map of maps) {
+    const mapId = Number(map.id);
+    const cleared = Number(map.cleared) === 1;
+    update.run(cleared ? 0 : initialMapGauge(mapId), cleared ? terminalMapPhase(mapId) : 1, mapId);
   }
 }
 
@@ -833,7 +1003,9 @@ function createSchema(db: Database.Database) {
       map_no INTEGER NOT NULL,
       unlocked INTEGER NOT NULL,
       cleared INTEGER NOT NULL,
-      gauge INTEGER NOT NULL
+      gauge INTEGER NOT NULL,
+      phase INTEGER NOT NULL DEFAULT 1,
+      phase_progress INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS sortie_sessions (
       id INTEGER PRIMARY KEY,
@@ -1058,7 +1230,9 @@ function mapMap(row: Row): MapState {
     mapNo: Number(row.map_no),
     unlocked: Number(row.unlocked),
     cleared: Number(row.cleared),
-    gauge: Number(row.gauge)
+    gauge: Number(row.gauge),
+    phase: Number(row.phase ?? 1),
+    phaseProgress: Number(row.phase_progress ?? 0)
   };
 }
 
@@ -1206,8 +1380,21 @@ function consumeFleetSupply(db: Database.Database, shipIds: number[] | undefined
 }
 
 function seedMissingMaps(db: Database.Database) {
-  const insert = db.prepare("INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge) VALUES (?, ?, ?, 1, 0, 0)");
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress) VALUES (?, ?, ?, 1, 0, ?, 1, 0)"
+  );
   for (const map of masterData.api_mst_mapinfo) {
-    insert.run(map.api_id, map.api_maparea_id, map.api_no);
+    insert.run(map.api_id, map.api_maparea_id, map.api_no, initialMapGauge(map.api_id));
   }
+}
+
+function initialMapGauge(mapId: number) {
+  const stages = MULTI_STAGE_MAPS[mapId];
+  if (stages) return stages[0].required;
+  const map = masterData.api_mst_mapinfo.find((item) => item.api_id === mapId);
+  return map?.api_required_defeat_count ?? 1;
+}
+
+function terminalMapPhase(mapId: number) {
+  return (MULTI_STAGE_MAPS[mapId]?.length ?? 1) + 1;
 }

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
@@ -95,6 +95,12 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 277)).toMatchObject({
       api_name: "赤城改",
       api_soku: 10
+    });
+    expect(start2Data.api_mst_mapcell.find((cell: any) => cell.api_id === 1202)).toMatchObject({
+      api_maparea_id: 1,
+      api_mapinfo_no: 2,
+      api_no: 2,
+      api_color_no: 8
     });
     expect(start2Data.api_mst_shipgraph.find((ship: any) => ship.api_id === 9)).toMatchObject({
       api_filename: "gyckjmemgqoe"
@@ -817,6 +823,7 @@ describe("local kcsapi endpoints", () => {
   it("returns HTML5 battle arrays that match exposed enemy master data", async () => {
     const start2 = await post("api_start2/getData");
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
     await post("api_req_map/next");
 
     const battle = await post("api_req_sortie/battle", { api_formation: 2 });
@@ -942,6 +949,7 @@ describe("local kcsapi endpoints", () => {
   it("exposes official 1-1 boss enemy fleet through battle payload and start2 master data", async () => {
     const start2Data = (await post("api_start2/getData")).json().api_data;
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    store.db.prepare("UPDATE sortie_sessions SET seed = 3 WHERE id = 1").run();
     await post("api_req_map/next");
     await post("api_req_map/next");
 
@@ -965,6 +973,51 @@ describe("local kcsapi endpoints", () => {
         if (slotId > 0) expect(slotIds.has(slotId), `api_mst_slotitem contains ${slotId}`).toBe(true);
       }
     }
+  });
+
+  it("validates active route selection edge numbers", async () => {
+    await post("api_req_map/start", { api_maparea_id: 4, api_mapinfo_no: 5, api_deck_id: 1 });
+    const session = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = 1, state_json = ? WHERE id = 1").run(JSON.stringify({
+      ...session.state,
+      point: "A",
+      routeStep: 1,
+      visited: ["Start", "A"]
+    }));
+
+    const missing = await post("api_req_map/next");
+    const afterMissing = store.getSave().sortieSession;
+    const invalid = await post("api_req_map/next", { api_cell_id: 999 });
+    const afterInvalid = store.getSave().sortieSession;
+    const selected = await post("api_req_map/next", { api_cell_id: 4 });
+
+    expect(missing.statusCode).toBe(400);
+    expect(invalid.statusCode).toBe(400);
+    expect(missing.json()).toMatchObject({ api_result: 400, api_result_msg: expect.stringMatching(/api_cell_id/i) });
+    expect(invalid.json()).toMatchObject({ api_result: 400, api_result_msg: expect.stringMatching(/not available/i) });
+    expect(afterInvalid).toEqual(afterMissing);
+    expect(afterInvalid?.node).toBe(1);
+    expect(selected.json().api_data).toMatchObject({ api_no: 4, api_from_no: 1 });
+    expect(store.getSave().sortieSession?.node).toBe(4);
+  });
+
+  it("returns topology metadata for a non-combat resource node", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    const response = await post("api_req_map/start", {
+      api_maparea_id: 1,
+      api_mapinfo_no: 2,
+      api_deck_id: 1
+    });
+    now.mockRestore();
+
+    expect(response.json().api_data).toMatchObject({
+      api_no: 2,
+      api_from_no: 0,
+      api_color_no: 8,
+      api_event_id: 2,
+      api_event_kind: 0,
+      api_next: 3
+    });
   });
 
   it("returns combined airbattle payloads with combined stage3 arrays", async () => {
@@ -995,6 +1048,7 @@ describe("local kcsapi endpoints", () => {
 
   it("applies sortie battle results once and exposes night battle fields", async () => {
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
     await post("api_req_map/next");
     store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(1300);
 

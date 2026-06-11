@@ -62,6 +62,7 @@ export type MapResourceManifest = {
   thumbnail: Map<number, MapFileResource>;
   image: Map<number, MapFileResource>;
   info: Map<number, MapFileResource>;
+  infoVariants: Map<number, MapFileResource[]>;
   spots: Map<number, MapSpot[]>;
 };
 

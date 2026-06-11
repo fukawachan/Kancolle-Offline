@@ -1,7 +1,10 @@
+export const API_HTTP_STATUS = Symbol("apiHttpStatus");
+
 export type ApiEnvelope<T = unknown> = {
   api_result: number;
   api_result_msg: string;
   api_data: T;
+  [API_HTTP_STATUS]?: number;
 };
 
 export type ResponseFormat = "json" | "svdata";
@@ -14,12 +17,19 @@ export function apiOk<T>(api_data: T): ApiEnvelope<T> {
   };
 }
 
-export function apiError(api_result_msg: string, api_result = 500, api_data: Record<string, never> = {}): ApiEnvelope {
-  return {
+export function apiError(
+  api_result_msg: string,
+  api_result = 500,
+  api_data: Record<string, never> = {},
+  httpStatus?: number
+): ApiEnvelope {
+  const envelope: ApiEnvelope = {
     api_result,
     api_result_msg,
     api_data
   };
+  if (httpStatus != null) envelope[API_HTTP_STATUS] = httpStatus;
+  return envelope;
 }
 
 export function serializeApiResponse(payload: unknown, format: ResponseFormat = "json"): string {

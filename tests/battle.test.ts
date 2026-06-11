@@ -29,6 +29,7 @@ describe("sortie battle simulation", () => {
   });
 
   it("builds a deterministic day battle with shelling, torpedo, and result records", () => {
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
     const battle = createSortieBattle(store.getSave(), { formation: 2 });
     const payload = battle.payload;
     const enemyIds = payload.api_ship_ke.filter((id: number) => id > 0);
@@ -263,7 +264,7 @@ describe("sortie battle simulation", () => {
   });
 
   it("uses official 1-1 node encounters for later nodes", () => {
-    store.nextSortieNode();
+    setSortiePoint(store, 2, "B");
 
     const nodeB = createSortieBattle(store.getSave(), { formation: 1 });
     const nodeBEnemyIds = nodeB.payload.api_ship_ke.filter((id: number) => id > 0);
@@ -272,7 +273,7 @@ describe("sortie battle simulation", () => {
     expect(nodeBEnemyIds[0]).toBe(nodeBEnemyIds[1]);
     expect([1501, 1502, 1503]).toContain(nodeBEnemyIds[0]);
 
-    store.nextSortieNode();
+    setSortiePoint(store, 3, "C");
 
     const boss = createSortieBattle(store.getSave(), { formation: 1 });
     const bossEnemyIds = boss.payload.api_ship_ke.filter((id: number) => id > 0);
@@ -497,3 +498,9 @@ describe("sortie battle simulation", () => {
     expect(hougeki.api_damage[cutInIndex]).toHaveLength(1);
   });
 });
+
+function setSortiePoint(store: StateStore, node: number, point: string) {
+  const session = store.getSave().sortieSession!;
+  store.db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = 1")
+    .run(node, JSON.stringify({ ...session.state, point }));
+}

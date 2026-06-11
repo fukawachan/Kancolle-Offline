@@ -116,6 +116,8 @@ export type MapState = {
   unlocked: number;
   cleared: number;
   gauge: number;
+  phase: number;
+  phaseProgress: number;
 };
 
 export type SortieSession = {

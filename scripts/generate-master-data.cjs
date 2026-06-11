@@ -137,6 +137,7 @@ function mapShip(entry) {
     api_houg: [entry._firepower || 0, entry._firepower_max || 0],
     api_raig: [entry._torpedo || 0, entry._torpedo_max || 0],
     api_tyku: [entry._aa || 0, entry._aa_max || 0],
+    api_saku: [num(entry._los), num(entry._los_max, num(entry._los))],
     api_luck: [entry._luck || 0, entry._luck_max || 0],
     api_soku: num(entry._speed, 10),
     api_leng: num(entry._range, 1),
@@ -204,6 +205,26 @@ function applyStart2SlotOverrides(equipment, start2Data) {
       api_version: num(start2Slot.api_version, item.api_version),
       api_cost: start2Slot.api_cost ?? item.api_cost,
       api_distance: start2Slot.api_distance ?? item.api_distance,
+    };
+  });
+}
+
+function applyStart2ShipOverrides(ships, start2Data) {
+  const start2ShipById = new Map((start2Data.api_mst_ship || []).map((ship) => [ship.api_id, ship]));
+  return ships.map((item) => {
+    const start2Ship = start2ShipById.get(item.api_id);
+    if (!start2Ship) return item;
+    return {
+      ...item,
+      api_sortno: num(start2Ship.api_sortno, item.api_sortno),
+      api_sort_id: num(start2Ship.api_sort_id, item.api_sort_id),
+      api_stype: num(start2Ship.api_stype, item.api_stype),
+      api_ctype: num(start2Ship.api_ctype, item.api_ctype),
+      api_afterlv: num(start2Ship.api_afterlv, item.api_afterlv),
+      api_aftershipid: num(start2Ship.api_aftershipid, item.api_aftershipid),
+      api_soku: num(start2Ship.api_soku, item.api_soku),
+      api_slot_num: num(start2Ship.api_slot_num, item.api_slot_num),
+      api_maxeq: Array.isArray(start2Ship.api_maxeq) ? [...start2Ship.api_maxeq] : item.api_maxeq
     };
   });
 }
@@ -278,7 +299,10 @@ async function main() {
   for (const s of ships) {
     shipById.set(s.api_id, s);
   }
-  const uniqueShips = [...shipById.values()].sort((a, b) => a.api_id - b.api_id);
+  const uniqueShips = applyStart2ShipOverrides(
+    [...shipById.values()].sort((a, b) => a.api_id - b.api_id),
+    start2Data
+  );
   console.log(`  ${uniqueShips.length} unique ships after dedup`);
 
   const shipTypes = start2Data.api_mst_stype || buildShipTypes(uniqueShips);

@@ -6,7 +6,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResponseFormat } from "../kcsapi/envelope.js";
-import { apiError, apiOk, serializeApiResponse } from "../kcsapi/envelope.js";
+import { API_HTTP_STATUS, apiError, apiOk, serializeApiResponse } from "../kcsapi/envelope.js";
 import { handleKcsApi, requestToHandlerInput } from "../kcsapi/handlers.js";
 import { createResourceManifest, readMappedResource } from "../resources/manifest.js";
 import { renderBootstrap } from "./bootstrap.js";
@@ -32,7 +32,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const sendApi = (reply: FastifyReply, payload: unknown) => {
     const serialized = serializeApiResponse(payload, options.responseFormat || "json");
     const contentType = options.responseFormat === "svdata" ? "text/plain; charset=utf-8" : "application/json; charset=utf-8";
-    return reply.header("cache-control", "no-store").type(contentType).send(serialized);
+    const status = typeof payload === "object" && payload !== null && API_HTTP_STATUS in payload
+      ? Number(payload[API_HTTP_STATUS])
+      : 200;
+    return reply.code(status).header("cache-control", "no-store").type(contentType).send(serialized);
   };
 
   registerDebugRoutes(app, options.stateStore, sendApi);

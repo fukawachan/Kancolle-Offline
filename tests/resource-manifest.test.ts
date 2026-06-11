@@ -1,5 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { normalRoutingMaps } from "../src/master/routing-data.js";
 import { createResourceManifest, resolveMappedResource } from "../src/resources/manifest.js";
 
 describe("cached resource manifest", () => {
@@ -131,5 +132,23 @@ describe("cached resource manifest", () => {
     expect(ship179?.availableVoiceNos.has(18)).toBe(true);
     expect(ship179?.availableVoiceNos.has(29)).toBe(true);
     expect(ship179?.files.has("105230")).toBe(true);
+  });
+
+  it("merges normal-map info variants for multi-stage maps", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+    const sevenFiveSpots = manifest.map.spots.get(75) ?? [];
+
+    expect(sevenFiveSpots.map((spot) => spot.no)).toEqual(Array.from({ length: 26 }, (_, index) => index));
+  });
+
+  it("contains every topology edge number across all normal-map resource variants", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    for (const map of normalRoutingMaps()) {
+      const spotNos = new Set((manifest.map.spots.get(map.mapId) ?? []).map((spot) => spot.no));
+      for (const edge of map.edges) {
+        expect(spotNos.has(edge.no), `map ${map.mapId} contains edge ${edge.no}`).toBe(true);
+      }
+    }
   });
 });

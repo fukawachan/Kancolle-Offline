@@ -12,6 +12,8 @@ import {
   type ShipMaster
 } from "../master/catalog.js";
 import { mapMasterId, masterData } from "../master/data.js";
+import { normalRoutingMap } from "../master/routing-data.js";
+import type { RouteEvaluation } from "../master/routing.js";
 import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import type { ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
@@ -337,12 +339,37 @@ register("api_req_mission/return_instruction", (input, context) => apiOk({ api_d
 register("api_req_map/start", (input, context) => {
   const session = context.stateStore.startSortie(num(input.body.api_deck_id, 1), num(input.body.api_maparea_id, 1), num(input.body.api_mapinfo_no, 1));
   if (!session) return apiError("Unknown or locked sortie map", 400);
-  return apiOk(mapNode(context.resourceManifest, session.areaId, session.mapNo, session.node, 0, true));
+  return apiOk(mapNode(
+    context.resourceManifest,
+    session.areaId,
+    session.mapNo,
+    session.node,
+    0,
+    true,
+    context.stateStore.previewSortieRoute()
+  ));
 });
-register("api_req_map/next", (_input, context) => {
+register("api_req_map/next", (input, context) => {
   const previousNode = context.stateStore.getSave().sortieSession?.node ?? 0;
-  const session = context.stateStore.nextSortieNode();
-  return apiOk(session ? mapNode(context.resourceManifest, session.areaId, session.mapNo, session.node, previousNode) : mapNode(context.resourceManifest, 1, 1, 1, 0));
+  const selected = input.body.api_cell_id == null || input.body.api_cell_id === ""
+    ? undefined
+    : num(input.body.api_cell_id, -1);
+  try {
+    const session = context.stateStore.nextSortieNode(selected);
+    return apiOk(session
+      ? mapNode(
+          context.resourceManifest,
+          session.areaId,
+          session.mapNo,
+          session.node,
+          previousNode,
+          false,
+          context.stateStore.previewSortieRoute()
+        )
+      : mapNode(context.resourceManifest, 1, 1, 1, 0));
+  } catch (error) {
+    return apiError(error instanceof Error ? error.message : "Invalid sortie route selection", 400, {}, 400);
+  }
 });
 register("api_req_sortie/battle", (input, context) => apiOk(recordedBattlePayload(input, context)));
 register("api_req_battle_midnight/battle", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
@@ -671,14 +698,22 @@ function recipeDelta(body: Record<string, unknown>) {
   };
 }
 
-function mapNode(resourceManifest: ResourceManifest, areaId: number, mapNo: number, node: number, fromNo: number, includeCells = false) {
+function mapNode(
+  resourceManifest: ResourceManifest,
+  areaId: number,
+  mapNo: number,
+  node: number,
+  fromNo: number,
+  includeCells = false,
+  nextRoute: RouteEvaluation | null = null
+) {
   const spots = mapSpots(resourceManifest, areaId, mapNo);
   const lastMapCellNo = lastCellNo(spots);
   const bossCellNo = sortieBossNodeNo(areaId, mapNo) ?? lastMapCellNo;
-  const currentNode = spots.some((spot) => spot.no === node) ? node : node > lastMapCellNo ? lastMapCellNo : firstSortieCellNo(spots);
-  const next = nextCellNo(spots, currentNode);
+  const currentNode = node > 0 ? node : firstSortieCellNo(spots);
   const sortieNode = sortieNodeData(areaId, mapNo, currentNode);
-  const colorNo = sortieNode?.colorNo ?? mapCellColor(currentNode, lastMapCellNo);
+  const routingNode = routingNodeData(areaId, mapNo, currentNode);
+  const colorNo = sortieNode?.colorNo ?? routingNode?.colorNo ?? mapCellColor(currentNode, lastMapCellNo);
   return {
     api_rashin_flg: 1,
     api_rashin_id: 1,
@@ -687,11 +722,13 @@ function mapNode(resourceManifest: ResourceManifest, areaId: number, mapNo: numb
     api_no: currentNode,
     api_from_no: fromNo,
     api_color_no: colorNo,
-    api_event_id: sortieNode?.eventId ?? (currentNode === lastMapCellNo ? 5 : 4),
-    api_event_kind: currentNode === 0 ? 0 : sortieNode?.combat === false ? 0 : 1,
-    api_next: next,
+    api_event_id: sortieNode?.eventId ?? routingNode?.eventId ?? (currentNode === lastMapCellNo ? 5 : 4),
+    api_event_kind: currentNode === 0 ? 0 : sortieNode ? (sortieNode.combat ? 1 : 0) : routingNode?.eventKind ?? 0,
+    api_next: nextRoute?.kind === "route" ? nextRoute.edgeNo : 0,
     api_bosscell_no: bossCellNo,
-    api_select_route: null,
+    api_select_route: nextRoute?.kind === "select"
+      ? { api_select_cells: nextRoute.edgeNos }
+      : null,
     ...(includeCells ? { api_cell_data: cellData(spots, areaId, mapNo, lastMapCellNo) } : {})
   };
 }
@@ -718,17 +755,21 @@ function lastCellNo(spots: { no: number }[]) {
   return spots.reduce((max, spot) => Math.max(max, spot.no), firstSortieCellNo(spots));
 }
 
-function nextCellNo(spots: { no: number }[], currentNode: number) {
-  return spots.find((spot) => spot.no > currentNode)?.no ?? 0;
-}
-
 function mapCellColor(cellNo: number, bossCellNo: number) {
   if (cellNo <= 0) return 0;
   return cellNo === bossCellNo ? 6 : 5;
 }
 
 function mapCellColorFor(areaId: number, mapNo: number, cellNo: number, bossCellNo: number) {
-  return sortieNodeData(areaId, mapNo, cellNo)?.colorNo ?? mapCellColor(cellNo, bossCellNo);
+  return sortieNodeData(areaId, mapNo, cellNo)?.colorNo
+    ?? routingNodeData(areaId, mapNo, cellNo)?.colorNo
+    ?? mapCellColor(cellNo, bossCellNo);
+}
+
+function routingNodeData(areaId: number, mapNo: number, cellNo: number) {
+  const map = normalRoutingMap(areaId, mapNo);
+  const point = map?.edges.find((edge) => edge.no === cellNo)?.to;
+  return point ? map?.nodes?.[point] : undefined;
 }
 
 function recordedBattlePayload(input: HandlerInput, context: HandlerContext) {

@@ -112,6 +112,7 @@ function emptyManifest(): ResourceManifest {
       thumbnail: new Map(),
       image: new Map(),
       info: new Map(),
+      infoVariants: new Map(),
       spots: new Map()
     },
     voice: {
@@ -274,7 +275,14 @@ function addMapResource(manifest: ResourceManifest, cacheDir: string, pathname: 
   if (kind === "thumbnail") {
     manifest.map.thumbnail.set(id, file);
   } else if (kind === "info") {
-    manifest.map.info.set(id, file);
+    if (!variant) {
+      manifest.map.info.set(id, file);
+    } else {
+      const variants = manifest.map.infoVariants.get(id) ?? [];
+      variants.push(file);
+      variants.sort((left, right) => mapInfoVariant(left.pathname) - mapInfoVariant(right.pathname));
+      manifest.map.infoVariants.set(id, variants);
+    }
   } else if (kind === "image" && (!variant || !manifest.map.image.has(id))) {
     manifest.map.image.set(id, file);
   }
@@ -309,20 +317,30 @@ function attachShipVoiceResources(manifest: ResourceManifest) {
 }
 
 async function attachMapInfoResources(manifest: ResourceManifest) {
-  for (const [mapId, file] of manifest.map.info) {
-    try {
-      const raw = JSON.parse(await readFile(file.filePath, "utf8")) as { spots?: MapSpot[] };
-      const spots = Array.isArray(raw.spots)
-        ? raw.spots
-            .map((spot) => ({ ...spot, no: Number(spot.no) }))
-            .filter((spot) => Number.isFinite(spot.no))
-            .sort((a, b) => a.no - b.no)
-        : [];
-      manifest.map.spots.set(mapId, spots);
-    } catch {
-      manifest.map.spots.set(mapId, []);
+  const mapIds = new Set([...manifest.map.info.keys(), ...manifest.map.infoVariants.keys()]);
+  for (const mapId of mapIds) {
+    const files = [
+      manifest.map.info.get(mapId),
+      ...(manifest.map.infoVariants.get(mapId) ?? [])
+    ].filter((file): file is MapFileResource => Boolean(file));
+    const spotsByNo = new Map<number, MapSpot>();
+    for (const file of files) {
+      try {
+        const raw = JSON.parse(await readFile(file.filePath, "utf8")) as { spots?: MapSpot[] };
+        for (const spot of Array.isArray(raw.spots) ? raw.spots : []) {
+          const no = Number(spot.no);
+          if (Number.isFinite(no)) spotsByNo.set(no, { ...spot, no });
+        }
+      } catch {
+        // Keep other map info fragments when one cached variant is malformed.
+      }
     }
+    manifest.map.spots.set(mapId, [...spotsByNo.values()].sort((left, right) => left.no - right.no));
   }
+}
+
+function mapInfoVariant(pathname: string) {
+  return Number(pathname.match(/_info(\d+)\.json$/i)?.[1] ?? 0);
 }
 
 function availableVoiceNos(shipId: number, files: Set<string>) {

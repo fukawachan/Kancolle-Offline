@@ -50,7 +50,9 @@ describe("offline normal-map sortie data", () => {
     const store = createStateStore({ databasePath: ":memory:" });
     store.registerAccount(15);
     store.startSortie(1, 7, 5);
-    for (let node = 1; node < 24; node += 1) store.nextSortieNode();
+    const session = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = 24, state_json = ? WHERE id = 1")
+      .run(JSON.stringify({ ...session.state, point: "T" }));
 
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
 

@@ -140,6 +140,7 @@ function generatedShipMaster(api_id: number): ShipMaster {
     api_houg: [0, 0],
     api_raig: [0, 0],
     api_tyku: [0, 0],
+    api_saku: [0, 0],
     api_luck: [0, 0],
     api_soku: 10,
     api_leng: 1,

@@ -184,6 +184,30 @@ describe("SQLite state store", () => {
     expect(migrated.onSlot).toEqual([20, 0, 32, 0, 0]);
   });
 
+  it("migrates version 5 map progress into phase-aware state", () => {
+    store.registerAccount(15);
+    store.db.prepare("UPDATE maps SET cleared = 1, gauge = 0 WHERE id = 75").run();
+    store.db.prepare("UPDATE maps SET cleared = 0, gauge = 0 WHERE id = 72").run();
+    store.db.prepare("UPDATE schema_meta SET version = 5").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const save = store.getSave();
+
+    expect(save.maps.find((map) => map.id === 75)).toMatchObject({
+      cleared: 1,
+      gauge: 0,
+      phase: 5,
+      phaseProgress: 0
+    });
+    expect(save.maps.find((map) => map.id === 72)).toMatchObject({
+      cleared: 0,
+      gauge: 3,
+      phase: 1,
+      phaseProgress: 0
+    });
+  });
+
   it("does not persist or repair practice battle damage", () => {
     store.registerAccount(15);
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(5, 1);
