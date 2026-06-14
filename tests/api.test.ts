@@ -606,6 +606,64 @@ describe("local kcsapi endpoints", () => {
     expect(ship.api_slot[0]).toBe(-1);
   });
 
+  it("equips the turbine in an extra slot for ships that can equip it normally", async () => {
+    const turbine = store.createSlotItem(33);
+    const response = await post("api_req_kaisou/slotset_ex", { api_id: 1, api_item_id: turbine.id });
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const persistedShip = ship2.find((ship: any) => ship.api_id === 1);
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_id: 1, api_slot_ex: turbine.id }
+    });
+    expect(persistedShip.api_slot_ex).toBe(turbine.id);
+  });
+
+  it("does not let the turbine wildcard bypass normal equip eligibility", async () => {
+    const coastalDefenseShip = store.createShip(376);
+    const turbine = store.createSlotItem(33);
+    const response = await post("api_req_kaisou/slotset_ex", { api_id: coastalDefenseShip.id, api_item_id: turbine.id });
+
+    expect(response.json()).toMatchObject({ api_result: 400 });
+    expect(store.getSave().ships.find((ship) => ship.id === coastalDefenseShip.id)?.exSlotId).toBe(-1);
+  });
+
+  it("keeps extra-slot boilers restricted to the listed ship remodels", async () => {
+    const shimakazeKai = store.createShip(229);
+
+    for (const boilerMasterId of [34, 87]) {
+      const allowedBoiler = store.createSlotItem(boilerMasterId);
+      const deniedBoiler = store.createSlotItem(boilerMasterId);
+      const allowed = await post("api_req_kaisou/slotset_ex", { api_id: shimakazeKai.id, api_item_id: allowedBoiler.id });
+      const denied = await post("api_req_kaisou/slotset_ex", { api_id: 1, api_item_id: deniedBoiler.id });
+
+      expect(allowed.json()).toMatchObject({
+        api_result: 1,
+        api_data: { api_id: shimakazeKai.id, api_slot_ex: allowedBoiler.id }
+      });
+      expect(denied.json()).toMatchObject({ api_result: 400 });
+    }
+  });
+
+  it("uses equipment improvement level for extra-slot requirements", async () => {
+    const bismarck = store.createShip(171);
+    const radar = store.createSlotItem(124);
+
+    store.db.prepare("UPDATE ships SET level = 99 WHERE id = ?").run(bismarck.id);
+    const underImproved = await post("api_req_kaisou/slotset_ex", { api_id: bismarck.id, api_item_id: radar.id });
+
+    expect(underImproved.json()).toMatchObject({ api_result: 400 });
+
+    store.db.prepare("UPDATE ships SET level = 1 WHERE id = ?").run(bismarck.id);
+    store.db.prepare("UPDATE slot_items SET level = 7 WHERE id = ?").run(radar.id);
+    const improved = await post("api_req_kaisou/slotset_ex", { api_id: bismarck.id, api_item_id: radar.id });
+
+    expect(improved.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_id: bismarck.id, api_slot_ex: radar.id }
+    });
+  });
+
   it("returns aircraft onslot counts from each equipped carrier slot capacity", async () => {
     const akagi = store.createShip(277);
     const fighter1 = store.createSlotItem(20);

@@ -65,8 +65,15 @@ function isExtraSlotEquipAllowed(
 
   const shipRule = extraShipRules()[String(slotMaster.api_id)] as ExSlotShipRule | undefined;
   if (!shipRule) return false;
-  if (Number(shipRule.api_req_level ?? 0) > ship.level) return false;
-  return matchesRuleMap(shipRule.api_ship_ids, shipMaster.api_id) || matchesRuleMap(shipRule.api_stypes, shipMaster.api_stype) || matchesRuleMap(shipRule.api_ctypes, shipMaster.api_ctype);
+  if (Number(shipRule.api_req_level ?? 0) > slotItem.level) return false;
+
+  const allNormallyEquippableShipTypes =
+    matchesRuleMap(shipRule.api_stypes, 99) &&
+    isNormalSlotEquipAllowed(shipMaster.api_id, shipMaster.api_stype, slotItem, slotMaster);
+  return allNormallyEquippableShipTypes ||
+    matchesRuleMap(shipRule.api_ship_ids, shipMaster.api_id) ||
+    matchesRuleMap(shipRule.api_stypes, shipMaster.api_stype) ||
+    matchesRuleMap(shipRule.api_ctypes, shipMaster.api_ctype);
 }
 
 function isEquipmentValid(rule: Record<string, EquipTypeRule> | undefined, slotItem: SlotItem, slotMaster: { api_id: number; api_type: number[] }) {
