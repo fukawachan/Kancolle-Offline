@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { masterData } from "./data.js";
+import { effectiveShipSpeedValue } from "./ship-speed.js";
 import type { SaveState } from "../state/types.js";
 
 export type RoutingSpeed = "slow" | "fast" | "fastPlus" | "fastest";
@@ -372,14 +373,15 @@ function fleetSpeed(ships: RoutingShip[]): RoutingSpeed {
 }
 
 function effectiveShipSpeed(ship: RoutingShip): RoutingSpeed {
-  const turbineCount = ship.equipment.filter((item) => item.masterId === 33 || /タービン/.test(item.name)).length;
-  const boilerCount = ship.equipment.filter((item) => [34, 87].includes(item.masterId) || /(?:艦本式|高温高圧)缶/.test(item.name)).length;
-  const baseSpeed: RoutingSpeed = ship.speed >= 10 ? "fast" : "slow";
-  if (turbineCount === 0 || boilerCount === 0) return baseSpeed;
-
-  const baseIndex = SPEED_ORDER.indexOf(baseSpeed);
-  const upgradeSteps = ship.speed >= 10 ? boilerCount : Math.max(1, boilerCount);
-  return SPEED_ORDER[Math.min(SPEED_ORDER.length - 1, baseIndex + upgradeSteps)];
+  const value = effectiveShipSpeedValue(
+    ship.speed,
+    ship.classId,
+    ship.equipment.map((item) => ({ masterId: item.masterId, improvement: item.improvement }))
+  );
+  if (value >= 20) return "fastest";
+  if (value >= 15) return "fastPlus";
+  if (value >= 10) return "fast";
+  return "slow";
 }
 
 function equipmentLosCoefficient(typeId: number) {

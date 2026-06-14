@@ -4,6 +4,7 @@ import {
   mapGaugeStage,
   mapPhaseDefinitions
 } from "../master/map-progress.js";
+import { effectiveShipSpeedValue } from "../master/ship-speed.js";
 import type { ResourceManifest } from "../resources/types.js";
 import type {
   BuildDock,
@@ -93,6 +94,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
   const slot = [...ship.slotIds, ...Array(5).fill(-1)].slice(0, 5);
   const repair = repairCost(ship, master);
 
+  const equippedSlotItems = resolveEquippedSlotItems(ship, slotItems);
   const equippedMasters = resolveEquippedMasters(ship, slotItems);
   const equipSum = (field: string) =>
     equippedMasters.reduce((sum, sm) => sum + safeNum(sm[field as keyof typeof sm]), 0);
@@ -126,7 +128,11 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_slotnum: master?.api_slot_num ?? 0,
     api_ndock_time: repairTimeMs(ship, master),
     api_ndock_item: [repair.fuel, repair.steel],
-    api_soku: safeNum(master?.api_soku),
+    api_soku: effectiveShipSpeedValue(
+      safeNum(master?.api_soku),
+      safeNum(master?.api_ctype),
+      equippedSlotItems.map((item) => ({ masterId: item.masterId, improvement: item.level }))
+    ),
     api_srate: 0,
     api_cond: ship.condition,
     api_karyoku: [arrVal(master?.api_houg, 0) + equipSum("api_houg") + kyouka(0), arrVal(master?.api_houg, 1) + equipSum("api_houg") + kyouka(0)],
@@ -169,14 +175,17 @@ function resolveEquippedMasters(
   ship: Ship,
   slotItems?: SlotItem[]
 ): (typeof masterData.api_mst_slotitem)[number][] {
+  return resolveEquippedSlotItems(ship, slotItems)
+    .map((item) => masterData.api_mst_slotitem.find((m) => m.api_id === item.masterId))
+    .filter((m): m is NonNullable<typeof m> => m != null);
+}
+
+function resolveEquippedSlotItems(ship: Ship, slotItems?: SlotItem[]) {
   if (!slotItems || slotItems.length === 0) return [];
   const allSlotIds = [...ship.slotIds, ship.exSlotId].filter((id) => id > 0);
   return allSlotIds
-    .map((slotId) => {
-      const item = slotItems.find((si) => si.id === slotId);
-      return item ? masterData.api_mst_slotitem.find((m) => m.api_id === item.masterId) : undefined;
-    })
-    .filter((m): m is NonNullable<typeof m> => m != null);
+    .map((slotId) => slotItems.find((item) => item.id === slotId))
+    .filter((item): item is SlotItem => item != null);
 }
 
 function arrVal(arr: number | number[] | undefined, index: number): number {

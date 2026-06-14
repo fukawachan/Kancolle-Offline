@@ -584,6 +584,36 @@ describe("local kcsapi endpoints", () => {
     }
   });
 
+  it("serializes Yamato engine improvements as effective ship speed", async () => {
+    const yamato = store.createShip(131);
+    const turbine = store.createSlotItem(33);
+    const enhancedBoiler1 = store.createSlotItem(34);
+    const enhancedBoiler2 = store.createSlotItem(34);
+    const newModelBoiler = store.createSlotItem(87);
+    const speedFromShip2 = async () => {
+      const ships = (await post("api_get_member/ship2")).json().api_data;
+      return ships.find((ship: any) => ship.api_id === yamato.id).api_soku;
+    };
+
+    expect(await speedFromShip2()).toBe(5);
+
+    store.equipExSlotItem(yamato.id, turbine.id);
+    store.equipSlotItem(yamato.id, 0, enhancedBoiler1.id);
+    expect(await speedFromShip2()).toBe(10);
+
+    store.equipSlotItem(yamato.id, 1, newModelBoiler.id);
+    expect(await speedFromShip2()).toBe(15);
+
+    store.equipSlotItem(yamato.id, 2, enhancedBoiler2.id);
+    const port = (await post("api_port/port")).json().api_data.api_ship;
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const ship3 = (await post("api_get_member/ship3")).json().api_data.api_ship_data;
+
+    for (const ships of [port, ship2, ship3]) {
+      expect(ships.find((ship: any) => ship.api_id === yamato.id).api_soku).toBe(20);
+    }
+  });
+
   it("preserves HP values at the client damage-state thresholds", async () => {
     for (const hp of [75, 50, 25]) {
       store.db.prepare("UPDATE ships SET hp = ?, max_hp = 100 WHERE id = 1").run(hp);

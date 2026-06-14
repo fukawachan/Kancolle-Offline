@@ -116,6 +116,21 @@ describe("normal-map routing evaluator", () => {
     expect(buildRoutingFleet(save, 1).speed).toBe("fastPlus");
   });
 
+  it("uses Yamato's slow-A engine combinations for effective fleet speed", () => {
+    const save = saveWithLos();
+    save.ships[0].masterId = 131;
+    save.ships[0].slotIds = [2, 3, 4, -1, -1];
+    save.ships[0].exSlotId = 1;
+    save.slotItems = [
+      { id: 1, masterId: 33, level: 0, proficiency: 0, locked: 0 },
+      { id: 2, masterId: 34, level: 0, proficiency: 0, locked: 0 },
+      { id: 3, masterId: 34, level: 0, proficiency: 0, locked: 0 },
+      { id: 4, masterId: 87, level: 0, proficiency: 0, locked: 0 }
+    ];
+
+    expect(buildRoutingFleet(save, 1).speed).toBe("fastest");
+  });
+
   it("applies formula 33 thresholds at their exact boundary", () => {
     const fleet = buildRoutingFleet(saveWithLos(), 1);
     const score = calculateFleetLos33(fleet, 1, 10);
