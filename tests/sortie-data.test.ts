@@ -46,6 +46,30 @@ describe("offline normal-map sortie data", () => {
     }
   });
 
+  it("uses the client combat colors for every generated battle node", () => {
+    for (const node of sortieNodes()) {
+      expect(node.eventId, `${node.mapId} ${node.point} event`).toBe(node.isBoss ? 5 : 4);
+      expect(node.colorNo, `${node.mapId} ${node.point} color`).toBe(node.isBoss ? 5 : 4);
+    }
+  });
+
+  it("assigns normal and boss colors to every duplicate 1-3 edge", () => {
+    for (const nodeNo of [3, 5, 6, 11, 12]) {
+      expect(sortieNodeData(1, 3, nodeNo)).toMatchObject({
+        isBoss: false,
+        eventId: 4,
+        colorNo: 4
+      });
+    }
+    for (const nodeNo of [10, 13]) {
+      expect(sortieNodeData(1, 3, nodeNo)).toMatchObject({
+        isBoss: true,
+        eventId: 5,
+        colorNo: 5
+      });
+    }
+  });
+
   it("uses the generated 7-5 boss fleet instead of the fallback encounter", () => {
     const store = createStateStore({ databasePath: ":memory:" });
     store.registerAccount(15);

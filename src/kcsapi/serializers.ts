@@ -1,4 +1,9 @@
 import { masterData } from "../master/data.js";
+import {
+  mapGaugeRequirement,
+  mapGaugeStage,
+  mapPhaseDefinitions
+} from "../master/map-progress.js";
 import type { ResourceManifest } from "../resources/types.js";
 import type {
   BuildDock,
@@ -365,18 +370,35 @@ export function toUnsetSlot(save: SaveState) {
 }
 
 export function toMapInfo(save: SaveState) {
-  return save.maps.map((map) => ({
-    api_id: map.id,
-    api_cleared: map.cleared,
-    api_exboss_flag: 0,
-    api_gauge_num: map.gauge,
-    api_gauge_type: 0,
-    api_maparea_id: map.areaId,
-    api_no: map.mapNo,
-    api_required_defeat_count: masterData.api_mst_mapinfo.find((master) => master.api_id === map.id)?.api_required_defeat_count ?? null,
-    api_sally_flag: masterData.api_mst_mapinfo.find((master) => master.api_id === map.id)?.api_sally_flag ?? [1, 0, 0],
-    api_eventmap: null
-  }));
+  return save.maps.map((map) => {
+    const master = masterData.api_mst_mapinfo.find((item) => item.api_id === map.id);
+    const required = mapGaugeRequirement(map.id, map.phase, master?.api_required_defeat_count);
+    const gauge = required == null
+      ? { api_gauge_num: 1, api_gauge_type: 0, api_required_defeat_count: null }
+      : {
+          api_gauge_num: mapGaugeStage(map.id, map.phase),
+          api_gauge_type: 1,
+          ...(map.cleared === 1
+            ? {}
+            : {
+                api_defeat_count: mapPhaseDefinitions(map.id)
+                  ? Math.min(required, Math.max(0, Math.trunc(map.phaseProgress)))
+                  : Math.min(required, Math.max(0, required - Math.trunc(map.gauge))),
+                api_required_defeat_count: required
+              })
+        };
+
+    return {
+      api_id: map.id,
+      api_cleared: map.cleared,
+      api_exboss_flag: 0,
+      ...gauge,
+      api_maparea_id: map.areaId,
+      api_no: map.mapNo,
+      api_sally_flag: master?.api_sally_flag ?? [1, 0, 0],
+      api_eventmap: null
+    };
+  });
 }
 
 function material(api_id: number, api_value: number) {

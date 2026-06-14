@@ -678,7 +678,7 @@ function firstExistingBattleBgm(resourceManifest: ResourceManifest, ids: number[
 function mapCellMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
   return mapInfos.flatMap((map) => {
     const spots = mapSpots(resourceManifest, map.api_maparea_id, map.api_no);
-    const fallbackBossCellNo = lastCellNo(spots);
+    const fallbackBossCellNo = sortieBossNodeNo(map.api_maparea_id, map.api_no) ?? lastCellNo(spots);
     return spots.map((spot) => ({
       api_id: map.api_id * 100 + spot.no,
       api_maparea_id: map.api_maparea_id,
@@ -713,7 +713,7 @@ function mapNode(
   const currentNode = node > 0 ? node : firstSortieCellNo(spots);
   const sortieNode = sortieNodeData(areaId, mapNo, currentNode);
   const routingNode = routingNodeData(areaId, mapNo, currentNode);
-  const colorNo = sortieNode?.colorNo ?? routingNode?.colorNo ?? mapCellColor(currentNode, lastMapCellNo);
+  const colorNo = sortieNode?.colorNo ?? routingNode?.colorNo ?? mapCellColor(currentNode, bossCellNo);
   return {
     api_rashin_flg: 1,
     api_rashin_id: 1,
@@ -722,14 +722,14 @@ function mapNode(
     api_no: currentNode,
     api_from_no: fromNo,
     api_color_no: colorNo,
-    api_event_id: sortieNode?.eventId ?? routingNode?.eventId ?? (currentNode === lastMapCellNo ? 5 : 4),
+    api_event_id: sortieNode?.eventId ?? routingNode?.eventId ?? (currentNode === bossCellNo ? 5 : 4),
     api_event_kind: currentNode === 0 ? 0 : sortieNode ? (sortieNode.combat ? 1 : 0) : routingNode?.eventKind ?? 0,
     api_next: nextRoute?.kind === "route" ? nextRoute.edgeNo : 0,
     api_bosscell_no: bossCellNo,
     api_select_route: nextRoute?.kind === "select"
       ? { api_select_cells: nextRoute.edgeNos }
       : null,
-    ...(includeCells ? { api_cell_data: cellData(spots, areaId, mapNo, lastMapCellNo) } : {})
+    ...(includeCells ? { api_cell_data: cellData(spots, areaId, mapNo, bossCellNo) } : {})
   };
 }
 
@@ -757,7 +757,7 @@ function lastCellNo(spots: { no: number }[]) {
 
 function mapCellColor(cellNo: number, bossCellNo: number) {
   if (cellNo <= 0) return 0;
-  return cellNo === bossCellNo ? 6 : 5;
+  return cellNo === bossCellNo ? 5 : 4;
 }
 
 function mapCellColorFor(areaId: number, mapNo: number, cellNo: number, bossCellNo: number) {

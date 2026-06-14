@@ -244,7 +244,7 @@ describe("local kcsapi endpoints", () => {
     expect(start2Data.api_mst_mapcell).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ api_maparea_id: 1, api_mapinfo_no: 1, api_no: 0, api_color_no: 0 }),
-        expect.objectContaining({ api_maparea_id: 1, api_mapinfo_no: 1, api_no: 1, api_color_no: 5 })
+        expect.objectContaining({ api_maparea_id: 1, api_mapinfo_no: 1, api_no: 1, api_color_no: 4 })
       ])
     );
     expect(options.json().api_data).toMatchObject({
@@ -783,7 +783,7 @@ describe("local kcsapi endpoints", () => {
       api_mapinfo_no: 1,
       api_cell_data: expect.arrayContaining([
         expect.objectContaining({ api_no: 0, api_color_no: 0 }),
-        expect.objectContaining({ api_no: 1, api_color_no: 5 })
+        expect.objectContaining({ api_no: 1, api_color_no: 4 })
       ]),
       api_next: expect.any(Number)
     });
@@ -818,6 +818,85 @@ describe("local kcsapi endpoints", () => {
       { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} },
       { api_seiku_value: 0, api_tp_value: 0, api_atp_value: {} }
     ]);
+  });
+
+  it("serializes single-stage map gauges as progress instead of resource variants", async () => {
+    const initialMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+
+    expect(initialMaps.find((map: any) => map.api_id === 11)).toMatchObject({
+      api_gauge_num: 1,
+      api_gauge_type: 0,
+      api_required_defeat_count: null
+    });
+    expect(initialMaps.find((map: any) => map.api_id === 15)).toMatchObject({
+      api_gauge_num: 1,
+      api_gauge_type: 1,
+      api_defeat_count: 0,
+      api_required_defeat_count: 4
+    });
+    expect(initialMaps.find((map: any) => map.api_id === 16)).toMatchObject({
+      api_gauge_num: 1,
+      api_gauge_type: 1,
+      api_defeat_count: 0,
+      api_required_defeat_count: 7
+    });
+
+    store.db.prepare("UPDATE maps SET gauge = 3 WHERE id = 15").run();
+    const progressedMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    expect(progressedMaps.find((map: any) => map.api_id === 15)).toMatchObject({
+      api_gauge_num: 1,
+      api_gauge_type: 1,
+      api_defeat_count: 1,
+      api_required_defeat_count: 4
+    });
+
+    store.db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = 2 WHERE id = 15").run();
+    const clearedMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    const cleared = clearedMaps.find((map: any) => map.api_id === 15);
+    expect(cleared).toMatchObject({
+      api_gauge_num: 1,
+      api_gauge_type: 1
+    });
+    expect(cleared).not.toHaveProperty("api_defeat_count");
+    expect(cleared).not.toHaveProperty("api_required_defeat_count");
+  });
+
+  it("serializes multi-stage map gauges using the current real stage", async () => {
+    const initialMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    expect(initialMaps.find((map: any) => map.api_id === 72)).toMatchObject({
+      api_gauge_num: 1,
+      api_gauge_type: 1,
+      api_defeat_count: 0,
+      api_required_defeat_count: 3
+    });
+
+    store.db.prepare("UPDATE maps SET gauge = 4, phase = 2, phase_progress = 0 WHERE id = 72").run();
+    const secondStageMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    expect(secondStageMaps.find((map: any) => map.api_id === 72)).toMatchObject({
+      api_gauge_num: 2,
+      api_gauge_type: 1,
+      api_defeat_count: 0,
+      api_required_defeat_count: 4
+    });
+
+    store.db.prepare("UPDATE maps SET gauge = 3, phase_progress = 1 WHERE id = 72").run();
+    const progressedMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    expect(progressedMaps.find((map: any) => map.api_id === 72)).toMatchObject({
+      api_gauge_num: 2,
+      api_gauge_type: 1,
+      api_defeat_count: 1,
+      api_required_defeat_count: 4
+    });
+
+    store.db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = 3, phase_progress = 0 WHERE id = 72").run();
+    const clearedMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    const cleared = clearedMaps.find((map: any) => map.api_id === 72);
+    expect(cleared).toMatchObject({
+      api_gauge_num: 2,
+      api_gauge_type: 1
+    });
+    expect(cleared).not.toHaveProperty("api_defeat_count");
+    expect(cleared).not.toHaveProperty("api_required_defeat_count");
   });
 
   it("returns HTML5 battle arrays that match exposed enemy master data", async () => {
@@ -1017,6 +1096,69 @@ describe("local kcsapi endpoints", () => {
       api_event_id: 2,
       api_event_kind: 0,
       api_next: 3
+    });
+  });
+
+  it("returns normal and boss combat colors for every 1-3 route variant", async () => {
+    const start2Data = (await post("api_start2/getData")).json().api_data;
+    const mapCells = start2Data.api_mst_mapcell.filter(
+      (cell: any) => cell.api_maparea_id === 1 && cell.api_mapinfo_no === 3
+    );
+    const colorByNode = new Map(mapCells.map((cell: any) => [cell.api_no, cell.api_color_no]));
+
+    expect(Object.fromEntries(colorByNode)).toMatchObject({
+      3: 4,
+      5: 4,
+      6: 4,
+      10: 5,
+      11: 4,
+      12: 4,
+      13: 5
+    });
+
+    const start = await post("api_req_map/start", {
+      api_maparea_id: 1,
+      api_mapinfo_no: 3,
+      api_deck_id: 1
+    });
+    expect(start.json().api_data.api_cell_data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_no: 3, api_color_no: 4 }),
+        expect.objectContaining({ api_no: 10, api_color_no: 5 }),
+        expect.objectContaining({ api_no: 13, api_color_no: 5 })
+      ])
+    );
+
+    const session = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = 2, state_json = ? WHERE id = 1").run(JSON.stringify({
+      ...session.state,
+      point: "B",
+      routeStep: 2,
+      visited: ["Start", "A", "D", "B"]
+    }));
+    const normal = await post("api_req_map/next");
+    expect(normal.json().api_data).toMatchObject({
+      api_no: 11,
+      api_color_no: 4,
+      api_event_id: 4,
+      api_event_kind: 1
+    });
+
+    const normalSession = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = 12, seed = 6, state_json = ? WHERE id = 1").run(
+      JSON.stringify({
+        ...normalSession.state,
+        point: "F",
+        routeStep: 4,
+        visited: ["Start", "A", "E", "F"]
+      })
+    );
+    const boss = await post("api_req_map/next");
+    expect(boss.json().api_data).toMatchObject({
+      api_no: 10,
+      api_color_no: 5,
+      api_event_id: 5,
+      api_event_kind: 1
     });
   });
 

@@ -2,6 +2,12 @@ import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { mapMasterId, masterData } from "../master/data.js";
+import {
+  initialMapGauge,
+  mapPhaseDefinitions,
+  terminalMapPhase,
+  type MapPhaseCondition
+} from "../master/map-progress.js";
 import { normalRoutingMap } from "../master/routing-data.js";
 import {
   buildRoutingFleet,
@@ -57,30 +63,6 @@ const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
-
-type MapPhaseCondition = "sink" | "victory";
-type MapPhaseDefinition = {
-  point: string;
-  required: number;
-  condition: MapPhaseCondition;
-};
-
-const MULTI_STAGE_MAPS: Record<number, readonly MapPhaseDefinition[]> = {
-  72: [
-    { point: "G", required: 3, condition: "sink" },
-    { point: "M", required: 4, condition: "sink" }
-  ],
-  73: [
-    { point: "E", required: 3, condition: "sink" },
-    { point: "P", required: 4, condition: "sink" }
-  ],
-  75: [
-    { point: "K", required: 2, condition: "sink" },
-    { point: "M", required: 1, condition: "victory" },
-    { point: "Q", required: 3, condition: "sink" },
-    { point: "T", required: 3, condition: "sink" }
-  ]
-};
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -587,7 +569,7 @@ function applyMapProgress(db: Database.Database, record: BattleRecord) {
   const map = db.prepare("SELECT * FROM maps WHERE id = ?").get(sortie.mapId) as Row | undefined;
   if (!map || Number(map.cleared) === 1) return;
 
-  const stages = MULTI_STAGE_MAPS[sortie.mapId];
+  const stages = mapPhaseDefinitions(sortie.mapId);
   if (!stages) {
     if (!sortie.isBoss || !enemyFlagshipSunk(record)) return;
     const nextGauge = Math.max(0, Number(map.gauge) - 1);
@@ -809,7 +791,12 @@ function migrateToV6(db: Database.Database) {
   for (const map of maps) {
     const mapId = Number(map.id);
     const cleared = Number(map.cleared) === 1;
-    update.run(cleared ? 0 : initialMapGauge(mapId), cleared ? terminalMapPhase(mapId) : 1, mapId);
+    const requiredDefeatCount = masterData.api_mst_mapinfo.find((item) => item.api_id === mapId)?.api_required_defeat_count;
+    update.run(
+      cleared ? 0 : initialMapGauge(mapId, requiredDefeatCount),
+      cleared ? terminalMapPhase(mapId) : 1,
+      mapId
+    );
   }
 }
 
@@ -1384,17 +1371,11 @@ function seedMissingMaps(db: Database.Database) {
     "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress) VALUES (?, ?, ?, 1, 0, ?, 1, 0)"
   );
   for (const map of masterData.api_mst_mapinfo) {
-    insert.run(map.api_id, map.api_maparea_id, map.api_no, initialMapGauge(map.api_id));
+    insert.run(
+      map.api_id,
+      map.api_maparea_id,
+      map.api_no,
+      initialMapGauge(map.api_id, map.api_required_defeat_count)
+    );
   }
-}
-
-function initialMapGauge(mapId: number) {
-  const stages = MULTI_STAGE_MAPS[mapId];
-  if (stages) return stages[0].required;
-  const map = masterData.api_mst_mapinfo.find((item) => item.api_id === mapId);
-  return map?.api_required_defeat_count ?? 1;
-}
-
-function terminalMapPhase(mapId: number) {
-  return (MULTI_STAGE_MAPS[mapId]?.length ?? 1) + 1;
 }

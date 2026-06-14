@@ -266,7 +266,7 @@ function buildPointData(point, dropData, shipByJapaneseName, fallbackEncounters 
     isBoss: point.isBoss,
     combat: true,
     eventId: point.isBoss ? 5 : 4,
-    colorNo: point.isBoss ? 6 : 5,
+    colorNo: point.isBoss ? 5 : 4,
     nodeNos: point.nodeNos,
     encounters,
     dropPool,
