@@ -50,6 +50,7 @@ import {
   toUnsetSlot,
   toUseItems
 } from "./serializers.js";
+import { normalizeSupplyKind } from "./supply.js";
 
 export type HandlerContext = {
   stateStore: StateStore;
@@ -184,9 +185,16 @@ register("api_req_hensei/preset_lock", () => apiOk({}));
 register("api_req_hensei/preset_order_change", () => apiOk({}));
 
 register("api_req_hokyu/charge", (input, context) => {
-  const ships = context.stateStore.supplyShips(csvNums(input.body.api_id_items, [1]));
+  const supplied = context.stateStore.supplyShips(csvNums(input.body.api_id_items, [1]), {
+    kind: normalizeSupplyKind(num(input.body.api_kind, 3)),
+    refillAircraft: num(input.body.api_onslot, 1) === 1
+  });
   const save = context.stateStore.getSave();
-  return apiOk({ api_ship: ships.map((s) => toShip(s, save.slotItems)), api_material: toMaterialValues(save.materials), api_use_bou: 0 });
+  return apiOk({
+    api_ship: supplied.ships.map((ship) => toShip(ship, save.slotItems)),
+    api_material: toMaterialValues(save.materials),
+    api_use_bou: supplied.consumed.bauxite > 0 ? 1 : 0
+  });
 });
 
 register("api_req_kaisou/slotset", (input, context) => {

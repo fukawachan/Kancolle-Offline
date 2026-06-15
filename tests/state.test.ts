@@ -153,9 +153,10 @@ describe("SQLite state store", () => {
     const beforeBauxite = store.getSave().materials.bauxite;
     store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([18, 0, 30, 0, 0]), akagi.id);
 
-    const supplied = store.supplyShips([akagi.id])[0] as any;
+    const supplied = store.supplyShips([akagi.id]);
 
-    expect(supplied.onSlot).toEqual([20, 0, 32, 0, 0]);
+    expect(supplied.ships[0].onSlot).toEqual([20, 0, 32, 0, 0]);
+    expect(supplied.consumed.bauxite).toBe(20);
     expect(store.getSave().materials.bauxite).toBe(beforeBauxite - 20);
   });
 
@@ -208,17 +209,49 @@ describe("SQLite state store", () => {
     });
   });
 
-  it("does not persist or repair practice battle damage", () => {
+  it("consumes each ship's daytime battle cost after every settled battle", () => {
     store.registerAccount(15);
-    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(5, 1);
-    const before = store.getSave().ships.find((ship) => ship.id === 1)!;
+    const akagi = store.createShip(277);
+    store.changeDeckShip(1, 0, akagi.id);
+    const before = store.getSave();
+    const fleet = before.decks[0].shipIds
+      .filter((shipId) => shipId > 0)
+      .map((shipId) => before.ships.find((ship) => ship.id === shipId)!);
+
+    for (let battleNo = 1; battleNo <= 2; battleNo += 1) {
+      const battle = createPracticeBattle(store.getSave(), { practiceEnemyId: battleNo, formation: 1 });
+      store.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
+      store.applyPracticeBattleResult();
+
+      const after = store.getSave();
+      for (const beforeShip of fleet) {
+        const ship = after.ships.find((item) => item.id === beforeShip.id)!;
+        expect(ship.fuel).toBe(Math.max(0, beforeShip.fuel - Math.floor(beforeShip.maxFuel * 0.2) * battleNo));
+        expect(ship.ammo).toBe(Math.max(0, beforeShip.ammo - Math.floor(beforeShip.maxAmmo * 0.2) * battleNo));
+      }
+    }
+  });
+
+  it("persists practice aircraft losses without persisting or repairing HP damage", () => {
+    store.registerAccount(15);
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(5, akagi.id);
+    const before = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
     const battle = createPracticeBattle(store.getSave(), { practiceEnemyId: 1, formation: 1 });
 
     store.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
     store.applyPracticeBattleResult();
 
-    const after = store.getSave().ships.find((ship) => ship.id === 1)!;
+    const after = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
     expect(after.hp).toBe(before.hp);
     expect(after.hp).toBeLessThan(after.maxHp);
+    expect(after.onSlot).toEqual(battle.record.after.fOnSlotByShipId?.[akagi.id]);
+    expect(after.onSlot.reduce((sum, count) => sum + count, 0))
+      .toBeLessThan(before.onSlot.reduce((sum, count) => sum + count, 0));
   });
 });

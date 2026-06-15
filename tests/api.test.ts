@@ -402,6 +402,59 @@ describe("local kcsapi endpoints", () => {
     expect(destroyShip.api_material).toEqual([992, 992, 994, 990, 10, 10, 49, 5]);
   });
 
+  it("honors every charge kind and aircraft supply flag", async () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+
+    const depletedFuel = akagi.maxFuel - 3;
+    const depletedAmmo = akagi.maxAmmo - 4;
+    const depletedOnSlot = [18, 0, 30, 0, 0];
+    const cases = [0, 1, 2, 3].flatMap((kind) => [0, 1].map((onSlot) => ({ kind, onSlot })));
+
+    for (const { kind, onSlot } of cases) {
+      store.db.prepare("UPDATE ships SET fuel = ?, ammo = ?, onslot_json = ? WHERE id = ?")
+        .run(depletedFuel, depletedAmmo, JSON.stringify(depletedOnSlot), akagi.id);
+      store.db.prepare("UPDATE materials SET fuel = 1000, ammo = 1000, bauxite = 1000 WHERE player_id = 1").run();
+
+      const charge = await post("api_req_hokyu/charge", {
+        api_id_items: String(akagi.id),
+        api_kind: kind,
+        api_onslot: onSlot
+      });
+      const data = charge.json().api_data;
+      const chargedShip = data.api_ship.find((ship: any) => ship.api_id === akagi.id);
+      const save = store.getSave();
+      const persistedShip = save.ships.find((ship) => ship.id === akagi.id)!;
+      const suppliesFuel = kind === 1 || kind === 3;
+      const suppliesAmmo = kind === 2 || kind === 3;
+
+      expect(chargedShip.api_fuel, `kind=${kind} onslot=${onSlot} fuel`).toBe(suppliesFuel ? akagi.maxFuel : depletedFuel);
+      expect(chargedShip.api_bull, `kind=${kind} onslot=${onSlot} ammo`).toBe(suppliesAmmo ? akagi.maxAmmo : depletedAmmo);
+      expect(chargedShip.api_onslot, `kind=${kind} onslot=${onSlot} planes`)
+        .toEqual(onSlot === 1 ? [20, 0, 32, 0, 0] : depletedOnSlot);
+      expect(persistedShip.fuel).toBe(chargedShip.api_fuel);
+      expect(persistedShip.ammo).toBe(chargedShip.api_bull);
+      expect(persistedShip.onSlot).toEqual(chargedShip.api_onslot);
+      expect(save.materials.fuel).toBe(1000 - (suppliesFuel ? 3 : 0));
+      expect(save.materials.ammo).toBe(1000 - (suppliesAmmo ? 4 : 0));
+      expect(save.materials.bauxite).toBe(1000 - (onSlot === 1 ? 20 : 0));
+      expect(data.api_use_bou).toBe(onSlot === 1 ? 1 : 0);
+      expect(data.api_material).toEqual([
+        save.materials.fuel,
+        save.materials.ammo,
+        save.materials.steel,
+        save.materials.bauxite,
+        save.materials.buildKit,
+        save.materials.repairKit,
+        save.materials.devmat,
+        save.materials.screw
+      ]);
+    }
+  });
+
   it("exposes repair cost and time on damaged ships", async () => {
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
 
@@ -1111,6 +1164,20 @@ describe("local kcsapi endpoints", () => {
     const afterShips = (await post("api_get_member/ship2")).json().api_data;
     const akagiAfter = afterShips.find((ship: any) => ship.api_id === akagi.id);
     expect(akagiAfter.api_onslot[0] + akagiAfter.api_onslot[2]).toBeLessThan(52);
+
+    const missingAircraft = 52 - akagiAfter.api_onslot[0] - akagiAfter.api_onslot[2];
+    const beforeSupply = store.getSave();
+    const charge = await post("api_req_hokyu/charge", {
+      api_id_items: String(akagi.id),
+      api_kind: 3,
+      api_onslot: 1
+    });
+    const chargeData = charge.json().api_data;
+    const suppliedAkagi = chargeData.api_ship.find((ship: any) => ship.api_id === akagi.id);
+
+    expect(suppliedAkagi.api_onslot).toEqual([20, 0, 32, 0, 0]);
+    expect(store.getSave().materials.bauxite).toBe(beforeSupply.materials.bauxite - missingAircraft * 5);
+    expect(chargeData.api_use_bou).toBe(1);
   });
 
   it("exposes official 1-1 boss enemy fleet through battle payload and start2 master data", async () => {
@@ -1277,7 +1344,12 @@ describe("local kcsapi endpoints", () => {
   });
 
   it("applies sortie battle results once and exposes night battle fields", async () => {
+    const beforeSortie = store.getSave();
+    const beforeFleet = beforeSortie.decks[0].shipIds
+      .filter((shipId) => shipId > 0)
+      .map((shipId) => beforeSortie.ships.find((ship) => ship.id === shipId)!);
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    const afterStart = store.getSave();
     store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
     await post("api_req_map/next");
     store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(1300);
@@ -1286,10 +1358,17 @@ describe("local kcsapi endpoints", () => {
     const night = await post("api_req_battle_midnight/battle");
     const result = await post("api_req_sortie/battleresult");
     const afterFirst = store.getSave();
+    const afterFirstFleet = beforeFleet.map((ship) => afterFirst.ships.find((afterShip) => afterShip.id === ship.id)!);
     const repeat = await post("api_req_sortie/battleresult");
     const afterRepeat = store.getSave();
+    const afterRepeatFleet = beforeFleet.map((ship) => afterRepeat.ships.find((afterShip) => afterShip.id === ship.id)!);
 
     expect(battle.statusCode).toBe(200);
+    for (const beforeShip of beforeFleet) {
+      const startedShip = afterStart.ships.find((ship) => ship.id === beforeShip.id)!;
+      expect(startedShip.fuel).toBe(beforeShip.fuel);
+      expect(startedShip.ammo).toBe(beforeShip.ammo);
+    }
     expect(night.json().api_data.api_hougeki).toMatchObject({
       api_sp_list: expect.any(Array),
       api_n_mother_list: expect.any(Array)
@@ -1317,12 +1396,14 @@ describe("local kcsapi endpoints", () => {
     expect(repeat.json().api_data.api_get_ship_exp).toEqual(result.json().api_data.api_get_ship_exp);
     expect(repeat.json().api_data.api_get_exp_lvup).toEqual(result.json().api_data.api_get_exp_lvup);
     expect(afterRepeat.materials).toEqual(afterFirst.materials);
-    for (const ship of afterRepeat.ships.slice(0, 2)) {
-      expect(ship.hp).toBeGreaterThanOrEqual(1);
-      expect(ship.hp).toBeLessThanOrEqual(ship.maxHp);
-      expect(ship.fuel).toBeLessThanOrEqual(ship.maxFuel);
-      expect(ship.ammo).toBeLessThanOrEqual(ship.maxAmmo);
-      expect(ship.exp).toBeGreaterThan(0);
+    for (const [index, beforeShip] of beforeFleet.entries()) {
+      expect(afterFirstFleet[index].fuel).toBe(Math.max(0, beforeShip.fuel - Math.floor(beforeShip.maxFuel * 0.2)));
+      expect(afterFirstFleet[index].ammo).toBe(Math.max(0, beforeShip.ammo - Math.ceil(beforeShip.maxAmmo * 0.3)));
+      expect(afterRepeatFleet[index].hp).toBeGreaterThanOrEqual(1);
+      expect(afterRepeatFleet[index].hp).toBeLessThanOrEqual(afterRepeatFleet[index].maxHp);
+      expect(afterRepeatFleet[index].fuel).toBe(afterFirstFleet[index].fuel);
+      expect(afterRepeatFleet[index].ammo).toBe(afterFirstFleet[index].ammo);
+      expect(afterRepeatFleet[index].exp).toBeGreaterThan(0);
     }
     expect(afterRepeat.player.exp).toBeGreaterThan(0);
     expect((afterRepeat.sortieSession?.state as any).lastBattle.resultClaimed).toBe(true);
@@ -1415,8 +1496,8 @@ describe("local kcsapi endpoints", () => {
     expect(repeat.json().api_data.api_get_ship_exp).toEqual(result.json().api_data.api_get_ship_exp);
     for (const [index, beforeShip] of beforePracticeFleet.entries()) {
       expect(afterFirstFleet[index].hp).toBe(beforeShip.hp);
-      expect(afterFirstFleet[index].fuel).toBe(Math.max(0, beforeShip.fuel - 2));
-      expect(afterFirstFleet[index].ammo).toBe(Math.max(0, beforeShip.ammo - 2));
+      expect(afterFirstFleet[index].fuel).toBe(Math.max(0, beforeShip.fuel - Math.floor(beforeShip.maxFuel * 0.2)));
+      expect(afterFirstFleet[index].ammo).toBe(Math.max(0, beforeShip.ammo - Math.ceil(beforeShip.maxAmmo * 0.3)));
       expect(afterRepeatFleet[index].hp).toBe(afterFirstFleet[index].hp);
       expect(afterRepeatFleet[index].fuel).toBe(afterFirstFleet[index].fuel);
       expect(afterRepeatFleet[index].ammo).toBe(afterFirstFleet[index].ammo);
@@ -1435,12 +1516,20 @@ describe("local kcsapi endpoints", () => {
     await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort1.id });
     await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: escort2.id });
     await post("api_req_hensei/combined", { api_combined_type: 1 });
+    const beforeCombined = store.getSave();
+    const beforeMainFleet = beforeCombined.decks[0].shipIds
+      .filter((shipId) => shipId > 0)
+      .map((shipId) => beforeCombined.ships.find((ship) => ship.id === shipId)!);
+    const beforeEscortFleet = beforeCombined.decks[1].shipIds
+      .filter((shipId) => shipId > 0)
+      .map((shipId) => beforeCombined.ships.find((ship) => ship.id === shipId)!);
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     await post("api_req_map/next");
 
     const battle = await post("api_req_combined_battle/battle", { api_formation: 1 });
     const night = await post("api_req_combined_battle/midnight_battle");
     const result = await post("api_req_combined_battle/battleresult");
+    const afterFirst = store.getSave();
     const repeat = await post("api_req_combined_battle/battleresult");
     const after = store.getSave();
 
@@ -1475,6 +1564,14 @@ describe("local kcsapi endpoints", () => {
     expect(result.json().api_data.api_get_exp_lvup).toHaveLength(6);
     expect(result.json().api_data.api_get_exp_lvup_combined).toHaveLength(6);
     expect(repeat.json().api_data.api_get_ship_exp_combined).toEqual(result.json().api_data.api_get_ship_exp_combined);
+    for (const beforeShip of [...beforeMainFleet, ...beforeEscortFleet]) {
+      const firstShip = afterFirst.ships.find((ship) => ship.id === beforeShip.id)!;
+      const repeatedShip = after.ships.find((ship) => ship.id === beforeShip.id)!;
+      expect(firstShip.fuel).toBe(Math.max(0, beforeShip.fuel - Math.floor(beforeShip.maxFuel * 0.2)));
+      expect(firstShip.ammo).toBe(Math.max(0, beforeShip.ammo - Math.ceil(beforeShip.maxAmmo * 0.3)));
+      expect(repeatedShip.fuel).toBe(firstShip.fuel);
+      expect(repeatedShip.ammo).toBe(firstShip.ammo);
+    }
     expect(after.ships.find((ship) => ship.id === escort1.id)?.exp).toBeGreaterThan(0);
     expect(after.ships.find((ship) => ship.id === escort2.id)?.exp).toBeGreaterThan(0);
   });

@@ -19,6 +19,12 @@ import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
 import { playerLevelForExp, shipLevelForExp, shipLevelupInfo } from "../kcsapi/experience.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
 import { isAircraftSlotItem } from "../kcsapi/serializers.js";
+import {
+  battleSupplyCost,
+  suppliesAmmo,
+  suppliesFuel,
+  type SupplyOptions
+} from "../kcsapi/supply.js";
 import type {
   BuildDock,
   Deck,
@@ -171,7 +177,7 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE ships SET locked = ? WHERE id = ?").run(next, shipId);
       return next;
     },
-    supplyShips: (shipIds: number[]) => {
+    supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }) => {
       const save = getSave(db);
       let fuel = 0;
       let ammo = 0;
@@ -182,18 +188,26 @@ export function createStateStore(options: StateStoreOptions) {
           const ship = save.ships.find((item) => item.id === shipId);
           if (!ship) continue;
           const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
-          const targetFuel = master?.api_fuel_max ?? ship.maxFuel;
-          const targetAmmo = master?.api_bull_max ?? ship.maxAmmo;
-          const targetOnSlot = onSlotForShip(master, save.slotItems, ship.slotIds);
+          const maxFuel = master?.api_fuel_max ?? ship.maxFuel;
+          const maxAmmo = master?.api_bull_max ?? ship.maxAmmo;
+          const targetFuel = suppliesFuel(options.kind) ? maxFuel : ship.fuel;
+          const targetAmmo = suppliesAmmo(options.kind) ? maxAmmo : ship.ammo;
+          const targetOnSlot = options.refillAircraft
+            ? onSlotForShip(master, save.slotItems, ship.slotIds)
+            : normalizeFixed(ship.onSlot, 5, 0);
           fuel += Math.max(0, targetFuel - ship.fuel);
           ammo += Math.max(0, targetAmmo - ship.ammo);
           bauxite += aircraftRefillCount(ship.onSlot, targetOnSlot) * 5;
-          update.run(targetFuel, targetAmmo, targetFuel, targetAmmo, JSON.stringify(targetOnSlot), ship.id);
+          update.run(targetFuel, targetAmmo, maxFuel, maxAmmo, JSON.stringify(targetOnSlot), ship.id);
         }
         consumeMaterials(db, { fuel, ammo, bauxite });
       });
       tx();
-      return getSave(db).ships.filter((ship) => shipIds.includes(ship.id));
+      const nextSave = getSave(db);
+      return {
+        ships: nextSave.ships.filter((ship) => shipIds.includes(ship.id)),
+        consumed: { fuel, ammo, bauxite }
+      };
     },
     equipSlotItem: (shipId: number, slotIndex: number, itemId: number) => {
       const save = getSave(db);
@@ -413,11 +427,6 @@ export function createStateStore(options: StateStoreOptions) {
         playerLevel: save.player.level,
         phase
       }));
-      consumeFleetSupply(db, deck.shipIds);
-      if (deckId === 1 && save.player.combinedFleet > 0) {
-        const escort = save.decks.find((item) => item.id === 2);
-        if (escort) consumeFleetSupply(db, escort.shipIds);
-      }
       return getSave(db).sortieSession;
     },
     recordSortieBattle: (record: JsonObject) => {
@@ -543,14 +552,15 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
   const settlement = buildBattleSettlement(save, record);
   const nextBattle = { ...record, resultClaimed: true, settlement };
   const tx = db.transaction(() => {
-    if (mode === "practice") {
-      consumeFleetSupply(db, record.shipIds);
-    } else {
+    const pursuedNightBattle = record.phases.night != null;
+    consumeBattleSupply(db, record.shipIds, pursuedNightBattle);
+    consumeBattleSupply(db, record.escortShipIds, pursuedNightBattle);
+    if (mode !== "practice") {
       applyFleetHp(db, record.shipIds, record.after?.fNowHps);
       applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps);
-      applyFleetOnSlot(db, record.after?.fOnSlotByShipId);
-      applyFleetOnSlot(db, record.after?.fCombinedOnSlotByShipId);
     }
+    applyFleetOnSlot(db, record.after?.fOnSlotByShipId);
+    applyFleetOnSlot(db, record.after?.fCombinedOnSlotByShipId);
     applyFleetExperience(db, settlement.main);
     applyFleetExperience(db, settlement.escort);
     db.prepare("UPDATE players SET exp = ?, level = ? WHERE id = 1").run(settlement.memberExp, settlement.memberLevel);
@@ -1359,10 +1369,20 @@ function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {
   return [...values, ...Array(length).fill(fill)].slice(0, length);
 }
 
-function consumeFleetSupply(db: Database.Database, shipIds: number[] | undefined) {
-  const update = db.prepare("UPDATE ships SET fuel = max(0, fuel - 2), ammo = max(0, ammo - 2) WHERE id = ?");
+function consumeBattleSupply(db: Database.Database, shipIds: number[] | undefined, pursuedNightBattle: boolean) {
+  const save = getSave(db);
+  const update = db.prepare("UPDATE ships SET fuel = max(0, fuel - ?), ammo = max(0, ammo - ?) WHERE id = ?");
   for (const shipId of shipIds ?? []) {
-    if (shipId > 0) update.run(shipId);
+    if (shipId <= 0) continue;
+    const ship = save.ships.find((item) => item.id === shipId);
+    if (!ship) continue;
+    const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
+    const cost = battleSupplyCost(
+      master?.api_fuel_max ?? ship.maxFuel,
+      master?.api_bull_max ?? ship.maxAmmo,
+      pursuedNightBattle
+    );
+    update.run(cost.fuel, cost.ammo, shipId);
   }
 }
 
