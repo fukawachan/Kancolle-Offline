@@ -1,6 +1,13 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { CachedResourceMeta, FileResource, MapFileResource, MapSpot, ResourceManifest } from "./types.js";
+import {
+  DEFAULT_PORT_BGM_ID,
+  type CachedResourceMeta,
+  type FileResource,
+  type MapFileResource,
+  type MapSpot,
+  type ResourceManifest
+} from "./types.js";
 
 type CacheIndex = Record<string, CachedResourceMeta>;
 
@@ -69,7 +76,8 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
   const portBgm = pathname.match(/^\/kcs2\/resources\/bgm\/port\/(\d{3})_\d{4}\.mp3$/i);
   if (portBgm) {
     const id = Number(portBgm[1]);
-    return manifest.bgm.port.get(id) || manifest.bgm.port.get(0);
+    if (id === 0) return manifest.bgm.port.get(0);
+    return manifest.bgm.port.get(id) || defaultPortBgmResource(manifest);
   }
 
   const bgm = pathname.match(/^\/kcs2\/resources\/bgm\/(battle|fanfare)\/(\d{3})_\d{4}\.mp3$/i);
@@ -251,6 +259,13 @@ function addBgmResource(manifest: ResourceManifest, cacheDir: string, pathname: 
 
 function firstResource(collection: Map<number, FileResource>) {
   return [...collection.values()].sort((a, b) => a.id - b.id)[0];
+}
+
+function defaultPortBgmResource(manifest: ResourceManifest) {
+  return (
+    manifest.bgm.port.get(DEFAULT_PORT_BGM_ID) ||
+    [...manifest.bgm.port.values()].filter((bgm) => bgm.id > 0).sort((a, b) => a.id - b.id)[0]
+  );
 }
 
 function addMapResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {

@@ -219,8 +219,11 @@ describe("local kcsapi endpoints", () => {
         expect.objectContaining({ api_id: 6, api_no: 6, api_filename: "8280" })
       ])
     );
-    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toContain(0);
-    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toEqual(expect.arrayContaining([1, 154, 155, 156]));
+    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(0);
+    expect(start2Data.api_mst_bgm).toEqual(
+      expect.arrayContaining([expect.objectContaining({ api_id: 101, api_name: "母港" })])
+    );
+    expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).toEqual(expect.arrayContaining([101, 154, 155, 156]));
     expect(start2Data.api_mst_useitem.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([54, 59]));
     expect(start2Data.api_mst_maparea).toEqual(
       expect.arrayContaining([
@@ -335,7 +338,7 @@ describe("local kcsapi endpoints", () => {
       api_ship: expect.any(Array),
       api_deck_port: expect.any(Array),
       api_material: expect.any(Array),
-      api_p_bgm_id: 0
+      api_p_bgm_id: 101
     });
     expect(port.json().api_data.api_ship.map((ship: any) => ship.api_ship_id)).toEqual([9, 10, 1, 2]);
     const materialMasterIds = new Set(start2.json().api_data.api_mst_useitem.map((item: any) => item.api_id));

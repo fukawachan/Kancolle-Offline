@@ -5,7 +5,7 @@ import {
   mapPhaseDefinitions
 } from "../master/map-progress.js";
 import { effectiveShipSpeedValue } from "../master/ship-speed.js";
-import type { ResourceManifest } from "../resources/types.js";
+import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import type {
   BuildDock,
   Deck,
@@ -350,8 +350,14 @@ function normalizeFurnitureSet(set?: Partial<FurnitureState["set"]>, resourceMan
 }
 
 export function normalizePortBgmId(portBgmId: number, resourceManifest?: ResourceManifest) {
-  if (!resourceManifest) return portBgmId;
-  return resourceManifest.bgm.port.has(portBgmId) ? portBgmId : resourceManifest.bgm.port.has(0) ? 0 : portBgmId;
+  if (!resourceManifest) return portBgmId > 1 ? portBgmId : DEFAULT_PORT_BGM_ID;
+  if (portBgmId > 1 && resourceManifest.bgm.port.has(portBgmId)) return portBgmId;
+  return defaultPortBgmId(resourceManifest) ?? portBgmId;
+}
+
+function defaultPortBgmId(resourceManifest: ResourceManifest) {
+  if (resourceManifest.bgm.port.has(DEFAULT_PORT_BGM_ID)) return DEFAULT_PORT_BGM_ID;
+  return [...resourceManifest.bgm.port.keys()].filter((id) => id > 0).sort((a, b) => a - b)[0];
 }
 
 export function toUseItems(materials: Materials, useItems: SaveState["useItems"] = []) {

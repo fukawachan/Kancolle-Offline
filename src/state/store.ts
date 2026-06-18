@@ -33,6 +33,7 @@ import {
   suppliesFuel,
   type SupplyOptions
 } from "../kcsapi/supply.js";
+import { DEFAULT_PORT_BGM_ID } from "../resources/types.js";
 import type {
   BuildDock,
   Deck,
@@ -1557,8 +1558,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
 
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO players (id, world_id, nickname, level, exp, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, 0, ?, 100, ?, 1, 0, 1)"
-    ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
+      "INSERT INTO players (id, world_id, nickname, level, exp, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, 0, ?, 100, ?, 1, 0, ?)"
+    ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions), DEFAULT_PORT_BGM_ID);
     db.prepare(
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw, last_recovery_at) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5, ?)"
     ).run(Date.now());

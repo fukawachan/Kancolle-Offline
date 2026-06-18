@@ -15,7 +15,7 @@ import { mapMasterId, masterData } from "../master/data.js";
 import { normalRoutingMap } from "../master/routing-data.js";
 import type { RouteEvaluation } from "../master/routing.js";
 import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
-import type { ResourceManifest } from "../resources/types.js";
+import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
 import type { SaveState } from "../state/types.js";
@@ -656,8 +656,12 @@ function furnitureGraph(resourceManifest: ResourceManifest) {
 
 function bgmMaster(resourceManifest: ResourceManifest) {
   const bgms = new Map<number, ReturnType<typeof bgmEntry>>();
-  for (const bgm of resourceManifest.bgm.port.values()) bgms.set(bgm.id, bgmEntry(bgm, bgm.id === 0 ? "母港" : "Port"));
-  for (const bgm of resourceManifest.bgm.battle.values()) bgms.set(bgm.id, bgmEntry(bgm, "Battle"));
+  for (const bgm of resourceManifest.bgm.port.values()) {
+    if (bgm.id > 0) bgms.set(bgm.id, bgmEntry(bgm, bgm.id === DEFAULT_PORT_BGM_ID ? "母港" : "Port"));
+  }
+  for (const bgm of resourceManifest.bgm.battle.values()) {
+    if (!bgms.has(bgm.id)) bgms.set(bgm.id, bgmEntry(bgm, "Battle"));
+  }
   for (const bgm of resourceManifest.bgm.fanfare.values()) {
     if (!bgms.has(bgm.id)) bgms.set(bgm.id, bgmEntry(bgm, "Fanfare"));
   }
@@ -666,8 +670,9 @@ function bgmMaster(resourceManifest: ResourceManifest) {
 
 function portBgmMaster(resourceManifest: ResourceManifest) {
   return [...resourceManifest.bgm.port.values()]
+    .filter((bgm) => bgm.id > 0)
     .sort((a, b) => a.id - b.id)
-    .map((bgm) => bgmEntry(bgm, bgm.id === 0 ? "母港" : "Port"));
+    .map((bgm) => bgmEntry(bgm, bgm.id === DEFAULT_PORT_BGM_ID ? "母港" : "Port"));
 }
 
 function bgmEntry(bgm: ResourceManifest["bgm"]["port"] extends Map<number, infer T> ? T : never, label: string) {

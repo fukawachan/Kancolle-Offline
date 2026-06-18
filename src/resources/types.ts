@@ -5,6 +5,8 @@ export type CachedResourceMeta = {
   cache?: string | null;
 };
 
+export const DEFAULT_PORT_BGM_ID = 101;
+
 export type FileResource = {
   id: number;
   frame: string;

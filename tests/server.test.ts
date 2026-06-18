@@ -176,6 +176,28 @@ describe("local Fastify server", () => {
     expect(fanfare.headers["content-type"]).toContain("audio/mpeg");
   });
 
+  it("falls back to an audible default port BGM when the client asks with a stale or legacy id", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const defaultPort = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/port/101_0000.mp3" });
+    const legacyPort = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/port/001_0000.mp3" });
+    const explicitSilent = await app.inject({ method: "GET", url: "/kcs2/resources/bgm/port/000_0000.mp3" });
+
+    expect(defaultPort.statusCode).toBe(200);
+    expect(defaultPort.headers["content-type"]).toContain("audio/mpeg");
+    expect(defaultPort.body.length).toBeGreaterThan(1_000_000);
+    expect(legacyPort.statusCode).toBe(200);
+    expect(legacyPort.headers["content-type"]).toContain("audio/mpeg");
+    expect(legacyPort.body.length).toBe(defaultPort.body.length);
+    expect(explicitSilent.statusCode).toBe(200);
+    expect(explicitSilent.headers["content-type"]).toContain("audio/mpeg");
+    expect(explicitSilent.body.length).toBeLessThan(defaultPort.body.length);
+  });
+
   it("falls back to a cache-backed battle slot text image when a cutin asks for an uncached equipment id", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
