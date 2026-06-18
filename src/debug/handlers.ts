@@ -1,4 +1,5 @@
 import { SHIPS, SLOT_ITEMS, SHIP_TYPES } from "../master/generated-data.js";
+import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { apiError, apiOk } from "../kcsapi/envelope.js";
 import { toShip, toSlotItem } from "../kcsapi/serializers.js";
 import type { StateStore } from "../state/store.js";
@@ -178,4 +179,69 @@ export function handleRemoveSlotItem(params: { itemId?: unknown }, stateStore: S
     materials,
     message: `Destroyed equipment: ${master?.api_name ?? "Unknown"} (Player ID: ${itemId})`,
   });
+}
+
+export function handleExpeditionStatus(stateStore: StateStore) {
+  const save = stateStore.getSave();
+  const member = stateStore.getMissionMemberState();
+  const states = new Map(
+    member.api_list_items.map((item) => [item.api_mission_id, item.api_state] as const)
+  );
+  return apiOk({
+    missions: EXPEDITION_MASTERS.map((mission) => ({
+      id: mission.api_id,
+      displayNo: mission.api_disp_no,
+      areaId: mission.api_maparea_id,
+      name: mission.api_name,
+      minutes: mission.api_time,
+      state: states.get(mission.api_id) ?? 0,
+      monthly: mission.api_reset_type === 1,
+      combat: mission.api_damage_type > 0,
+      support: mission.api_id === 33 || mission.api_id === 34,
+    })),
+    runs: save.expeditionRuns,
+    settings: save.expeditionSettings,
+    limitTime: member.api_limit_time,
+  });
+}
+
+export function handleUnlockAllExpeditions(
+  params: { enabled?: unknown },
+  stateStore: StateStore
+) {
+  stateStore.unlockAllExpeditions(params.enabled !== false && params.enabled !== "false");
+  return handleExpeditionStatus(stateStore);
+}
+
+export function handleConfigureExpeditions(
+  params: { fixedSeed?: unknown; clockOffsetMs?: unknown },
+  stateStore: StateStore
+) {
+  if ("fixedSeed" in params) {
+    const seed = params.fixedSeed === null || params.fixedSeed === "" ? null : Number(params.fixedSeed);
+    if (seed != null && !Number.isFinite(seed)) return apiError("Invalid fixedSeed", 400);
+    stateStore.setExpeditionFixedSeed(seed);
+  }
+  if ("clockOffsetMs" in params) {
+    const offset = Number(params.clockOffsetMs);
+    if (!Number.isFinite(offset)) return apiError("Invalid clockOffsetMs", 400);
+    stateStore.setExpeditionClockOffset(offset);
+  }
+  return handleExpeditionStatus(stateStore);
+}
+
+export function handleForceCompleteExpedition(
+  params: { deckId?: unknown },
+  stateStore: StateStore
+) {
+  const deckId = Number(params.deckId);
+  if (!Number.isInteger(deckId) || !stateStore.forceCompleteExpedition(deckId)) {
+    return apiError("No active expedition for that fleet", 404);
+  }
+  return handleExpeditionStatus(stateStore);
+}
+
+export function handleResetExpeditions(stateStore: StateStore) {
+  stateStore.resetExpeditionProgress();
+  return handleExpeditionStatus(stateStore);
 }

@@ -874,6 +874,10 @@ describe("local kcsapi endpoints", () => {
 
   it("supports docks, arsenal, expeditions, items, and a deterministic first sortie loop", async () => {
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
+    const expeditionShip1 = store.createShip(9);
+    const expeditionShip2 = store.createShip(10);
+    store.changeDeckShip(2, 0, expeditionShip1.id);
+    store.changeDeckShip(2, 1, expeditionShip2.id);
     const repair = await post("api_req_nyukyo/start", { api_ship_id: 1, api_highspeed: 1 });
     const craft = await post("api_req_kousyou/createitem", {
       api_item1: 10,
@@ -888,7 +892,11 @@ describe("local kcsapi endpoints", () => {
       api_item3: 30,
       api_item4: 30
     });
-    const expedition = await post("api_req_mission/start", { api_deck_id: 2, api_mission_id: 2 });
+    const expedition = await post("api_req_mission/start", {
+      api_deck_id: 2,
+      api_mission_id: 1,
+      api_serial_cid: "api-smoke"
+    });
     const chartInfo = await post("api_get_member/chart_additional_info");
     const mapInfo = await post("api_get_member/mapinfo");
     const mapStart = await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
@@ -945,8 +953,12 @@ describe("local kcsapi endpoints", () => {
       api_get_ship_exp: expect.any(Array)
     });
 
+    store.forceCompleteExpedition(2);
     const missionResult = await post("api_req_mission/result", { api_deck_id: 2 });
-    expect(missionResult.json().api_data).toMatchObject({ api_clear_result: 1, api_get_material: expect.any(Array) });
+    expect(missionResult.json().api_data).toMatchObject({
+      api_clear_result: expect.any(Number),
+      api_get_material: expect.any(Array)
+    });
   });
 
   it("returns deck parameter slots required by sortie deck selection", async () => {

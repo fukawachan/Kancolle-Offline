@@ -312,7 +312,7 @@ export function toRequireInfo(save: SaveState, resourceManifest?: ResourceManife
     api_slot_item: save.slotItems.map(toSlotItem),
     api_unsetslot: toUnsetSlot(save),
     api_kdock: save.buildDocks.map(toBuildDock),
-    api_useitem: toUseItems(save.materials),
+    api_useitem: toUseItems(save.materials, save.useItems),
     api_furniture: toFurniture(save.furniture, resourceManifest).api_list
   };
 }
@@ -351,18 +351,26 @@ export function normalizePortBgmId(portBgmId: number, resourceManifest?: Resourc
   return resourceManifest.bgm.port.has(portBgmId) ? portBgmId : resourceManifest.bgm.port.has(0) ? 0 : portBgmId;
 }
 
-export function toUseItems(materials: Materials) {
-  return [
+export function toUseItems(materials: Materials, useItems: SaveState["useItems"] = []) {
+  const counts = new Map(useItems.map((item) => [item.id, item.count]));
+  const fixed = [
     { api_id: 1, api_count: materials.repairKit },
     { api_id: 2, api_count: materials.buildKit },
     { api_id: 3, api_count: materials.devmat },
     { api_id: 4, api_count: materials.screw },
-    { api_id: 49, api_count: 0 },
-    { api_id: 54, api_count: 0 },
-    { api_id: 55, api_count: 0 },
-    { api_id: 59, api_count: 0 },
-    { api_id: 64, api_count: 0 }
+    { api_id: 49, api_count: counts.get(49) ?? 0 },
+    { api_id: 54, api_count: counts.get(54) ?? 0 },
+    { api_id: 55, api_count: counts.get(55) ?? 0 },
+    { api_id: 59, api_count: counts.get(59) ?? 0 },
+    { api_id: 64, api_count: counts.get(64) ?? 0 }
   ];
+  const fixedIds = new Set(fixed.map((item) => item.api_id));
+  return [
+    ...fixed,
+    ...useItems
+      .filter((item) => !fixedIds.has(item.id))
+      .map((item) => ({ api_id: item.id, api_count: item.count }))
+  ].sort((a, b) => a.api_id - b.api_id);
 }
 
 export function toUnsetSlot(save: SaveState) {

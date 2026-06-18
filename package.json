@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/cli.ts",
     "start": "tsx src/cli.ts",
+    "generate:expedition-data": "node scripts/generate-expedition-data.mjs",
     "generate:sortie-data": "node scripts/generate-sortie-data.mjs",
     "generate:routing-data": "node scripts/generate-routing-data.mjs",
     "test": "vitest run",

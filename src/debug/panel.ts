@@ -128,6 +128,18 @@ export function renderDebugPanel(): string {
 
       /* Loading spinner */
       .loading { text-align: center; padding: 16px; color: #8b949e; }
+      .debug-controls {
+        display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px;
+        border-bottom: 1px solid #1e2a36;
+      }
+      .debug-controls input {
+        width: 150px; padding: 6px 10px; border: 1px solid #30363d;
+        border-radius: 6px; background: #0d1117; color: #c9d1d9;
+      }
+      .debug-controls button {
+        padding: 6px 12px; border: 1px solid #30363d; border-radius: 6px;
+        background: #21262d; color: #c9d1d9; cursor: pointer;
+      }
 
       @media (max-width: 900px) {
         .content-area { grid-template-columns: 1fr; }
@@ -144,6 +156,7 @@ export function renderDebugPanel(): string {
     <nav class="tabs">
       <button id="tab-ships" class="active" onclick="switchTab('ships')">&u8230;&u5A18; Ships (840)</button>
       <button id="tab-equipment" onclick="switchTab('equipment')">&u88C5;&u5099; Equipment (572)</button>
+      <button id="tab-expeditions" onclick="switchTab('expeditions')">Expeditions (63)</button>
     </nav>
 
     <!-- Ships Tab -->
@@ -186,6 +199,26 @@ export function renderDebugPanel(): string {
       </div>
     </div>
 
+    <!-- Expeditions Tab -->
+    <div id="panel-expeditions" class="tab-panel">
+      <div class="section">
+        <div class="section-header">Expedition state and deterministic controls</div>
+        <div class="debug-controls">
+          <button onclick="unlockAllExpeditions(true)">Unlock all</button>
+          <button onclick="unlockAllExpeditions(false)">Use progression</button>
+          <button onclick="resetExpeditions()">Reset progress</button>
+          <input id="expedition-seed" type="number" placeholder="Fixed seed">
+          <button onclick="configureExpeditions()">Apply seed/time</button>
+          <input id="expedition-offset" type="number" value="0" placeholder="Clock offset ms">
+          <button onclick="forceCompleteExpedition(2)">Force complete Fleet 2</button>
+          <button onclick="forceCompleteExpedition(3)">Force complete Fleet 3</button>
+          <button onclick="forceCompleteExpedition(4)">Force complete Fleet 4</button>
+        </div>
+        <div id="expedition-summary" class="section-header"></div>
+        <div id="expedition-list" class="list"></div>
+      </div>
+    </div>
+
     <div id="status-bar"></div>
 
     <script>
@@ -206,6 +239,7 @@ export function renderDebugPanel(): string {
       refreshOwnedEquipment();
       // Pre-warm equipment search too so tab switch is instant
       searchEquipment();
+      refreshExpeditions();
 
       // ---- Tab switching ----
       function switchTab(tab) {
@@ -216,6 +250,7 @@ export function renderDebugPanel(): string {
         document.getElementById("tab-" + tab).classList.add("active");
         if (tab === "ships") refreshOwnedShips();
         if (tab === "equipment") refreshOwnedEquipment();
+        if (tab === "expeditions") refreshExpeditions();
       }
 
       // ---- Ships ----
@@ -466,6 +501,92 @@ export function renderDebugPanel(): string {
         } catch (err) {
           showStatus("Error removing equipment: " + err.message, "error");
         }
+      }
+
+      // ---- Expeditions ----
+      async function expeditionRequest(url, body) {
+        const options = { cache: "no-store" };
+        if (body !== undefined) {
+          options.method = "POST";
+          options.headers = { "Content-Type": "application/json" };
+          options.body = JSON.stringify(body);
+        }
+        const response = await fetch(url, options);
+        const json = parseApi(await response.text());
+        if (json.api_result !== 1) throw new Error(json.api_result_msg || "Expedition debug request failed");
+        return json.api_data;
+      }
+
+      async function refreshExpeditions() {
+        const list = document.getElementById("expedition-list");
+        const summary = document.getElementById("expedition-summary");
+        try {
+          const data = await expeditionRequest("/debug/api/expeditions/status");
+          summary.textContent =
+            "Runs: " + data.runs.length +
+            " | Fixed seed: " + (data.settings.fixedSeed == null ? "random" : data.settings.fixedSeed) +
+            " | Clock offset: " + data.settings.clockOffsetMs + " ms" +
+            " | Unlock all: " + Boolean(data.settings.unlockAll);
+          document.getElementById("expedition-seed").value =
+            data.settings.fixedSeed == null ? "" : String(data.settings.fixedSeed);
+          document.getElementById("expedition-offset").value = String(data.settings.clockOffsetMs);
+          list.innerHTML = "";
+          for (const mission of data.missions) {
+            const run = data.runs.find(r => r.missionId === mission.id);
+            const row = document.createElement("div");
+            row.className = "list-row";
+            row.innerHTML =
+              '<span class="info"><span class="name">[' + esc(mission.displayNo) + '] ' +
+              esc(mission.name) + '</span> <span class="meta">ID ' + mission.id +
+              ' | state ' + mission.state + ' | ' + mission.minutes + ' min' +
+              (mission.monthly ? ' | monthly' : '') +
+              (mission.combat ? ' | combat' : '') +
+              (mission.support ? ' | support' : '') +
+              (run ? ' | Fleet ' + run.deckId + ' ' + esc(run.status) + ' seed=' + run.seed : '') +
+              '</span></span>';
+            list.appendChild(row);
+          }
+        } catch (err) {
+          list.innerHTML = '<div class="list-empty">' + esc(err.message) + '</div>';
+        }
+      }
+
+      async function unlockAllExpeditions(enabled) {
+        try {
+          await expeditionRequest("/debug/api/expeditions/unlock-all", { enabled });
+          showStatus(enabled ? "All expeditions unlocked." : "Normal progression restored.", "success");
+          refreshExpeditions();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      async function configureExpeditions() {
+        const seed = document.getElementById("expedition-seed").value;
+        const offset = document.getElementById("expedition-offset").value;
+        try {
+          await expeditionRequest("/debug/api/expeditions/configure", {
+            fixedSeed: seed === "" ? null : Number(seed),
+            clockOffsetMs: Number(offset || 0)
+          });
+          showStatus("Expedition debug configuration updated.", "success");
+          refreshExpeditions();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      async function forceCompleteExpedition(deckId) {
+        try {
+          await expeditionRequest("/debug/api/expeditions/force-complete", { deckId });
+          showStatus("Fleet " + deckId + " expedition is ready to claim.", "success");
+          refreshExpeditions();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      async function resetExpeditions() {
+        if (!confirm("Reset all expedition progress and active runs?")) return;
+        try {
+          await expeditionRequest("/debug/api/expeditions/reset", {});
+          showStatus("Expedition progress reset.", "success");
+          refreshExpeditions();
+        } catch (err) { showStatus(err.message, "error"); }
       }
 
       // ---- Status bar ----

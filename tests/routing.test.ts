@@ -420,6 +420,10 @@ function saveWithLos(): SaveState {
       coins: 0
     },
     maps: [],
-    sortieSession: null
+    sortieSession: null,
+    expeditionProgress: [],
+    expeditionRuns: [],
+    expeditionSettings: { fixedSeed: null, clockOffsetMs: 0, unlockAll: 0 },
+    useItems: []
   };
 }

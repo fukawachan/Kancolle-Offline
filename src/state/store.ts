@@ -9,6 +9,7 @@ import {
   type MapPhaseCondition
 } from "../master/map-progress.js";
 import { normalRoutingMap } from "../master/routing-data.js";
+import { EXPEDITION_DEFINITIONS, EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import {
   buildRoutingFleet,
   evaluateRoute,
@@ -17,6 +18,13 @@ import {
 } from "../master/routing.js";
 import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
 import { playerLevelForExp, shipLevelForExp, shipLevelupInfo } from "../kcsapi/experience.js";
+import {
+  buildExpeditionSnapshot,
+  expeditionDefinition,
+  resolveExpedition,
+  type ExpeditionOutcome,
+  type ExpeditionRunSnapshot
+} from "../kcsapi/expedition.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
 import { isAircraftSlotItem } from "../kcsapi/serializers.js";
 import {
@@ -28,6 +36,9 @@ import {
 import type {
   BuildDock,
   Deck,
+  ExpeditionProgress,
+  ExpeditionRun,
+  ExpeditionSettings,
   FurnitureState,
   JsonObject,
   MapState,
@@ -40,7 +51,8 @@ import type {
   SaveState,
   Ship,
   SlotItem,
-  SortieSession
+  SortieSession,
+  UseItemInventory
 } from "./types.js";
 
 export type StateStoreOptions = {
@@ -64,7 +76,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
@@ -121,6 +133,8 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       const deck = save.decks.find((item) => item.id === deckId);
       if (!deck) return null;
+      const awayShips = activeExpeditionShipIds(db);
+      if (deckIsAway(db, deckId) || (shipId > 0 && awayShips.has(shipId))) return null;
       const targetIndex = Math.max(0, Math.min(5, Math.trunc(index)));
       const nextShipId = shipId > 0 && save.ships.some((ship) => ship.id === shipId) ? shipId : -1;
       const updatedDecks = save.decks.map((item) => {
@@ -179,12 +193,14 @@ export function createStateStore(options: StateStoreOptions) {
     },
     supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }) => {
       const save = getSave(db);
+      const awayShips = activeExpeditionShipIds(db);
+      const availableShipIds = shipIds.filter((id) => !awayShips.has(id));
       let fuel = 0;
       let ammo = 0;
       let bauxite = 0;
       const update = db.prepare("UPDATE ships SET fuel = ?, ammo = ?, max_fuel = ?, max_ammo = ?, onslot_json = ? WHERE id = ?");
       const tx = db.transaction(() => {
-        for (const shipId of shipIds) {
+        for (const shipId of availableShipIds) {
           const ship = save.ships.find((item) => item.id === shipId);
           if (!ship) continue;
           const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
@@ -205,14 +221,14 @@ export function createStateStore(options: StateStoreOptions) {
       tx();
       const nextSave = getSave(db);
       return {
-        ships: nextSave.ships.filter((ship) => shipIds.includes(ship.id)),
+        ships: nextSave.ships.filter((ship) => availableShipIds.includes(ship.id)),
         consumed: { fuel, ammo, bauxite }
       };
     },
     equipSlotItem: (shipId: number, slotIndex: number, itemId: number) => {
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
-      if (!ship) return null;
+      if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
       const slotIds = normalizeFixed(ship.slotIds, 5, -1);
       slotIds[Math.max(0, slotIndex)] = itemId;
       const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
@@ -221,16 +237,18 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     equipExSlotItem: (shipId: number, itemId: number) => {
+      if (activeExpeditionShipIds(db).has(shipId)) return null;
       db.prepare("UPDATE ships SET ex_slot_id = ? WHERE id = ?").run(itemId, shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     unsetAllSlots: (shipId: number) => {
+      if (activeExpeditionShipIds(db).has(shipId)) return null;
       db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = -1 WHERE id = ?").run(JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     exchangeSlotIndex: (shipId: number, from: number, to: number) => {
       const ship = getSave(db).ships.find((item) => item.id === shipId);
-      if (!ship) return null;
+      if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
       const slotIds = normalizeFixed(ship.slotIds, 5, -1);
       const onSlot = normalizeFixed(ship.onSlot, 5, 0);
       const moving = slotIds[from];
@@ -252,6 +270,8 @@ export function createStateStore(options: StateStoreOptions) {
       return next;
     },
     modernizeShip: (shipId: number, consumedShipIds: number[]) => {
+      const awayShips = activeExpeditionShipIds(db);
+      if (awayShips.has(shipId) || consumedShipIds.some((id) => awayShips.has(id))) return null;
       const ship = getSave(db).ships.find((item) => item.id === shipId);
       if (!ship) return null;
       const stats = { ...ship.stats, modernized: true };
@@ -265,6 +285,7 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     remodelShip: (shipId: number, masterId: number) => {
+      if (activeExpeditionShipIds(db).has(shipId)) return null;
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
       const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
@@ -274,18 +295,22 @@ export function createStateStore(options: StateStoreOptions) {
     },
     createSlotItem: (masterId: number) => createSlotItem(db, masterId),
     destroySlotItem: (itemIds: number[]) => {
+      const awayItems = activeExpeditionSlotItemIds(db);
+      const availableIds = itemIds.filter((id) => !awayItems.has(id));
       const tx = db.transaction(() => {
-        for (const id of itemIds) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
-        addMaterials(db, { fuel: itemIds.length, ammo: itemIds.length, steel: itemIds.length * 2, bauxite: 0 });
+        for (const id of availableIds) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
+        addMaterials(db, { fuel: availableIds.length, ammo: availableIds.length, steel: availableIds.length * 2, bauxite: 0 });
       });
       tx();
       return getSave(db).materials;
     },
     createShip: (masterId: number) => createShip(db, masterId),
     destroyShip: (shipIds: number[]) => {
+      const awayShips = activeExpeditionShipIds(db);
+      const availableIds = shipIds.filter((id) => !awayShips.has(id));
       const tx = db.transaction(() => {
-        for (const id of shipIds) db.prepare("DELETE FROM ships WHERE id = ?").run(id);
-        addMaterials(db, { fuel: shipIds.length, ammo: shipIds.length, steel: shipIds.length * 2, bauxite: 0 });
+        for (const id of availableIds) db.prepare("DELETE FROM ships WHERE id = ?").run(id);
+        addMaterials(db, { fuel: availableIds.length, ammo: availableIds.length, steel: availableIds.length * 2, bauxite: 0 });
       });
       tx();
       return getSave(db).materials;
@@ -319,6 +344,9 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
       if (!ship) return { ok: false, error: "Unknown ship" };
+      if (activeExpeditionShipIds(db).has(shipId)) {
+        return { ok: false, error: "Ship is away on expedition" };
+      }
 
       const dock = save.repairDocks.find((item) => item.id === dockId);
       if (!dock) return { ok: false, error: "Unknown repair dock" };
@@ -383,21 +411,66 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE build_docks SET recipe_json = '{}', result_master_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dockId);
       return ship;
     },
+    getMissionMemberState: () => missionMemberState(db),
+    startExpedition: (deckId: number, missionId: number, serialCid = "") =>
+      startExpedition(db, deckId, missionId, serialCid),
+    claimExpedition: (deckId: number) => claimExpedition(db, deckId),
+    recallExpedition: (deckId: number) => recallExpedition(db, deckId),
+    forceCompleteExpedition: (deckId: number) => forceCompleteExpedition(db, deckId),
+    recordSupportParticipation: (deckId: number) => {
+      const result = db.prepare(`
+        UPDATE expedition_runs
+        SET support_count = support_count + 1
+        WHERE deck_id = ? AND mission_id IN (33, 34) AND status = 'active'
+      `).run(deckId);
+      return result.changes > 0;
+    },
+    finishSupportExpeditions: () => finishSupportExpeditions(db),
+    unlockAllExpeditions: (enabled = true) => {
+      ensureExpeditionSettings(db);
+      db.prepare("UPDATE expedition_settings SET unlock_all = ? WHERE id = 1").run(enabled ? 1 : 0);
+      return missionMemberState(db);
+    },
+    resetExpeditionProgress: () => {
+      const tx = db.transaction(() => {
+        db.prepare("DELETE FROM expedition_runs").run();
+        db.prepare("DELETE FROM expedition_progress").run();
+        db.prepare("UPDATE decks SET mission_json = ?").run(JSON.stringify(emptyMissionState()));
+        seedExpeditionProgress(db);
+      });
+      tx();
+      return missionMemberState(db);
+    },
+    setExpeditionFixedSeed: (seed: number | null) => {
+      ensureExpeditionSettings(db);
+      db.prepare("UPDATE expedition_settings SET fixed_seed = ? WHERE id = 1")
+        .run(seed == null ? null : Math.trunc(seed));
+      return getExpeditionSettings(db);
+    },
+    setExpeditionClockOffset: (offsetMs: number) => {
+      ensureExpeditionSettings(db);
+      db.prepare("UPDATE expedition_settings SET clock_offset_ms = ? WHERE id = 1")
+        .run(Math.trunc(offsetMs));
+      return getExpeditionSettings(db);
+    },
     startMission: (deckId: number, missionId: number) => {
-      const missionState = { state: 2, missionId, completeTime: Date.now() + 30 * 60_000 };
-      db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?").run(JSON.stringify(missionState), deckId);
-      return missionState;
+      const started = startExpedition(db, deckId, missionId, "");
+      if (!started.ok) throw new Error(started.error);
+      return { state: 1, missionId, completeTime: started.run.completeAt };
     },
     completeMission: (deckId: number) => {
-      db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?").run(JSON.stringify({ state: 0, missionId: 0, completeTime: 0 }), deckId);
-      addMaterials(db, { fuel: 30, ammo: 30, steel: 0, bauxite: 0 });
+      forceCompleteExpedition(db, deckId);
+      const claimed = claimExpedition(db, deckId);
+      if (!claimed.ok) throw new Error(claimed.error);
       return getSave(db).materials;
     },
     recallMission: (deckId: number) => {
-      db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?").run(JSON.stringify({ state: 0, missionId: 0, completeTime: 0 }), deckId);
+      const recalled = recallExpedition(db, deckId);
+      if (!recalled.ok) return null;
       return getSave(db).decks.find((deck) => deck.id === deckId);
     },
     startSortie: (deckId: number, areaId: number, mapNo: number) => {
+      if (deckIsAway(db, deckId)) return null;
       const save = getSave(db);
       const map = save.maps.find((item) => item.id === mapMasterId(areaId, mapNo));
       const deck = save.decks.find((item) => item.id === deckId);
@@ -467,10 +540,410 @@ export function createStateStore(options: StateStoreOptions) {
     previewSortieRoute: () => previewSortieRoute(db),
     nextSortieNode: (selectedEdgeNo?: number) => advanceSortieRoute(db, selectedEdgeNo),
     clearSortie: () => {
+      finishSupportExpeditions(db);
       db.prepare("DELETE FROM sortie_sessions").run();
     },
     completeSortieBattle: () => getSave(db)
   };
+}
+
+function missionMemberState(db: Database.Database) {
+  const progress = new Map(
+    (db.prepare("SELECT * FROM expedition_progress").all() as Row[])
+      .map(mapExpeditionProgress)
+      .map((item) => [item.missionId, item] as const)
+  );
+  const settings = getExpeditionSettings(db);
+  const currentPeriod = expeditionPeriodKey(expeditionNow(db));
+  return {
+    api_list_items: EXPEDITION_MASTERS.map((master) => {
+      const item = progress.get(master.api_id);
+      const completed = master.api_reset_type === 1
+        ? item?.periodKey === currentPeriod && (item?.periodCount ?? 0) > 0
+        : (item?.completedCount ?? 0) > 0;
+      return {
+        api_mission_id: master.api_id,
+        api_state: completed ? 2 : settings.unlockAll || item?.unlocked ? 1 : 0
+      };
+    }),
+    api_limit_time: [nextExpeditionResetAt(expeditionNow(db))]
+  };
+}
+
+function startExpedition(db: Database.Database, deckId: number, missionId: number, serialCid: string) {
+  const existingRow = db.prepare("SELECT * FROM expedition_runs WHERE deck_id = ?").get(deckId) as Row | undefined;
+  if (existingRow) {
+    const existing = mapExpeditionRun(existingRow);
+    if (serialCid && existing.serialCid === serialCid) return { ok: true as const, run: existing };
+    if (existing.status !== "claimed") {
+      return { ok: false as const, error: "Fleet is already away on expedition" };
+    }
+  }
+  if (deckId < 2 || deckId > 4) return { ok: false as const, error: "Only fleets 2-4 can start expeditions" };
+
+  const save = getSave(db);
+  const deck = save.decks.find((item) => item.id === deckId);
+  if (!deck) return { ok: false as const, error: "Unknown fleet" };
+  const missionState = missionMemberState(db).api_list_items.find((item) => item.api_mission_id === missionId);
+  if (!missionState || missionState.api_state !== 1) {
+    return { ok: false as const, error: "Expedition is locked or already used this period" };
+  }
+  const ships = deck.shipIds
+    .filter((id) => id > 0)
+    .map((id) => save.ships.find((ship) => ship.id === id))
+    .filter((ship): ship is Ship => ship != null);
+  if (ships.length === 0) return { ok: false as const, error: "Expedition fleet is empty" };
+  if (ships[0].hp * 4 <= ships[0].maxHp) {
+    return { ok: false as const, error: "The flagship is heavily damaged" };
+  }
+  const repairing = new Set(save.repairDocks.filter((dock) => dock.state !== 0).map((dock) => dock.shipId));
+  if (ships.some((ship) => repairing.has(ship.id))) {
+    return { ok: false as const, error: "Expedition fleet contains a ship in repair" };
+  }
+  if (save.sortieSession && save.sortieSession.deckId === deckId) {
+    return { ok: false as const, error: "Fleet is currently on sortie" };
+  }
+
+  const now = expeditionNow(db);
+  const settings = getExpeditionSettings(db);
+  const snapshot = buildExpeditionSnapshot(save, deckId, missionId, {
+    now,
+    seed: settings.fixedSeed ?? undefined,
+    serialCid
+  });
+  const definition = expeditionDefinition(missionId);
+  const periodKey = expeditionPeriodKey(now);
+  const tx = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO expedition_runs (
+        deck_id, mission_id, status, serial_cid, seed, started_at, complete_at,
+        snapshot_json, outcome_json, result_json, support_count
+      ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, NULL, NULL, 0)
+      ON CONFLICT(deck_id) DO UPDATE SET
+        mission_id = excluded.mission_id,
+        status = excluded.status,
+        serial_cid = excluded.serial_cid,
+        seed = excluded.seed,
+        started_at = excluded.started_at,
+        complete_at = excluded.complete_at,
+        snapshot_json = excluded.snapshot_json,
+        outcome_json = NULL,
+        result_json = NULL,
+        support_count = 0
+    `).run(
+      deckId,
+      missionId,
+      serialCid,
+      snapshot.seed,
+      snapshot.startedAt,
+      snapshot.completeAt,
+      JSON.stringify(snapshot)
+    );
+    db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?")
+      .run(JSON.stringify({ state: 1, missionId, completeTime: snapshot.completeAt }), deckId);
+    if (definition.resetType === 1) {
+      db.prepare(`
+        UPDATE expedition_progress
+        SET period_key = ?, period_count = CASE WHEN period_key = ? THEN period_count + 1 ELSE 1 END
+        WHERE mission_id = ?
+      `).run(periodKey, periodKey, missionId);
+    }
+  });
+  tx();
+  const run = mapExpeditionRun(
+    db.prepare("SELECT * FROM expedition_runs WHERE deck_id = ?").get(deckId) as Row
+  );
+  return { ok: true as const, run };
+}
+
+function claimExpedition(db: Database.Database, deckId: number) {
+  const row = db.prepare("SELECT * FROM expedition_runs WHERE deck_id = ?").get(deckId) as Row | undefined;
+  if (!row) return { ok: false as const, error: "Fleet has no expedition result" };
+  const run = mapExpeditionRun(row);
+  if (run.status === "claimed" && run.result) {
+    return { ok: true as const, result: run.result };
+  }
+  const now = expeditionNow(db);
+  if (run.completeAt > now) return { ok: false as const, error: "Expedition has not returned yet" };
+
+  const snapshot = run.snapshot as unknown as ExpeditionRunSnapshot;
+  const definition = expeditionDefinition(run.missionId);
+  const resolved = resolveExpedition(snapshot, definition);
+  const outcome: ExpeditionOutcome = run.status === "returning"
+    ? {
+        ...resolved,
+        clearResult: 0,
+        memberExp: 0,
+        shipExp: resolved.shipExp.map(() => 0),
+        materials: [0, 0, 0, 0],
+        items: []
+      }
+    : resolved;
+  let result: JsonObject = {};
+  const tx = db.transaction(() => {
+    applyExpeditionOutcome(db, snapshot, outcome);
+    if (run.status !== "returning") completeExpeditionProgress(db, definition.id);
+    const save = getSave(db);
+    result = {
+      missionId: definition.id,
+      questName: expeditionMasterName(definition.id),
+      clearResult: outcome.clearResult,
+      getExp: outcome.memberExp,
+      memberLevel: save.player.level,
+      memberExp: save.player.exp,
+      shipIds: snapshot.ships.map((ship) => ship.id),
+      shipExp: outcome.shipExp,
+      materials: outcome.materials,
+      items: outcome.items,
+      shipHps: outcome.shipHps,
+      recalled: run.status === "returning",
+      claimedAt: now
+    };
+    db.prepare(`
+      UPDATE expedition_runs
+      SET status = 'claimed', outcome_json = ?, result_json = ?
+      WHERE deck_id = ?
+    `).run(JSON.stringify(outcome), JSON.stringify(result), deckId);
+    db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?")
+      .run(JSON.stringify(emptyMissionState()), deckId);
+  });
+  tx();
+  return { ok: true as const, result };
+}
+
+function recallExpedition(db: Database.Database, deckId: number) {
+  const row = db.prepare("SELECT * FROM expedition_runs WHERE deck_id = ?").get(deckId) as Row | undefined;
+  if (!row) return { ok: false as const, error: "Fleet is not away on expedition" };
+  const run = mapExpeditionRun(row);
+  if (run.status !== "active") return { ok: false as const, error: "Expedition cannot be recalled" };
+  const definition = expeditionDefinition(run.missionId);
+  if (!definition.returnAllowed || definition.supportType) {
+    return { ok: false as const, error: "This expedition cannot be recalled manually" };
+  }
+  const now = expeditionNow(db);
+  const elapsed = Math.max(0, now - run.startedAt);
+  const remaining = Math.max(0, run.completeAt - now);
+  const completeAt = now + Math.floor(Math.min(elapsed, remaining) / 3);
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE expedition_runs SET status = 'returning', complete_at = ? WHERE deck_id = ?")
+      .run(completeAt, deckId);
+    db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?")
+      .run(JSON.stringify({ state: 2, missionId: run.missionId, completeTime: completeAt }), deckId);
+  });
+  tx();
+  return {
+    ok: true as const,
+    mission: [2, run.missionId, completeAt, 0],
+    completeAt
+  };
+}
+
+function forceCompleteExpedition(db: Database.Database, deckId: number) {
+  const now = expeditionNow(db);
+  db.prepare("UPDATE expedition_runs SET complete_at = ? WHERE deck_id = ? AND status != 'claimed'")
+    .run(now, deckId);
+  const row = db.prepare("SELECT mission_id, status FROM expedition_runs WHERE deck_id = ?").get(deckId) as Row | undefined;
+  if (row) {
+    db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?").run(
+      JSON.stringify({
+        state: String(row.status) === "returning" ? 2 : 1,
+        missionId: Number(row.mission_id),
+        completeTime: now
+      }),
+      deckId
+    );
+  }
+  return row != null;
+}
+
+function finishSupportExpeditions(db: Database.Database) {
+  const rows = db.prepare(`
+    SELECT deck_id
+    FROM expedition_runs
+    WHERE mission_id IN (33, 34) AND status IN ('active', 'returning')
+  `).all() as Row[];
+  const now = expeditionNow(db);
+  const results: unknown[] = [];
+  for (const row of rows) {
+    const deckId = Number(row.deck_id);
+    db.prepare("UPDATE expedition_runs SET complete_at = ? WHERE deck_id = ?").run(now, deckId);
+    results.push(claimExpedition(db, deckId));
+  }
+  return results;
+}
+
+function applyExpeditionOutcome(
+  db: Database.Database,
+  snapshot: ExpeditionRunSnapshot,
+  outcome: ExpeditionOutcome
+) {
+  const updateShip = db.prepare(`
+    UPDATE ships
+    SET fuel = max(0, fuel - ?),
+        ammo = max(0, ammo - ?),
+        condition = max(0, condition - ?),
+        hp = max(1, min(max_hp, ?)),
+        exp = ?,
+        level = ?
+    WHERE id = ?
+  `);
+  snapshot.ships.forEach((ship, index) => {
+    const nextExp = ship.exp + (outcome.shipExp[index] ?? 0);
+    updateShip.run(
+      outcome.fuelCosts[index] ?? 0,
+      outcome.ammoCosts[index] ?? 0,
+      outcome.conditionCosts[index] ?? 0,
+      outcome.shipHps[index] ?? ship.hp,
+      nextExp,
+      shipLevelForExp(nextExp),
+      ship.id
+    );
+  });
+  addMaterials(db, {
+    fuel: outcome.materials[0],
+    ammo: outcome.materials[1],
+    steel: outcome.materials[2],
+    bauxite: outcome.materials[3]
+  });
+  for (const item of outcome.items) addUseItem(db, item.itemId, item.count);
+  const player = db.prepare("SELECT exp FROM players WHERE id = 1").get() as Row;
+  const memberExp = Number(player.exp) + outcome.memberExp;
+  db.prepare("UPDATE players SET exp = ?, level = ? WHERE id = 1")
+    .run(memberExp, playerLevelForExp(memberExp));
+}
+
+function completeExpeditionProgress(db: Database.Database, missionId: number) {
+  db.prepare("UPDATE expedition_progress SET completed_count = completed_count + 1 WHERE mission_id = ?")
+    .run(missionId);
+  const completed = new Set(
+    (db.prepare("SELECT mission_id FROM expedition_progress WHERE completed_count > 0").all() as Row[])
+      .map((row) => Number(row.mission_id))
+  );
+  const unlock = db.prepare("UPDATE expedition_progress SET unlocked = 1 WHERE mission_id = ?");
+  for (const definition of EXPEDITION_DEFINITIONS) {
+    if (definition.prerequisiteIds.every((id) => completed.has(id))) unlock.run(definition.id);
+  }
+}
+
+function addUseItem(db: Database.Database, itemId: number, count: number) {
+  if (count <= 0) return;
+  if (itemId === 1) return addMaterials(db, { repairKit: count });
+  if (itemId === 2) return addMaterials(db, { buildKit: count });
+  if (itemId === 3) return addMaterials(db, { devmat: count });
+  if (itemId === 4) return addMaterials(db, { screw: count });
+  db.prepare(`
+    INSERT INTO use_items (id, count) VALUES (?, ?)
+    ON CONFLICT(id) DO UPDATE SET count = count + excluded.count
+  `).run(itemId, count);
+}
+
+function seedExpeditionProgress(db: Database.Database) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO expedition_progress
+      (mission_id, unlocked, completed_count, period_key, period_count)
+    VALUES (?, ?, 0, '', 0)
+  `);
+  for (const [index, mission] of EXPEDITION_MASTERS.entries()) {
+    insert.run(mission.api_id, index === 0 ? 1 : 0);
+  }
+}
+
+function ensureExpeditionSettings(db: Database.Database) {
+  db.prepare(`
+    INSERT OR IGNORE INTO expedition_settings (id, fixed_seed, clock_offset_ms, unlock_all)
+    VALUES (1, NULL, 0, 0)
+  `).run();
+}
+
+function getExpeditionSettings(db: Database.Database) {
+  ensureExpeditionSettings(db);
+  return mapExpeditionSettings(
+    db.prepare("SELECT * FROM expedition_settings WHERE id = 1").get() as Row
+  );
+}
+
+function expeditionNow(db: Database.Database) {
+  return Date.now() + getExpeditionSettings(db).clockOffsetMs;
+}
+
+function expeditionPeriodKey(now: number) {
+  const jst = new Date(now + 9 * 60 * 60_000);
+  let year = jst.getUTCFullYear();
+  let month = jst.getUTCMonth();
+  if (jst.getUTCDate() < 15 || (jst.getUTCDate() === 15 && jst.getUTCHours() < 12)) {
+    month -= 1;
+    if (month < 0) {
+      month = 11;
+      year -= 1;
+    }
+  }
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+function nextExpeditionResetAt(now: number) {
+  const jst = new Date(now + 9 * 60 * 60_000);
+  let year = jst.getUTCFullYear();
+  let month = jst.getUTCMonth();
+  let reset = Date.UTC(year, month, 15, 3, 0, 0);
+  if (reset <= now) {
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+    reset = Date.UTC(year, month, 15, 3, 0, 0);
+  }
+  return reset;
+}
+
+function expeditionMasterName(id: number) {
+  return EXPEDITION_MASTERS.find((item) => item.api_id === id)?.api_name ?? `Expedition ${id}`;
+}
+
+function emptyMissionState() {
+  return { state: 0, missionId: 0, completeTime: 0 };
+}
+
+function activeExpeditionShipIds(db: Database.Database) {
+  const rows = db.prepare(
+    "SELECT snapshot_json FROM expedition_runs WHERE status IN ('active', 'returning')"
+  ).all() as Row[];
+  const ids = new Set<number>();
+  for (const row of rows) {
+    const snapshot = parseJson<ExpeditionRunSnapshot>(row.snapshot_json, {
+      deckId: 0,
+      missionId: 0,
+      serialCid: "",
+      seed: 0,
+      startedAt: 0,
+      completeAt: 0,
+      ships: []
+    });
+    for (const ship of snapshot.ships) ids.add(ship.id);
+  }
+  return ids;
+}
+
+function deckIsAway(db: Database.Database, deckId: number) {
+  const row = db.prepare(
+    "SELECT 1 AS active FROM expedition_runs WHERE deck_id = ? AND status IN ('active', 'returning')"
+  ).get(deckId) as Row | undefined;
+  return row != null;
+}
+
+function activeExpeditionSlotItemIds(db: Database.Database) {
+  const shipIds = activeExpeditionShipIds(db);
+  const ids = new Set<number>();
+  if (shipIds.size === 0) return ids;
+  const rows = db.prepare("SELECT id, slot_ids_json, ex_slot_id FROM ships").all() as Row[];
+  for (const row of rows) {
+    if (!shipIds.has(Number(row.id))) continue;
+    const slots = parseJson<number[]>(row.slot_ids_json, []);
+    for (const id of [...slots, Number(row.ex_slot_id)]) {
+      if (id > 0) ids.add(id);
+    }
+  }
+  return ids;
 }
 
 type BattleMode = "sortie" | "practice" | "combined";
@@ -769,10 +1242,20 @@ function migrate(db: Database.Database) {
   if (currentVersion < 4) migrateToV4(db);
   if (currentVersion < 5) migrateToV5(db);
   if (currentVersion < 6) migrateToV6(db);
+  if (currentVersion < 7) migrateToV7(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
   repairMaps(db);
+}
+
+function migrateToV7(db: Database.Database) {
+  db.prepare(
+    "UPDATE decks SET mission_json = ?"
+  ).run(JSON.stringify({ state: 0, missionId: 0, completeTime: 0 }));
+  db.prepare("DELETE FROM expedition_runs").run();
+  seedExpeditionProgress(db);
+  ensureExpeditionSettings(db);
 }
 
 function migrateToV4(db: Database.Database) {
@@ -891,6 +1374,10 @@ function schemaVersion(db: Database.Database) {
 
 function resetSchema(db: Database.Database) {
   db.exec(`
+    DROP TABLE IF EXISTS expedition_settings;
+    DROP TABLE IF EXISTS use_items;
+    DROP TABLE IF EXISTS expedition_runs;
+    DROP TABLE IF EXISTS expedition_progress;
     DROP TABLE IF EXISTS battle_sessions;
     DROP TABLE IF EXISTS sortie_sessions;
     DROP TABLE IF EXISTS maps;
@@ -1017,6 +1504,36 @@ function createSchema(db: Database.Database) {
       id TEXT PRIMARY KEY,
       state_json TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS expedition_progress (
+      mission_id INTEGER PRIMARY KEY,
+      unlocked INTEGER NOT NULL,
+      completed_count INTEGER NOT NULL,
+      period_key TEXT NOT NULL,
+      period_count INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS expedition_runs (
+      deck_id INTEGER PRIMARY KEY,
+      mission_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      serial_cid TEXT NOT NULL,
+      seed INTEGER NOT NULL,
+      started_at INTEGER NOT NULL,
+      complete_at INTEGER NOT NULL,
+      snapshot_json TEXT NOT NULL,
+      outcome_json TEXT,
+      result_json TEXT,
+      support_count INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS use_items (
+      id INTEGER PRIMARY KEY,
+      count INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS expedition_settings (
+      id INTEGER PRIMARY KEY,
+      fixed_seed INTEGER,
+      clock_offset_ms INTEGER NOT NULL,
+      unlock_all INTEGER NOT NULL
+    );
   `);
 }
 
@@ -1088,6 +1605,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
     );
 
     seedMissingMaps(db);
+    seedExpeditionProgress(db);
+    ensureExpeditionSettings(db);
   });
   tx();
   return getSave(db);
@@ -1111,7 +1630,13 @@ function getSave(db: Database.Database): SaveState {
     quests: (db.prepare("SELECT * FROM quests ORDER BY id").all() as Row[]).map(mapQuest),
     furniture: mapFurniture(db.prepare("SELECT * FROM furniture WHERE id = 1").get() as Row),
     maps: (db.prepare("SELECT * FROM maps ORDER BY id").all() as Row[]).map(mapMap),
-    sortieSession: mapNullable(db.prepare("SELECT * FROM sortie_sessions WHERE id = 1").get() as Row | undefined, mapSortieSession)
+    sortieSession: mapNullable(db.prepare("SELECT * FROM sortie_sessions WHERE id = 1").get() as Row | undefined, mapSortieSession),
+    expeditionProgress: (db.prepare("SELECT * FROM expedition_progress ORDER BY mission_id").all() as Row[]).map(mapExpeditionProgress),
+    expeditionRuns: (db.prepare("SELECT * FROM expedition_runs ORDER BY deck_id").all() as Row[]).map(mapExpeditionRun),
+    expeditionSettings: mapExpeditionSettings(
+      db.prepare("SELECT * FROM expedition_settings WHERE id = 1").get() as Row
+    ),
+    useItems: (db.prepare("SELECT * FROM use_items ORDER BY id").all() as Row[]).map(mapUseItem)
   };
 }
 
@@ -1201,6 +1726,44 @@ function mapBuildDock(row: Row): BuildDock {
     completeTime: Number(row.complete_time),
     state: Number(row.state)
   };
+}
+
+function mapExpeditionProgress(row: Row): ExpeditionProgress {
+  return {
+    missionId: Number(row.mission_id),
+    unlocked: Number(row.unlocked),
+    completedCount: Number(row.completed_count),
+    periodKey: String(row.period_key),
+    periodCount: Number(row.period_count)
+  };
+}
+
+function mapExpeditionRun(row: Row): ExpeditionRun {
+  return {
+    deckId: Number(row.deck_id),
+    missionId: Number(row.mission_id),
+    status: String(row.status) as ExpeditionRun["status"],
+    serialCid: String(row.serial_cid),
+    seed: Number(row.seed),
+    startedAt: Number(row.started_at),
+    completeAt: Number(row.complete_at),
+    snapshot: parseJson<JsonObject>(row.snapshot_json, {}),
+    outcome: row.outcome_json == null ? null : parseJson<JsonObject>(row.outcome_json, {}),
+    result: row.result_json == null ? null : parseJson<JsonObject>(row.result_json, {}),
+    supportCount: Number(row.support_count)
+  };
+}
+
+function mapExpeditionSettings(row: Row): ExpeditionSettings {
+  return {
+    fixedSeed: row.fixed_seed == null ? null : Number(row.fixed_seed),
+    clockOffsetMs: Number(row.clock_offset_ms),
+    unlockAll: Number(row.unlock_all)
+  };
+}
+
+function mapUseItem(row: Row): UseItemInventory {
+  return { id: Number(row.id), count: Number(row.count) };
 }
 
 function mapQuest(row: Row): Quest {

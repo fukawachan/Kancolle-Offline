@@ -74,6 +74,39 @@ export type MissionState = {
   completeTime: number;
 };
 
+export type ExpeditionProgress = {
+  missionId: number;
+  unlocked: number;
+  completedCount: number;
+  periodKey: string;
+  periodCount: number;
+};
+
+export type ExpeditionRun = {
+  deckId: number;
+  missionId: number;
+  status: "active" | "returning" | "claimed";
+  serialCid: string;
+  seed: number;
+  startedAt: number;
+  completeAt: number;
+  snapshot: JsonObject;
+  outcome: JsonObject | null;
+  result: JsonObject | null;
+  supportCount: number;
+};
+
+export type ExpeditionSettings = {
+  fixedSeed: number | null;
+  clockOffsetMs: number;
+  unlockAll: number;
+};
+
+export type UseItemInventory = {
+  id: number;
+  count: number;
+};
+
 export type RepairDock = {
   id: number;
   shipId: number;
@@ -142,6 +175,10 @@ export type SaveState = {
   furniture: FurnitureState;
   maps: MapState[];
   sortieSession: SortieSession | null;
+  expeditionProgress: ExpeditionProgress[];
+  expeditionRuns: ExpeditionRun[];
+  expeditionSettings: ExpeditionSettings;
+  useItems: UseItemInventory[];
 };
 
 export type MaterialDelta = Partial<Record<keyof Materials, number>>;

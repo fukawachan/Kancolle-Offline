@@ -106,7 +106,10 @@ register("api_get_member/ship_deck", (input, context) => {
 });
 register("api_get_member/slot_item", (_input, context) => apiOk(context.stateStore.getSave().slotItems.map(toSlotItem)));
 register("api_get_member/unsetslot", (_input, context) => apiOk(toUnsetSlot(context.stateStore.getSave())));
-register("api_get_member/useitem", (_input, context) => apiOk(toUseItems(context.stateStore.getSave().materials)));
+register("api_get_member/useitem", (_input, context) => {
+  const save = context.stateStore.getSave();
+  return apiOk(toUseItems(save.materials, save.useItems));
+});
 register("api_get_member/furniture", (_input, context) => apiOk(toFurniture(context.stateStore.getSave().furniture, context.resourceManifest)));
 register("api_get_member/kdock", (_input, context) => apiOk(context.stateStore.getSave().buildDocks.map(toBuildDock)));
 register("api_get_member/ndock", (_input, context) => {
@@ -121,7 +124,9 @@ register("api_get_member/mapinfo", (_input, context) =>
     api_air_base_expanded_info: []
   })
 );
-register("api_get_member/mission", () => apiOk({ api_list: masterData.api_mst_mission, api_exec: [] }));
+register("api_get_member/mission", (_input, context) =>
+  apiOk(context.stateStore.getMissionMemberState())
+);
 register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
 register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
 register("api_get_member/payitem", () => apiOk([]));
@@ -335,14 +340,53 @@ register("api_req_kousyou/remodel_slot", (input, context) => {
 });
 
 register("api_req_mission/start", (input, context) => {
-  const state = context.stateStore.startMission(num(input.body.api_deck_id, 2), num(input.body.api_mission_id, 1));
-  return apiOk({ api_complatetime: state.completeTime, api_complatetime_str: new Date(state.completeTime).toISOString() });
+  const started = context.stateStore.startExpedition(
+    num(input.body.api_deck_id, 2),
+    num(input.body.api_mission_id, 1),
+    String(input.body.api_serial_cid ?? "")
+  );
+  if (!started.ok) return apiError(started.error, 400);
+  return apiOk({
+    api_complatetime: started.run.completeAt,
+    api_complatetime_str: new Date(started.run.completeAt).toISOString(),
+    api_expired_flag: 0
+  });
 });
 register("api_req_mission/result", (input, context) => {
-  const materials = context.stateStore.completeMission(num(input.body.api_deck_id, 2));
-  return apiOk({ api_clear_result: 1, api_get_exp: 30, api_get_material: [30, 30, 0, 0], api_member_lv: 1, api_member_exp: 0, api_material: toMaterials(materials) });
+  const claimed = context.stateStore.claimExpedition(num(input.body.api_deck_id, 2));
+  if (!claimed.ok) return apiError(claimed.error, 400);
+  const result = claimed.result as Record<string, any>;
+  const items = Array.isArray(result.items) ? result.items : [];
+  const reward = (index: number) => {
+    const item = items[index];
+    return item
+      ? {
+          api_useitem_id: Number(item.itemId),
+          api_useitem_count: Number(item.count),
+          api_useitem_name: String(item.name ?? "")
+        }
+      : {};
+  };
+  return apiOk({
+    api_quest_name: String(result.questName ?? ""),
+    api_clear_result: Number(result.clearResult ?? 0),
+    api_get_exp: Number(result.getExp ?? 0),
+    api_member_lv: Number(result.memberLevel ?? 1),
+    api_member_exp: Number(result.memberExp ?? 0),
+    api_get_material: Array.isArray(result.materials) ? result.materials : [0, 0, 0, 0],
+    api_ship_id: Array.isArray(result.shipIds) ? result.shipIds : [],
+    api_useitem_flag: [items[0] ? 1 : 0, items[1] ? 1 : 0],
+    api_get_item1: reward(0),
+    api_get_item2: reward(1),
+    api_material: toMaterials(context.stateStore.getSave().materials)
+  });
 });
-register("api_req_mission/return_instruction", (input, context) => apiOk({ api_deck: toDeck(context.stateStore.recallMission(num(input.body.api_deck_id, 2))!) }));
+register("api_req_mission/return_instruction", (input, context) => {
+  const recalled = context.stateStore.recallExpedition(num(input.body.api_deck_id, 2));
+  return recalled.ok
+    ? apiOk({ api_mission: recalled.mission })
+    : apiError(recalled.error, 400);
+});
 
 register("api_req_map/start", (input, context) => {
   const session = context.stateStore.startSortie(num(input.body.api_deck_id, 1), num(input.body.api_maparea_id, 1), num(input.body.api_mapinfo_no, 1));
@@ -782,6 +826,9 @@ function routingNodeData(areaId: number, mapNo: number, cellNo: number) {
 
 function recordedBattlePayload(input: HandlerInput, context: HandlerContext) {
   const battle = createSortieBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+  if (battle.record.support?.arrived) {
+    context.stateStore.recordSupportParticipation(battle.record.support.deckId);
+  }
   context.stateStore.recordSortieBattle(battle.record as unknown as Record<string, unknown>);
   return battle.payload;
 }
@@ -822,6 +869,9 @@ function recordedPracticeNightBattlePayload(context: HandlerContext) {
 
 function recordedCombinedBattlePayload(input: HandlerInput, context: HandlerContext) {
   const battle = createCombinedBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+  if (battle.record.support?.arrived) {
+    context.stateStore.recordSupportParticipation(battle.record.support.deckId);
+  }
   context.stateStore.recordCombinedBattle(battle.record as unknown as Record<string, unknown>);
   return battle.payload;
 }

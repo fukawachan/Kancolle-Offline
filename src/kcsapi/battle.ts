@@ -228,6 +228,13 @@ export type BattleRecord = {
     friendly: Record<number, number>;
     enemy: Record<number, number>;
   };
+  support?: {
+    deckId: number;
+    missionId: number;
+    arrived: boolean;
+    flag: number;
+    info: Record<string, unknown> | null;
+  };
   settlement?: BattleSettlementRecord;
   resultClaimed?: boolean;
 };
@@ -408,6 +415,7 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const beforeF = fixedHp(friendly);
   const beforeE = fixedHp(enemy);
 
+  const support = supportPhase(save, sortie, enemy);
   const kouku = airPhase(friendly, enemy, formation[0], rng);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
@@ -437,7 +445,8 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
     },
     sortie,
     result,
-    aircraftLosses: aircraftLosses(friendly, enemy)
+    aircraftLosses: aircraftLosses(friendly, enemy),
+    support
   };
 
   return {
@@ -511,6 +520,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const beforeE = fixedHp(enemy);
   const beforeECombined = fixedHp(enemyCombined);
 
+  const support = supportPhase(save, sortie, enemy);
   const kouku = airPhase(friendly, enemy, formation[0], rng);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
@@ -554,7 +564,8 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
     },
     sortie,
     result,
-    aircraftLosses: aircraftLosses([...friendly, ...escort], enemy)
+    aircraftLosses: aircraftLosses([...friendly, ...escort], enemy),
+    support
   };
 
   return {
@@ -698,8 +709,8 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_search: [1, 1],
     api_stage_flag: stageFlag,
     api_kouku: kouku,
-    api_support_flag: 0,
-    api_support_info: null,
+    api_support_flag: record.support?.arrived ? record.support.flag : 0,
+    api_support_info: record.support?.arrived ? record.support.info : null,
     api_hougeki1: record.phases.hougeki1,
     api_hougeki2: record.phases.hougeki2,
     api_hougeki3: record.phases.hougeki3,
@@ -1375,6 +1386,93 @@ function sortieBattleContext(save: SaveState, seed: number): BattleSortieContext
   if (!session) return undefined;
   const encounter = selectSortieEncounter(session.areaId, session.mapNo, session.node, seed);
   return encounter ? { ...encounter, seed } : undefined;
+}
+
+function supportPhase(
+  save: SaveState,
+  sortie: BattleSortieContext | undefined,
+  enemy: BattleUnit[]
+): NonNullable<BattleRecord["support"]> | undefined {
+  if (!sortie || save.sortieSession?.areaId !== 5) return undefined;
+  const missionId = sortie.isBoss ? 34 : 33;
+  const run = save.expeditionRuns.find(
+    (item) => item.status === "active" && item.missionId === missionId
+  );
+  if (!run) return undefined;
+  const snapshot = run.snapshot as {
+    ships?: { id: number; masterId: number }[];
+  };
+  const shipIds = snapshot.ships?.map((ship) => ship.id) ?? [];
+  const supportUnits = friendlyUnits(save, shipIds);
+  const rng = new BattleRng(run.seed + sortie.node * 31 + run.supportCount * 997);
+  const arrivalChance = sortie.isBoss ? 0.5 : 0.8;
+  if (!rng.chance(arrivalChance) || supportUnits.length < 2) {
+    return {
+      deckId: run.deckId,
+      missionId,
+      arrived: false,
+      flag: 0,
+      info: null
+    };
+  }
+
+  const carrierCount = supportUnits.filter((unit) => [7, 11, 18].includes(unit.shipType)).length;
+  const shellingCount = supportUnits.filter((unit) => [8, 9, 10, 12].includes(unit.shipType)).length;
+  const flag = carrierCount >= 2 ? 1 : shellingCount >= 2 ? 2 : 3;
+  const damage = normalizeFixed(enemy.map(() => 0), 6, 0);
+  const critical = normalizeFixed(enemy.map(() => 0), 6, 0);
+
+  for (const attacker of supportUnits) {
+    const targets = enemy.filter((unit) => unit.hp > 0);
+    if (targets.length === 0) break;
+    const target = rng.pick(targets);
+    const power = flag === 3 ? attacker.torpedo : attacker.firepower;
+    const dealt = Math.max(1, Math.min(target.hp, Math.floor(power * (0.2 + rng.next() * 0.25))));
+    target.hp = Math.max(0, target.hp - dealt);
+    damage[target.position - 1] += dealt;
+    critical[target.position - 1] = rng.chance(0.15) ? 2 : 1;
+  }
+
+  const supportShipIds = supportUnits.map((unit) => unit.masterId);
+  const info = flag === 1
+    ? {
+        api_support_airatack: {
+          api_deck_id: run.deckId,
+          api_ship_id: [-1, ...supportShipIds],
+          api_stage_flag: [0, 0, 1],
+          api_kouku: {
+            api_plane_from: [[1]],
+            api_stage1: null,
+            api_stage2: null,
+            api_stage3: {
+              api_frai_flag: normalizeFixed([], 6, 0),
+              api_erai_flag: normalizeFixed([], 6, 0),
+              api_fbak_flag: normalizeFixed([], 6, 0),
+              api_ebak_flag: normalizeFixed([], 6, 0),
+              api_fcl_flag: normalizeFixed([], 6, 0),
+              api_ecl_flag: critical,
+              api_fdam: normalizeFixed([], 6, 0),
+              api_edam: damage
+            }
+          }
+        }
+      }
+    : {
+        api_support_hourai: {
+          api_deck_id: run.deckId,
+          api_ship_id: [-1, ...supportShipIds],
+          api_undressing_flag: normalizeFixed(supportUnits.map(() => 1), 6, 0),
+          api_cl_list: critical,
+          api_damage: damage
+        }
+      };
+  return {
+    deckId: run.deckId,
+    missionId,
+    arrived: true,
+    flag,
+    info
+  };
 }
 
 function enemyUnits(shipIds: readonly number[]) {

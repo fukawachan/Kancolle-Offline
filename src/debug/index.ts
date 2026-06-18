@@ -10,6 +10,11 @@ import {
   handleRemoveShip,
   handleAddSlotItem,
   handleRemoveSlotItem,
+  handleConfigureExpeditions,
+  handleExpeditionStatus,
+  handleForceCompleteExpedition,
+  handleResetExpeditions,
+  handleUnlockAllExpeditions,
 } from "./handlers.js";
 import { renderDebugPanel } from "./panel.js";
 
@@ -122,6 +127,56 @@ export function registerDebugRoutes(
       const body = (request.body ?? {}) as Record<string, unknown>;
       const result = handleRemoveSlotItem(body, stateStore);
       return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.get("/debug/api/expeditions/status", async (_request, reply) => {
+    try {
+      if (!stateStore.hasAccount()) return sendApi(reply, apiError("No account registered.", 400));
+      return sendApi(reply, handleExpeditionStatus(stateStore));
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.post("/debug/api/expeditions/unlock-all", async (request, reply) => {
+    try {
+      return sendApi(
+        reply,
+        handleUnlockAllExpeditions((request.body ?? {}) as Record<string, unknown>, stateStore)
+      );
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.post("/debug/api/expeditions/configure", async (request, reply) => {
+    try {
+      return sendApi(
+        reply,
+        handleConfigureExpeditions((request.body ?? {}) as Record<string, unknown>, stateStore)
+      );
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.post("/debug/api/expeditions/force-complete", async (request, reply) => {
+    try {
+      return sendApi(
+        reply,
+        handleForceCompleteExpedition((request.body ?? {}) as Record<string, unknown>, stateStore)
+      );
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.post("/debug/api/expeditions/reset", async (_request, reply) => {
+    try {
+      return sendApi(reply, handleResetExpeditions(stateStore));
     } catch (err) {
       return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
     }

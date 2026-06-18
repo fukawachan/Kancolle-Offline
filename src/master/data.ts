@@ -8,6 +8,10 @@ import {
   SHIP_TYPES,
   SLOT_ITEMS
 } from "./generated-data.js";
+import {
+  EXPEDITION_MASTERS,
+  EXPEDITION_USEITEM_MASTERS,
+} from "./expedition-data.js";
 
 export function mapMasterId(areaId: number, mapNo: number) {
   return areaId * 10 + mapNo;
@@ -81,10 +85,7 @@ export const masterData = {
   api_mst_slotitem: SLOT_ITEMS,
   api_mst_slotitem_equiptype: EQUIP_TYPES,
   api_mst_stype: SHIP_TYPES,
-  api_mst_mission: [
-    { api_id: 1, api_maparea_id: 1, api_name: "Practice Voyage", api_time: 15, api_deck_num: 2, api_difficulty: 1 },
-    { api_id: 2, api_maparea_id: 1, api_name: "Long Distance Training", api_time: 30, api_deck_num: 2, api_difficulty: 1 }
-  ],
+  api_mst_mission: EXPEDITION_MASTERS,
   api_mst_maparea: MAP_AREAS,
   api_mst_mapinfo: NORMAL_MAP_INFOS,
   api_mst_furniture: [
@@ -96,21 +97,7 @@ export const masterData = {
     furnitureMaster(6, "Local Object", 5)
   ],
   api_mst_furnituregraph: [],
-  api_mst_useitem: [
-    { api_id: 31, api_usetype: 0, api_category: 0, api_name: "燃料", api_description: ["艦隊運用に必要な資源です。"] },
-    { api_id: 32, api_usetype: 0, api_category: 0, api_name: "弾薬", api_description: ["戦闘や補給に必要な資源です。"] },
-    { api_id: 33, api_usetype: 0, api_category: 0, api_name: "鋼材", api_description: ["建造や修理に必要な資源です。"] },
-    { api_id: 34, api_usetype: 0, api_category: 0, api_name: "ボーキサイト", api_description: ["航空機の運用に必要な資源です。"] },
-    { api_id: 1, api_usetype: 2, api_category: 1, api_name: "Instant Repair", api_description: ["Repairs one ship instantly."] },
-    { api_id: 2, api_usetype: 2, api_category: 1, api_name: "Instant Build", api_description: ["Completes one build instantly."] },
-    { api_id: 3, api_usetype: 2, api_category: 1, api_name: "Dev Material", api_description: ["Used for crafting."] },
-    { api_id: 4, api_usetype: 2, api_category: 1, api_name: "Improvement Material", api_description: ["Used for equipment improvement."] },
-    { api_id: 49, api_usetype: 2, api_category: 1, api_name: "ドック開放キー", api_description: ["入渠ドックを開放するためのアイテムです。"] },
-    { api_id: 54, api_usetype: 4, api_category: 1, api_name: "Mamiya", api_description: ["Restores fleet morale."] },
-    { api_id: 55, api_usetype: 2, api_category: 1, api_name: "ケッコン指輪", api_description: ["艦娘とケッコンカッコカリするための指輪です。"] },
-    { api_id: 59, api_usetype: 4, api_category: 1, api_name: "Irako", api_description: ["Restores ship morale."] },
-    { api_id: 64, api_usetype: 2, api_category: 1, api_name: "補強増設", api_description: ["艦娘のスロットを増設するためのアイテムです。"] }
-  ],
+  api_mst_useitem: EXPEDITION_USEITEM_MASTERS,
   api_mst_payitem: [],
   api_mst_bgm: [
     { api_id: 1, api_name: "母港", api_rarity: 1 },
