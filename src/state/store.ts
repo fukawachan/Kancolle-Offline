@@ -76,11 +76,13 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
+const MATERIAL_RECOVERY_INTERVAL_MS = 180_000;
+const BASIC_MATERIAL_CAP = 1_000_000;
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -1233,10 +1235,19 @@ function migrate(db: Database.Database) {
   if (currentVersion < 5) migrateToV5(db);
   if (currentVersion < 6) migrateToV6(db);
   if (currentVersion < 7) migrateToV7(db);
+  if (currentVersion < 8) migrateToV8(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
   repairMaps(db);
+}
+
+function migrateToV8(db: Database.Database) {
+  if (!columnExists(db, "materials", "last_recovery_at")) {
+    db.prepare("ALTER TABLE materials ADD COLUMN last_recovery_at INTEGER NOT NULL DEFAULT 0").run();
+    db.prepare("UPDATE materials SET last_recovery_at = ? WHERE last_recovery_at = 0").run(Date.now());
+  }
+  settleMaterialRecovery(db);
 }
 
 function migrateToV7(db: Database.Database) {
@@ -1413,7 +1424,8 @@ function createSchema(db: Database.Database) {
       build_kit INTEGER NOT NULL,
       repair_kit INTEGER NOT NULL,
       devmat INTEGER NOT NULL,
-      screw INTEGER NOT NULL
+      screw INTEGER NOT NULL,
+      last_recovery_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS ships (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1548,8 +1560,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       "INSERT INTO players (id, world_id, nickname, level, exp, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, 0, ?, 100, ?, 1, 0, 1)"
     ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions));
     db.prepare(
-      "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5)"
-    ).run();
+      "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw, last_recovery_at) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5, ?)"
+    ).run(Date.now());
 
     for (const masterId of [9, 10, 1, 2]) {
       const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
@@ -1609,6 +1621,7 @@ function getSave(db: Database.Database): SaveState {
   }
   settleCompletedRepairs(db);
   syncExpeditionDeckStates(db);
+  settleMaterialRecovery(db);
 
   return {
     player: mapPlayer(player),
@@ -1871,20 +1884,65 @@ function addMaterials(db: Database.Database, delta: MaterialDelta) {
 }
 
 function updateMaterials(db: Database.Database, delta: MaterialDelta, sign: 1 | -1) {
+  settleMaterialRecovery(db);
   const current = mapMaterials(db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row);
   const next: Materials = {
-    fuel: Math.max(0, current.fuel + sign * (delta.fuel || 0)),
-    ammo: Math.max(0, current.ammo + sign * (delta.ammo || 0)),
-    steel: Math.max(0, current.steel + sign * (delta.steel || 0)),
-    bauxite: Math.max(0, current.bauxite + sign * (delta.bauxite || 0)),
-    buildKit: Math.max(0, current.buildKit + sign * (delta.buildKit || 0)),
-    repairKit: Math.max(0, current.repairKit + sign * (delta.repairKit || 0)),
-    devmat: Math.max(0, current.devmat + sign * (delta.devmat || 0)),
-    screw: Math.max(0, current.screw + sign * (delta.screw || 0))
+    fuel: clampBasicMaterial(current.fuel + sign * (delta.fuel || 0)),
+    ammo: clampBasicMaterial(current.ammo + sign * (delta.ammo || 0)),
+    steel: clampBasicMaterial(current.steel + sign * (delta.steel || 0)),
+    bauxite: clampBasicMaterial(current.bauxite + sign * (delta.bauxite || 0)),
+    buildKit: clampMaterialCount(current.buildKit + sign * (delta.buildKit || 0)),
+    repairKit: clampMaterialCount(current.repairKit + sign * (delta.repairKit || 0)),
+    devmat: clampMaterialCount(current.devmat + sign * (delta.devmat || 0)),
+    screw: clampMaterialCount(current.screw + sign * (delta.screw || 0))
   };
   db.prepare(
     "UPDATE materials SET fuel = ?, ammo = ?, steel = ?, bauxite = ?, build_kit = ?, repair_kit = ?, devmat = ?, screw = ? WHERE player_id = 1"
   ).run(next.fuel, next.ammo, next.steel, next.bauxite, next.buildKit, next.repairKit, next.devmat, next.screw);
+}
+
+function settleMaterialRecovery(db: Database.Database, now = Date.now()) {
+  const row = db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row | undefined;
+  if (!row) return;
+
+  const nowMs = Math.trunc(now);
+  const lastRaw = Number(row.last_recovery_at);
+  const hasValidLastRecovery = Number.isFinite(lastRaw) && lastRaw > 0;
+  const lastRecoveryAt = hasValidLastRecovery ? Math.trunc(lastRaw) : nowMs;
+  const elapsed = Math.max(0, nowMs - lastRecoveryAt);
+  const ticks = Math.floor(elapsed / MATERIAL_RECOVERY_INTERVAL_MS);
+  const nextRecoveryAt = ticks > 0
+    ? lastRecoveryAt + ticks * MATERIAL_RECOVERY_INTERVAL_MS
+    : lastRecoveryAt;
+  const next = {
+    fuel: clampBasicMaterial(safeNum(row.fuel) + ticks * 3),
+    ammo: clampBasicMaterial(safeNum(row.ammo) + ticks * 3),
+    steel: clampBasicMaterial(safeNum(row.steel) + ticks * 3),
+    bauxite: clampBasicMaterial(safeNum(row.bauxite) + ticks)
+  };
+  const changed =
+    !hasValidLastRecovery ||
+    ticks > 0 ||
+    next.fuel !== safeNum(row.fuel) ||
+    next.ammo !== safeNum(row.ammo) ||
+    next.steel !== safeNum(row.steel) ||
+    next.bauxite !== safeNum(row.bauxite);
+
+  if (!changed) return;
+  db.prepare(`
+    UPDATE materials
+    SET fuel = ?, ammo = ?, steel = ?, bauxite = ?, last_recovery_at = ?
+    WHERE player_id = 1
+  `).run(next.fuel, next.ammo, next.steel, next.bauxite, nextRecoveryAt);
+}
+
+function clampBasicMaterial(value: number) {
+  return Math.min(BASIC_MATERIAL_CAP, clampMaterialCount(value));
+}
+
+function clampMaterialCount(value: number) {
+  const n = Math.trunc(Number(value));
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
 }
 
 function hasMaterials(materials: Materials, delta: MaterialDelta) {

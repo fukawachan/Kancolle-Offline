@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPracticeBattle } from "../src/kcsapi/battle.js";
 import { masterData } from "../src/master/data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
@@ -18,6 +18,7 @@ describe("SQLite state store", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     store.close();
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -136,6 +137,93 @@ describe("SQLite state store", () => {
     expect(after.materials.devmat).toBe(before.materials.devmat - 1);
     expect(after.slotItems.find((item) => item.id === created.id)).toBeTruthy();
     expect(after.ships.find((ship) => ship.id === 1)?.slotIds[0]).toBe(created.id);
+  });
+
+  it("recovers base materials from elapsed offline time after reopening the save", () => {
+    const startedAt = Date.UTC(2026, 5, 18, 0, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    store.registerAccount(15);
+    store.db.prepare("UPDATE materials SET fuel = 100, ammo = 200, steel = 300, bauxite = 400 WHERE player_id = 1").run();
+    store.close();
+
+    vi.setSystemTime(startedAt + 6 * 60_000 + 30_000);
+    store = createStateStore({ databasePath });
+    const recovered = store.getSave().materials;
+
+    expect(recovered).toMatchObject({
+      fuel: 106,
+      ammo: 206,
+      steel: 306,
+      bauxite: 402
+    });
+  });
+
+  it("waits for a full recovery tick and leaves non-basic materials unchanged", () => {
+    const startedAt = Date.UTC(2026, 5, 18, 1, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    store.registerAccount(15);
+    store.db.prepare(`
+      UPDATE materials
+      SET fuel = 10, ammo = 20, steel = 30, bauxite = 40,
+          build_kit = 7, repair_kit = 8, devmat = 9, screw = 10
+      WHERE player_id = 1
+    `).run();
+
+    vi.setSystemTime(startedAt + 180_000 - 1);
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 10,
+      ammo: 20,
+      steel: 30,
+      bauxite: 40,
+      buildKit: 7,
+      repairKit: 8,
+      devmat: 9,
+      screw: 10
+    });
+
+    vi.setSystemTime(startedAt + 180_000);
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 13,
+      ammo: 23,
+      steel: 33,
+      bauxite: 41,
+      buildKit: 7,
+      repairKit: 8,
+      devmat: 9,
+      screw: 10
+    });
+  });
+
+  it("clamps naturally recovered base materials at one million", () => {
+    const startedAt = Date.UTC(2026, 5, 18, 2, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    store.registerAccount(15);
+    store.db.prepare("UPDATE materials SET fuel = 999999, ammo = 999998, steel = 999997, bauxite = 999999 WHERE player_id = 1").run();
+
+    vi.setSystemTime(startedAt + 180_000);
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 1_000_000,
+      ammo: 1_000_000,
+      steel: 1_000_000,
+      bauxite: 1_000_000
+    });
+  });
+
+  it("does not bank recovery ticks while base materials are capped", () => {
+    const startedAt = Date.UTC(2026, 5, 18, 3, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(startedAt);
+    store.registerAccount(15);
+    store.db.prepare("UPDATE materials SET fuel = 1000000, ammo = 1000000, steel = 1000000, bauxite = 1000000 WHERE player_id = 1").run();
+
+    vi.setSystemTime(startedAt + 12 * 180_000);
+    expect(store.getSave().materials.fuel).toBe(1_000_000);
+
+    store.db.prepare("UPDATE materials SET fuel = 999990 WHERE player_id = 1").run();
+    expect(store.getSave().materials.fuel).toBe(999_990);
   });
 
   it("persists current aircraft counts and restores them during supply", () => {

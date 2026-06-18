@@ -23,6 +23,8 @@ describe("local kcsapi endpoints", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
     await app.close();
     store.close();
     await rm(tempDir, { recursive: true, force: true });
@@ -400,6 +402,39 @@ describe("local kcsapi endpoints", () => {
     expect(craft.api_material).toEqual([990, 990, 990, 990, 10, 10, 49, 5]);
     expect(destroyItem.api_get_material).toEqual([1, 1, 2, 0]);
     expect(destroyShip.api_material).toEqual([992, 992, 994, 990, 10, 10, 49, 5]);
+  });
+
+  it("settles natural material recovery consistently through port and material endpoints", async () => {
+    const baseline = Date.now();
+    store.db.prepare("UPDATE materials SET fuel = 100, ammo = 200, steel = 300, bauxite = 400 WHERE player_id = 1").run();
+    vi.spyOn(Date, "now").mockReturnValue(baseline + 6 * 60_000 + 30_000);
+
+    const port = (await post("api_port/port")).json().api_data;
+    const material = (await post("api_get_member/material")).json().api_data;
+
+    expect(port.api_material.slice(0, 4)).toEqual([
+      { api_member_id: 1, api_id: 1, api_value: 106 },
+      { api_member_id: 1, api_id: 2, api_value: 206 },
+      { api_member_id: 1, api_id: 3, api_value: 306 },
+      { api_member_id: 1, api_id: 4, api_value: 402 }
+    ]);
+    expect(material.slice(0, 4)).toEqual(port.api_material.slice(0, 4));
+  });
+
+  it("keeps material action responses within the one million resource cap", async () => {
+    const baseline = Date.now();
+    store.db.prepare("UPDATE materials SET fuel = 999999, ammo = 999999, steel = 999999, bauxite = 999999 WHERE player_id = 1").run();
+    vi.spyOn(Date, "now").mockReturnValue(baseline + 180_000);
+
+    const charge = (await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3 })).json().api_data;
+
+    expect(charge.api_material.slice(0, 4)).toEqual([1_000_000, 1_000_000, 1_000_000, 1_000_000]);
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 1_000_000,
+      ammo: 1_000_000,
+      steel: 1_000_000,
+      bauxite: 1_000_000
+    });
   });
 
   it("honors every charge kind and aircraft supply flag", async () => {
