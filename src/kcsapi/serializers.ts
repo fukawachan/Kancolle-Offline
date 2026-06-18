@@ -209,7 +209,10 @@ export function toSlotItem(item: SlotItem) {
 }
 
 export function toDeck(deck: Deck) {
-  const shipIds = [...deck.shipIds, ...Array(6).fill(-1)].slice(0, 6);
+  const shipIds = [
+    ...deck.shipIds.filter((id) => id > 0),
+    ...Array(6).fill(-1)
+  ].slice(0, 6);
   return {
     api_member_id: 1,
     api_id: deck.id,

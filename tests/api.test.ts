@@ -820,9 +820,11 @@ describe("local kcsapi endpoints", () => {
     expect(ship3.api_slot_data).toEqual(unsetSlot);
 
     expect(singleDeck.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1]);
-    expect(singleDeck.api_ship_data.map((ship: any) => ship.api_id).sort()).toEqual([1, 2]);
+    expect(singleDeck.api_ship_data.map((ship: any) => ship.api_id).sort()).toEqual([1, 2, 3, 4]);
     expect(multipleDecks.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1, 2]);
+    expect(multipleDecks.api_ship_data.map((ship: any) => ship.api_id).sort()).toEqual([1, 2, 3, 4]);
     expect(defaultDecks.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1, 2, 3, 4]);
+    expect(defaultDecks.api_ship_data.map((ship: any) => ship.api_id).sort()).toEqual([1, 2, 3, 4]);
     expect(invalidDecks).toEqual({ api_deck_data: [], api_ship_data: [] });
   });
 
@@ -866,9 +868,10 @@ describe("local kcsapi endpoints", () => {
     const allAssignedShips = decks.flatMap((deck: any) => deck.api_ship).filter((id: number) => id > 0);
 
     expect(firstDeck.api_ship).toHaveLength(6);
+    expect(firstDeck.api_ship).toEqual([2, -1, -1, -1, -1, -1]);
+    expect(firstDeck.api_flagship).toBe(2);
     expect(secondDeck.api_ship).toEqual([1, -1, -1, -1, -1, -1]);
     expect(firstDeck.api_ship).not.toContain(1);
-    expect(firstDeck.api_ship).toContain(2);
     expect(new Set(allAssignedShips).size).toBe(allAssignedShips.length);
   });
 

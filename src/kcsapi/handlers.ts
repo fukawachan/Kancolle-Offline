@@ -97,11 +97,12 @@ register("api_get_member/ship_deck", (input, context) => {
   const save = context.stateStore.getSave();
   const rawDeckIds = input.body.api_deck_rid;
   const requestedDeckIds = csvNums(rawDeckIds, []);
-  const decks = rawDeckIds == null || rawDeckIds === "" ? save.decks : save.decks.filter((deck) => requestedDeckIds.includes(deck.id));
-  const shipIds = new Set(decks.flatMap((deck) => deck.shipIds).filter((shipId) => shipId > 0));
+  const hasDeckFilter = rawDeckIds != null && rawDeckIds !== "";
+  const decks = hasDeckFilter ? save.decks.filter((deck) => requestedDeckIds.includes(deck.id)) : save.decks;
+  const ships = hasDeckFilter && decks.length === 0 ? [] : save.ships;
   return apiOk({
     api_deck_data: decks.map(toDeck),
-    api_ship_data: save.ships.filter((ship) => shipIds.has(ship.id)).map((s) => toShip(s, save.slotItems))
+    api_ship_data: ships.map((s) => toShip(s, save.slotItems))
   });
 });
 register("api_get_member/slot_item", (_input, context) => apiOk(context.stateStore.getSave().slotItems.map(toSlotItem)));

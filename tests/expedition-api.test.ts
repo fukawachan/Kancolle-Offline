@@ -93,6 +93,22 @@ describe("expedition kcsapi contract", () => {
     });
   });
 
+  it("keeps expedition fleet ship models available during scoped ship_deck refreshes", async () => {
+    await post("api_req_mission/start", {
+      api_deck_id: 2,
+      api_mission_id: 1,
+      api_serial_cid: "supply-scene-refresh",
+    });
+
+    const scoped = (await post("api_get_member/ship_deck", { api_deck_rid: "1" })).json().api_data;
+    const defaultDecks = (await post("api_get_member/ship_deck")).json().api_data;
+
+    expect(scoped.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1]);
+    expect(scoped.api_ship_data.map((ship: any) => ship.api_id)).toEqual(expect.arrayContaining([1, 2]));
+    expect(defaultDecks.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1, 2, 3, 4]);
+    expect(defaultDecks.api_ship_data.map((ship: any) => ship.api_id)).toEqual(expect.arrayContaining([1, 2]));
+  });
+
   it("publishes generic expedition reward inventory through useitem", async () => {
     store.db.prepare("INSERT INTO use_items (id, count) VALUES (59, 2)").run();
     const response = await post("api_get_member/useitem");
