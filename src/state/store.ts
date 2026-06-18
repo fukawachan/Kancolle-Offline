@@ -740,20 +740,10 @@ function recallExpedition(db: Database.Database, deckId: number) {
 
 function forceCompleteExpedition(db: Database.Database, deckId: number) {
   const now = expeditionNow(db);
-  db.prepare("UPDATE expedition_runs SET complete_at = ? WHERE deck_id = ? AND status != 'claimed'")
+  const changed = db.prepare("UPDATE expedition_runs SET complete_at = ? WHERE deck_id = ? AND status != 'claimed'")
     .run(now, deckId);
-  const row = db.prepare("SELECT mission_id, status FROM expedition_runs WHERE deck_id = ?").get(deckId) as Row | undefined;
-  if (row) {
-    db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?").run(
-      JSON.stringify({
-        state: String(row.status) === "returning" ? 2 : 1,
-        missionId: Number(row.mission_id),
-        completeTime: now
-      }),
-      deckId
-    );
-  }
-  return row != null;
+  syncExpeditionDeckStates(db);
+  return changed.changes > 0;
 }
 
 function finishSupportExpeditions(db: Database.Database) {
@@ -1618,6 +1608,7 @@ function getSave(db: Database.Database): SaveState {
     throw new Error("Local Kancolle account has not been registered. Select a world first.");
   }
   settleCompletedRepairs(db);
+  syncExpeditionDeckStates(db);
 
   return {
     player: mapPlayer(player),
@@ -1909,6 +1900,33 @@ function settleCompletedRepairs(db: Database.Database, now = Date.now()) {
 
   const tx = db.transaction(() => {
     for (const row of completedDocks) finishRepairDock(db, mapRepairDock(row));
+  });
+  tx();
+}
+
+function syncExpeditionDeckStates(db: Database.Database) {
+  const now = expeditionNow(db);
+  const rows = db.prepare(`
+    SELECT deck_id, mission_id, status, complete_at
+    FROM expedition_runs
+    WHERE status IN ('active', 'returning')
+  `).all() as Row[];
+  if (rows.length === 0) return;
+
+  const update = db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?");
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      const completeAt = Number(row.complete_at);
+      const state = String(row.status) === "returning" || completeAt <= now ? 2 : 1;
+      update.run(
+        JSON.stringify({
+          state,
+          missionId: Number(row.mission_id),
+          completeTime: completeAt
+        }),
+        Number(row.deck_id)
+      );
+    }
   });
   tx();
 }

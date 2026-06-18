@@ -92,6 +92,58 @@ describe("persisted expedition lifecycle", () => {
     expect(store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(1);
   });
 
+  it("marks naturally completed expeditions as ready without settling rewards", () => {
+    const before = store.getSave().materials.ammo;
+    const started = store.startExpedition(2, 1, "natural-complete");
+    if (!started.ok) throw new Error(started.error);
+
+    store.setExpeditionClockOffset(started.run.completeAt - Date.now() + 1);
+    const completed = store.getSave();
+
+    expect(completed.decks[1].missionState).toEqual({
+      state: 2,
+      missionId: 1,
+      completeTime: started.run.completeAt,
+    });
+    expect(completed.expeditionRuns[0]).toMatchObject({
+      deckId: 2,
+      missionId: 1,
+      status: "active",
+    });
+    expect(completed.materials.ammo).toBe(before);
+    expect(store.getSave().materials.ammo).toBe(before);
+
+    const claimed = store.claimExpedition(2);
+    expect(claimed.ok).toBe(true);
+    const afterClaim = store.getSave().materials.ammo;
+    const duplicate = store.claimExpedition(2);
+
+    expect(afterClaim).toBeGreaterThan(before);
+    expect(duplicate).toEqual(claimed);
+    expect(store.getSave().materials.ammo).toBe(afterClaim);
+  });
+
+  it("keeps recalled fleet deck state ready while it is returning", () => {
+    const started = store.startExpedition(2, 1, "returning-state");
+    if (!started.ok) throw new Error(started.error);
+
+    store.setExpeditionClockOffset(6 * 60_000);
+    const recalled = store.recallExpedition(2);
+    if (!recalled.ok) throw new Error(recalled.error);
+
+    const save = store.getSave();
+    expect(save.decks[1].missionState).toEqual({
+      state: 2,
+      missionId: 1,
+      completeTime: recalled.completeAt,
+    });
+    expect(save.expeditionRuns[0]).toMatchObject({
+      deckId: 2,
+      missionId: 1,
+      status: "returning",
+    });
+  });
+
   it("blocks mutations involving a fleet that is away", () => {
     store.db.prepare("UPDATE ships SET fuel = 1 WHERE id = 1").run();
     expect(store.startExpedition(2, 1, "locked-fleet").ok).toBe(true);

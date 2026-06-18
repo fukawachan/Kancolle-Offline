@@ -64,7 +64,23 @@ describe("expedition kcsapi contract", () => {
       api_expired_flag: 0,
     });
 
+    const startedPort = (await post("api_port/port")).json().api_data;
+    expect(startedPort.api_deck_port.find((deck: any) => deck.api_id === 2).api_mission).toEqual([
+      1,
+      1,
+      expect.any(Number),
+      0,
+    ]);
+
     store.forceCompleteExpedition(2);
+    const completedPort = (await post("api_port/port")).json().api_data;
+    expect(completedPort.api_deck_port.find((deck: any) => deck.api_id === 2).api_mission).toEqual([
+      2,
+      1,
+      expect.any(Number),
+      0,
+    ]);
+
     const result = await post("api_req_mission/result", { api_deck_id: 2 });
     expect(result.json().api_data).toMatchObject({
       api_quest_name: "練習航海",
@@ -78,6 +94,14 @@ describe("expedition kcsapi contract", () => {
       api_get_item1: expect.anything(),
       api_get_item2: expect.anything(),
     });
+
+    const settledPort = (await post("api_port/port")).json().api_data;
+    expect(settledPort.api_deck_port.find((deck: any) => deck.api_id === 2).api_mission).toEqual([
+      0,
+      0,
+      0,
+      0,
+    ]);
   });
 
   it("returns the raw mission array expected by return_instruction", async () => {
