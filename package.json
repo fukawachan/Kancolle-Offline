@@ -7,6 +7,7 @@
     "dev": "tsx watch src/cli.ts",
     "start": "tsx src/cli.ts",
     "generate:master-data": "node scripts/generate-master-data.cjs",
+    "generate:quest-data": "node scripts/generate-quest-data.mjs",
     "generate:expedition-data": "node scripts/generate-expedition-data.mjs",
     "generate:sortie-data": "node scripts/generate-sortie-data.mjs",
     "generate:routing-data": "node scripts/generate-routing-data.mjs",

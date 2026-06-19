@@ -18,7 +18,6 @@ import type {
   FurnitureState,
   Materials,
   Player,
-  Quest,
   RepairDock,
   SaveState,
   Ship,
@@ -26,6 +25,7 @@ import type {
 } from "../state/types.js";
 import { shipApiExp } from "./experience.js";
 import { repairCost, repairTimeMs } from "./repair.js";
+import { buildQuestList, type QuestListOptions } from "./quests.js";
 
 export const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
 
@@ -264,27 +264,8 @@ export function toBuildDock(dock: BuildDock) {
   };
 }
 
-export function toQuestList(quests: Quest[]) {
-  return {
-    api_count: quests.length,
-    api_completed_kind: 0,
-    api_page_count: 1,
-    api_disp_page: 1,
-    api_list: quests.map((quest) => ({
-      api_no: quest.id,
-      api_category: 1,
-      api_type: 1,
-      api_state: quest.completed ? 3 : quest.active ? 2 : 1,
-      api_title: `Local Quest ${quest.id}`,
-      api_detail: "Offline local quest placeholder.",
-      api_voice_id: 0,
-      api_get_material: [10, 10, 0, 0],
-      api_bonus_flag: 0,
-      api_progress_flag: quest.progress
-    })),
-    api_exec_count: quests.filter((quest) => quest.active).length,
-    api_exec_type: 0
-  };
+export function toQuestList(save: SaveState, options: QuestListOptions = {}) {
+  return buildQuestList(save, options);
 }
 
 export function toFurniture(furniture: FurnitureState, resourceManifest?: ResourceManifest) {
@@ -315,7 +296,7 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
     api_basic: toBasic(save.player, save.furniture, resourceManifest),
     api_log: [],
     api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),
-    api_parallel_quest_count: save.quests.filter((quest) => quest.active).length,
+    api_parallel_quest_count: save.quests.filter((quest) => quest.active === 1 && quest.completed !== 1).length,
     api_combined_flag: save.player.combinedFleet
   };
 }

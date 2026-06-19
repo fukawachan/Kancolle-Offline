@@ -125,7 +125,7 @@ register("api_get_member/ndock", (_input, context) => {
   const save = context.stateStore.getSave();
   return apiOk(save.repairDocks.map((dock) => toRepairDock(dock, save.ships)));
 });
-register("api_get_member/questlist", (_input, context) => apiOk(toQuestList(context.stateStore.getSave().quests)));
+register("api_get_member/questlist", (input, context) => apiOk(toQuestList(context.stateStore.getSave(), questListOptions(input))));
 register("api_get_member/mapinfo", (_input, context) =>
   apiOk({
     api_map_info: toMapInfo(context.stateStore.getSave()),
@@ -274,12 +274,22 @@ register("api_req_kaisou/preset_slot_update_lock", () => apiOk({}));
 register("api_req_kaisou/preset_slot_update_exslot_flag", () => apiOk({}));
 register("api_req_kaisou/can_preset_slot_select", () => apiOk({ api_select_flag: 1 }));
 
-register("api_req_quest/start", (input, context) => apiOk(toQuestList([context.stateStore.setQuestState(num(input.body.api_quest_id, 101), 1)!])));
-register("api_req_quest/stop", (input, context) => apiOk(toQuestList([context.stateStore.setQuestState(num(input.body.api_quest_id, 101), 0)!])));
+register("api_req_quest/start", (input, context) => {
+  const started = context.stateStore.startQuest(num(input.body.api_quest_id, 101));
+  return started ? apiOk(toQuestList(context.stateStore.getSave(), questListOptions(input))) : apiError("Quest is locked or unknown", 400);
+});
+register("api_req_quest/stop", (input, context) => {
+  const stopped = context.stateStore.stopQuest(num(input.body.api_quest_id, 101));
+  return stopped ? apiOk(toQuestList(context.stateStore.getSave(), questListOptions(input))) : apiError("Quest is unknown or already complete", 400);
+});
 register("api_req_quest/clearitemget", (input, context) => {
-  const quest = context.stateStore.setQuestState(num(input.body.api_quest_id, 101), 0, 1)!;
-  context.stateStore.addMaterials({ fuel: 10, ammo: 10 });
-  return apiOk({ api_quest: toQuestList([quest]), api_material: toMaterials(context.stateStore.getSave().materials) });
+  const cleared = context.stateStore.clearQuest(num(input.body.api_quest_id, 101), selectedRewardNos(input));
+  if (!cleared.ok) return apiError(cleared.error, 400);
+  return apiOk({
+    api_quest: toQuestList(cleared.save, questListOptions(input)),
+    api_material: toMaterials(cleared.save.materials),
+    api_bounus: cleared.bonuses.map(toQuestBonus)
+  });
 });
 
 register("api_req_furniture/change", (input, context) => {
@@ -336,6 +346,7 @@ register("api_req_kousyou/createitem", (input, context) => {
   const recipe = recipeDelta(input.body);
   context.stateStore.consumeMaterials({ ...recipe, devmat: 1 });
   const item = context.stateStore.createSlotItem(num(input.body.api_item1, 10) >= 20 ? 2 : 1);
+  context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "equipment" });
   return apiOk({ api_create_flag: 1, api_shizai_flag: 1, api_slot_item: toSlotItem(item), api_material: toMaterialValues(context.stateStore.getSave().materials) });
 });
 register("api_req_kousyou/destroyitem2", (input, context) => {
@@ -349,6 +360,7 @@ register("api_req_kousyou/destroyitem2", (input, context) => {
 register("api_req_kousyou/createship", (input, context) => {
   context.stateStore.consumeMaterials(recipeDelta(input.body));
   const dock = context.stateStore.startBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1), input.body, num(input.body.api_item1, 30) > 99 ? 54 : 9)!;
+  context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "ship" });
   return apiOk({ api_result: 1, api_kdock: toBuildDock(dock), api_material: toMaterialValues(context.stateStore.getSave().materials) });
 });
 register("api_req_kousyou/createship_speedchange", (input, context) => apiOk({ api_kdock: toBuildDock(context.stateStore.speedBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1))!) }));
@@ -364,6 +376,7 @@ register("api_req_kousyou/remodel_slotlist_detail", () => apiOk({ api_certain_bu
 register("api_req_kousyou/remodel_slot", (input, context) => {
   const itemId = num(input.body.api_slot_id ?? input.body.api_item_id, 1);
   context.stateStore.lockSlotItem(itemId, 1);
+  context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "improvement" });
   return apiOk({ api_remodel_flag: 1, api_after_slot: context.stateStore.getSave().slotItems.map(toSlotItem).find((item) => item.api_id === itemId) });
 });
 
@@ -582,6 +595,31 @@ function register(path: string, handler: KcsHandler) {
 
 function normalizeApiPath(path: string) {
   return path.replace(/^\/+/, "").replace(/^kcsapi\//, "").replace(/\/+$/, "");
+}
+
+function questListOptions(input: HandlerInput) {
+  return {
+    tabId: num(input.body.api_tab_id ?? input.query.api_tab_id, 0),
+    pageNo: num(input.body.api_page_no ?? input.body.api_page ?? input.query.api_page_no ?? input.query.api_page, 1)
+  };
+}
+
+function selectedRewardNos(input: HandlerInput) {
+  const values: number[] = [];
+  for (let index = 1; index <= 4; index += 1) {
+    const key = index === 1 ? "api_select_no" : `api_select_no${index}`;
+    if (input.body[key] != null && input.body[key] !== "") values.push(num(input.body[key], 1));
+  }
+  return values;
+}
+
+function toQuestBonus(bonus: { type: string; name: string; count: number; item?: Record<string, unknown> }) {
+  return {
+    api_type: bonus.type,
+    api_count: bonus.count,
+    api_name: bonus.name,
+    api_item: bonus.item ?? {}
+  };
 }
 
 async function recordUnknown(input: HandlerInput, context: HandlerContext) {

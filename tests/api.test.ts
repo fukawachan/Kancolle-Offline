@@ -679,7 +679,7 @@ describe("local kcsapi endpoints", () => {
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_locked).toBe(1);
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_fuel).toBeGreaterThan(0);
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_slot[0]).toBe(1);
-    expect(quests.api_list.find((quest: any) => quest.api_no === 101).api_state).toBe(2);
+    expect(quests.api_list.find((quest: any) => quest.api_no === 101).api_state).toBe(3);
     expect(port.api_basic.api_furniture).toEqual([1, 38, 72, 102, 133, 164]);
     expect(furniture).toEqual(expect.arrayContaining([expect.objectContaining({ api_id: 1 }), expect.objectContaining({ api_id: 164 })]));
   });

@@ -127,6 +127,8 @@ export type Quest = {
   active: number;
   progress: number;
   completed: number;
+  periodKey: string;
+  progressData: JsonObject;
 };
 
 export type FurnitureState = {

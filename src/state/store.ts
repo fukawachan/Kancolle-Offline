@@ -16,6 +16,7 @@ import {
 } from "../master/map-progress.js";
 import { normalRoutingMap } from "../master/routing-data.js";
 import { EXPEDITION_DEFINITIONS, EXPEDITION_MASTERS } from "../master/expedition-data.js";
+import { QUEST_BY_ID, QUEST_DEFINITIONS, type QuestDefinition, type QuestReward } from "../master/quest-data.js";
 import {
   buildRoutingFleet,
   evaluateRoute,
@@ -38,6 +39,13 @@ import {
   practicePeriodKey
 } from "../kcsapi/practice.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
+import {
+  advanceQuestProgress,
+  currentQuestPeriodKey,
+  evaluateQuest,
+  questIsVisible,
+  type QuestEvent
+} from "../kcsapi/quests.js";
 import { isAircraftSlotItem } from "../kcsapi/serializers.js";
 import {
   battleSupplyCost,
@@ -78,6 +86,15 @@ type Row = Record<string, unknown>;
 
 type RepairStartResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
 type RepairCompleteResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
+type QuestClearResult =
+  | { ok: true; save: SaveState; bonuses: QuestBonus[] }
+  | { ok: false; error: string };
+type QuestBonus = {
+  type: string;
+  name: string;
+  count: number;
+  item?: JsonObject;
+};
 
 const defaultOptions: PlayerOptions = {
   bgmFlag: 1,
@@ -89,7 +106,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
@@ -97,6 +114,29 @@ const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
 const MATERIAL_RECOVERY_INTERVAL_MS = 180_000;
 const BASIC_MATERIAL_CAP = 1_000_000;
+const QUEST_CONSUMPTION_MATERIALS: Record<string, keyof Materials> = {
+  "高速修復材": "repairKit",
+  "高速建造材": "buildKit",
+  "開発資材": "devmat",
+  "改修資材": "screw"
+};
+const QUEST_CONSUMPTION_USEITEMS = new Map<string, number>([
+  ["特注家具職人", 52],
+  ["給糧艦「間宮」", 54],
+  ["給糧艦「伊良湖」", 59],
+  ["補強増設", 64],
+  ["戦闘糧食", 66],
+  ["洋上補給", 67],
+  ["熟練搭乗員", 70],
+  ["設営隊", 73],
+  ["新型航空機設計図", 74],
+  ["新型砲熕兵装資材", 75],
+  ["新型航空兵装資材", 77],
+  ["戦闘詳報", 78],
+  ["新型噴進装備開発資材", 92],
+  ["新型兵装資材", 94],
+  ["航空特別増加食", 102]
+]);
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -235,6 +275,9 @@ export function createStateStore(options: StateStoreOptions) {
         consumeMaterials(db, { fuel, ammo, bauxite });
       });
       tx();
+      if (availableShipIds.length > 0) {
+        recordQuestEvent(db, { kind: "simple", subcategory: "resupply", amount: availableShipIds.length });
+      }
       const nextSave = getSave(db);
       return {
         ships: nextSave.ships.filter((ship) => availableShipIds.includes(ship.id)),
@@ -298,6 +341,9 @@ export function createStateStore(options: StateStoreOptions) {
         }
       });
       tx();
+      if (consumedShipIds.some((id) => id !== shipId)) {
+        recordQuestEvent(db, { kind: "simple", subcategory: "modernization" });
+      }
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     remodelShip: (shipId: number, masterId: number) => {
@@ -313,11 +359,22 @@ export function createStateStore(options: StateStoreOptions) {
     destroySlotItem: (itemIds: number[]) => {
       const awayItems = activeExpeditionSlotItemIds(db);
       const availableIds = itemIds.filter((id) => !awayItems.has(id));
+      const save = getSave(db);
+      const destroyedNames = availableIds
+        .map((id) => save.slotItems.find((item) => item.id === id))
+        .map((item) => masterData.api_mst_slotitem.find((master) => master.api_id === item?.masterId)?.api_name)
+        .filter((name): name is string => typeof name === "string");
       const tx = db.transaction(() => {
         for (const id of availableIds) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
         addMaterials(db, { fuel: availableIds.length, ammo: availableIds.length, steel: availableIds.length * 2, bauxite: 0 });
       });
       tx();
+      if (availableIds.length > 0) {
+        recordQuestEvent(db, { kind: "simple", subcategory: "scrapequipment", amount: availableIds.length });
+        recordQuestEvent(db, { kind: "scrapequipment", names: destroyedNames, amount: availableIds.length });
+        recordQuestEvent(db, { kind: "modelconversion", names: destroyedNames, amount: availableIds.length });
+        recordQuestEvent(db, { kind: "equipexchange", names: destroyedNames, amount: availableIds.length });
+      }
       return getSave(db).materials;
     },
     createShip: (masterId: number) => createShip(db, masterId),
@@ -329,6 +386,9 @@ export function createStateStore(options: StateStoreOptions) {
         addMaterials(db, { fuel: availableIds.length, ammo: availableIds.length, steel: availableIds.length * 2, bauxite: 0 });
       });
       tx();
+      if (availableIds.length > 0) {
+        recordQuestEvent(db, { kind: "simple", subcategory: "scrapship", amount: availableIds.length });
+      }
       return getSave(db).materials;
     },
     consumeMaterials: (delta: MaterialDelta) => {
@@ -340,11 +400,21 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).materials;
     },
     setQuestState: (questId: number, active: number, completed = 0) => {
+      ensureQuestStates(db);
+      const definition = QUEST_BY_ID.get(questId);
+      const periodKey = currentQuestPeriodKey(definition?.period ?? "once");
       db.prepare(
-        "INSERT INTO quests (id, active, progress, completed) VALUES (?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET active = excluded.active, completed = excluded.completed"
-      ).run(questId, active, completed);
+        `INSERT INTO quests (id, active, progress, completed, period_key, progress_json)
+         VALUES (?, ?, 0, ?, ?, '{}')
+         ON CONFLICT(id) DO UPDATE SET active = excluded.active, completed = excluded.completed`
+      ).run(questId, active, completed, periodKey);
       return getSave(db).quests.find((quest) => quest.id === questId);
     },
+    startQuest: (questId: number) => startQuest(db, questId),
+    stopQuest: (questId: number) => stopQuest(db, questId),
+    clearQuest: (questId: number, selectedRewards: number[] = []): QuestClearResult =>
+      clearQuest(db, questId, selectedRewards),
+    recordQuestEvent: (event: QuestEvent) => recordQuestEvent(db, event),
     updateFurnitureSet: (patch: Partial<FurnitureState["set"]>) => {
       const current = getSave(db).furniture;
       db.prepare("UPDATE furniture SET set_json = ? WHERE id = 1").run(JSON.stringify({ ...current.set, ...patch }));
@@ -389,6 +459,7 @@ export function createStateStore(options: StateStoreOptions) {
         }
       });
       tx();
+      recordQuestEvent(db, { kind: "simple", subcategory: "repair" });
 
       const updatedDock = getSave(db).repairDocks.find((item) => item.id === dock.id)!;
       return { ok: true, dock: updatedDock };
@@ -727,6 +798,11 @@ function claimExpedition(db: Database.Database, deckId: number) {
       .run(JSON.stringify(emptyMissionState()), deckId);
   });
   tx();
+  recordQuestEvent(db, {
+    kind: "expedition",
+    missionId: definition.id,
+    success: outcome.clearResult > 0
+  });
   return { ok: true as const, result };
 }
 
@@ -844,6 +920,284 @@ function addUseItem(db: Database.Database, itemId: number, count: number) {
     INSERT INTO use_items (id, count) VALUES (?, ?)
     ON CONFLICT(id) DO UPDATE SET count = count + excluded.count
   `).run(itemId, count);
+}
+
+function ensureQuestStates(db: Database.Database) {
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quests'").get() as Row | undefined;
+  if (!table || !columnExists(db, "quests", "period_key") || !columnExists(db, "quests", "progress_json")) return;
+
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO quests (id, active, progress, completed, period_key, progress_json)
+    VALUES (?, 0, 0, 0, ?, '{}')
+  `);
+  const tx = db.transaction(() => {
+    for (const definition of QUEST_DEFINITIONS) {
+      insert.run(definition.id, currentQuestPeriodKey(definition.period));
+    }
+  });
+  tx();
+}
+
+function refreshQuestPeriods(db: Database.Database) {
+  if (!columnExists(db, "quests", "period_key") || !columnExists(db, "quests", "progress_json")) return;
+  const states = new Map(
+    (db.prepare("SELECT * FROM quests").all() as Row[]).map((row) => [Number(row.id), row] as const)
+  );
+  const update = db.prepare(`
+    UPDATE quests
+    SET active = ?, progress = ?, completed = ?, period_key = ?, progress_json = ?
+    WHERE id = ?
+  `);
+  const tx = db.transaction(() => {
+    for (const definition of QUEST_DEFINITIONS) {
+      const row = states.get(definition.id);
+      if (!row) continue;
+      const currentKey = currentQuestPeriodKey(definition.period);
+      const storedKey = String(row.period_key ?? "");
+      if (definition.period !== "once" && storedKey !== currentKey) {
+        update.run(0, 0, 0, currentKey, "{}", definition.id);
+      } else if (!storedKey) {
+        update.run(Number(row.active), Number(row.progress), Number(row.completed), currentKey, String(row.progress_json ?? "{}"), definition.id);
+      }
+    }
+  });
+  tx();
+}
+
+function startQuest(db: Database.Database, questId: number) {
+  ensureQuestStates(db);
+  refreshQuestPeriods(db);
+  const save = getSave(db);
+  const state = save.quests.find((quest) => quest.id === questId);
+  if (!state || !QUEST_BY_ID.has(questId) || state.completed === 1 || !questIsVisible(save, questId)) {
+    return null;
+  }
+  db.prepare("UPDATE quests SET active = 1 WHERE id = ?").run(questId);
+  return getSave(db).quests.find((quest) => quest.id === questId) ?? null;
+}
+
+function stopQuest(db: Database.Database, questId: number) {
+  ensureQuestStates(db);
+  refreshQuestPeriods(db);
+  const state = getSave(db).quests.find((quest) => quest.id === questId);
+  if (!state || state.completed === 1) return null;
+  db.prepare("UPDATE quests SET active = 0 WHERE id = ?").run(questId);
+  return getSave(db).quests.find((quest) => quest.id === questId) ?? null;
+}
+
+function clearQuest(db: Database.Database, questId: number, selectedRewards: number[]): QuestClearResult {
+  ensureQuestStates(db);
+  refreshQuestPeriods(db);
+  const save = getSave(db);
+  const definition = QUEST_BY_ID.get(questId);
+  const state = save.quests.find((quest) => quest.id === questId);
+  if (!definition || !state) return { ok: false, error: "Unknown quest" };
+  if (state.completed === 1) return { ok: false, error: "Quest reward has already been claimed" };
+  if (state.active !== 1) return { ok: false, error: "Quest is not active" };
+
+  const evaluation = evaluateQuest(definition, save, state);
+  if (!evaluation.achieved) return { ok: false, error: "Quest is not complete" };
+
+  const bonuses: QuestBonus[] = [];
+  const rewardSelections = [...selectedRewards];
+  const tx = db.transaction(() => {
+    consumeQuestRequirements(db, definition, save);
+    const [fuel, ammo, steel, bauxite] = definition.materialRewards;
+    addMaterials(db, { fuel, ammo, steel, bauxite });
+
+    let choiceIndex = 0;
+    for (const reward of definition.rewards) {
+      if (reward.kind === "choice") {
+        const selected = Math.max(1, Math.trunc(Number(rewardSelections[choiceIndex] ?? 1)));
+        choiceIndex += 1;
+        const choice = reward.choices[Math.min(reward.choices.length - 1, selected - 1)] ?? reward.choices[0];
+        if (choice) applyQuestReward(db, choice, bonuses);
+      } else {
+        applyQuestReward(db, reward, bonuses);
+      }
+    }
+
+    db.prepare("UPDATE quests SET active = 0, progress = 0, completed = 1, progress_json = '{}' WHERE id = ?")
+      .run(questId);
+  });
+  tx();
+  return { ok: true, save: getSave(db), bonuses };
+}
+
+function consumeQuestRequirements(db: Database.Database, definition: QuestDefinition, save: SaveState) {
+  consumeRequirementCost(db, definition.requirements, save);
+}
+
+function consumeRequirementCost(db: Database.Database, requirement: unknown, save: SaveState) {
+  if (!isJsonObject(requirement)) return;
+  const category = String(requirement.category ?? "");
+  if (category === "and" || category === "then") {
+    if (Array.isArray(requirement.list)) {
+      for (const child of requirement.list) consumeRequirementCost(db, child, save);
+    }
+    return;
+  }
+  if (category === "or") {
+    const child = Array.isArray(requirement.list)
+      ? requirement.list.find((item) => requirementCostSatisfied(item, save))
+      : undefined;
+    if (child) consumeRequirementCost(db, child, save);
+    return;
+  }
+  if (category === "equipexchange") {
+    consumeRequirementResources(db, requirement.resources);
+    consumeRequirementEquipments(db, requirement.equipments, save);
+    consumeRequirementConsumptions(db, requirement.consumptions);
+  }
+  if (category === "modernization") {
+    consumeRequirementResources(db, requirement.resources);
+    consumeRequirementConsumptions(db, requirement.consumptions);
+  }
+}
+
+function requirementCostSatisfied(requirement: unknown, save: SaveState): boolean {
+  if (!isJsonObject(requirement)) return false;
+  if (String(requirement.category ?? "") !== "equipexchange") return true;
+  const hasEquipment = equipmentRequirements(requirement.equipments).every((item) =>
+    availableSlotItemsByName(save, item.name).length >= item.amount
+  );
+  return hasEquipment && hasMaterials(save.materials, requirementResourceDelta(requirement.resources));
+}
+
+function consumeRequirementResources(db: Database.Database, rawResources: unknown) {
+  consumeMaterials(db, requirementResourceDelta(rawResources));
+}
+
+function requirementResourceDelta(rawResources: unknown): MaterialDelta {
+  if (!Array.isArray(rawResources)) return {};
+  return {
+    fuel: safeNum(rawResources[0]),
+    ammo: safeNum(rawResources[1]),
+    steel: safeNum(rawResources[2]),
+    bauxite: safeNum(rawResources[3])
+  };
+}
+
+function consumeRequirementEquipments(db: Database.Database, rawEquipments: unknown, save: SaveState) {
+  for (const item of equipmentRequirements(rawEquipments)) {
+    const ids = availableSlotItemsByName(save, item.name).slice(0, item.amount).map((slotItem) => slotItem.id);
+    for (const id of ids) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
+  }
+}
+
+function consumeRequirementConsumptions(db: Database.Database, rawConsumptions: unknown) {
+  for (const item of equipmentRequirements(rawConsumptions)) {
+    const material = QUEST_CONSUMPTION_MATERIALS[item.name];
+    if (material) {
+      consumeMaterials(db, { [material]: item.amount });
+      continue;
+    }
+    if (item.name === "家具コイン") {
+      db.prepare("UPDATE furniture SET coins = max(0, coins - ?) WHERE id = 1").run(item.amount);
+      continue;
+    }
+    const useItemId = QUEST_CONSUMPTION_USEITEMS.get(item.name);
+    if (useItemId) consumeUseItem(db, useItemId, item.amount);
+  }
+}
+
+function consumeUseItem(db: Database.Database, itemId: number, count: number) {
+  if (count <= 0) return;
+  db.prepare("UPDATE use_items SET count = max(0, count - ?) WHERE id = ?").run(count, itemId);
+}
+
+function equipmentRequirements(raw: unknown) {
+  const values = Array.isArray(raw) ? raw : raw == null ? [] : [raw];
+  return values.flatMap((value) => {
+    if (typeof value === "string") return [{ name: value, amount: 1 }];
+    if (!isJsonObject(value)) return [];
+    const name = String(value.name ?? value.equipment ?? "");
+    if (!name) return [];
+    return [{ name, amount: Math.max(1, Math.trunc(safeNum(value.amount, 1))) }];
+  });
+}
+
+function availableSlotItemsByName(save: SaveState, name: string) {
+  const equipped = new Set(save.ships.flatMap((ship) => [...ship.slotIds, ship.exSlotId]).filter((id) => id > 0));
+  return save.slotItems.filter((item) => {
+    if (equipped.has(item.id)) return false;
+    return masterData.api_mst_slotitem.find((master) => master.api_id === item.masterId)?.api_name === name;
+  });
+}
+
+function applyQuestReward(db: Database.Database, reward: QuestReward, bonuses: QuestBonus[]) {
+  const amount = "amount" in reward ? Math.max(1, Math.trunc(Number(reward.amount ?? 1))) : 1;
+  if (reward.kind === "material") {
+    addMaterials(db, { [reward.material]: amount });
+    bonuses.push({ type: "material", name: reward.name, count: amount, item: { api_material: reward.material } });
+    return;
+  }
+  if (reward.kind === "ship") {
+    const ships = Array.from({ length: amount }, () => createShip(db, reward.masterId));
+    for (const ship of ships) {
+      bonuses.push({
+        type: "ship",
+        name: reward.name,
+        count: 1,
+        item: { api_id: ship.id, api_ship_id: ship.masterId, api_name: reward.name }
+      });
+    }
+    return;
+  }
+  if (reward.kind === "equipment") {
+    const items = Array.from({ length: amount }, () => createSlotItem(db, reward.masterId));
+    for (const item of items) {
+      bonuses.push({
+        type: "equipment",
+        name: reward.name,
+        count: 1,
+        item: { api_id: item.id, api_slotitem_id: item.masterId, api_name: reward.name }
+      });
+    }
+    return;
+  }
+  if (reward.kind === "useitem") {
+    addUseItem(db, reward.itemId, amount);
+    bonuses.push({ type: "useitem", name: reward.name, count: amount, item: { api_useitem_id: reward.itemId } });
+    return;
+  }
+  if (reward.kind === "furniture") {
+    grantFurniture(db, reward.furnitureId);
+    bonuses.push({ type: "furniture", name: reward.name, count: amount, item: { api_furniture_id: reward.furnitureId } });
+    return;
+  }
+  if (reward.kind === "special") {
+    bonuses.push({ type: "special", name: reward.name, count: amount });
+  }
+}
+
+function grantFurniture(db: Database.Database, furnitureId: number) {
+  const row = db.prepare("SELECT * FROM furniture WHERE id = 1").get() as Row | undefined;
+  if (!row) return;
+  const owned = normalizeOwnedFurniture([
+    ...parseJson<number[]>(row.owned_json, []),
+    furnitureId
+  ]);
+  db.prepare("UPDATE furniture SET owned_json = ? WHERE id = 1").run(JSON.stringify(owned));
+}
+
+function recordQuestEvent(db: Database.Database, event: QuestEvent) {
+  ensureQuestStates(db);
+  refreshQuestPeriods(db);
+  const save = getSave(db);
+  const update = db.prepare("UPDATE quests SET progress = ?, progress_json = ? WHERE id = ?");
+  const tx = db.transaction(() => {
+    for (const state of save.quests) {
+      if (state.active !== 1 || state.completed === 1) continue;
+      const definition = QUEST_BY_ID.get(state.id);
+      if (!definition) continue;
+      const next = advanceQuestProgress(definition, save, state, event);
+      if (next.progressFlag !== state.progress || JSON.stringify(next.progressData) !== JSON.stringify(state.progressData)) {
+        update.run(next.progressFlag, JSON.stringify(next.progressData), state.id);
+      }
+    }
+  });
+  tx();
 }
 
 function seedExpeditionProgress(db: Database.Database) {
@@ -1052,7 +1406,34 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     loaded.saveRecord(nextBattle as unknown as JsonObject);
   });
   tx();
+  const questEvent = battleQuestEvent(nextBattle as unknown as BattleRecord, mode);
+  if (questEvent) recordQuestEvent(db, questEvent);
+  recordQuestEvent(db, { kind: "simple", subcategory: "battle" });
   return { save: getSave(db), record: nextBattle, applied: true };
+}
+
+function battleQuestEvent(record: BattleRecord, mode: BattleMode): QuestEvent | null {
+  const rank = record.result?.rank;
+  const victory = rank === "S" || rank === "A" || rank === "B";
+  if (mode === "practice") return { kind: "practice", result: rank, victory };
+  const sortie = record.sortie;
+  return {
+    kind: "sortie",
+    map: sortie ? `${sortie.areaId}-${sortie.mapNo}` : undefined,
+    boss: sortie?.isBoss,
+    result: rank,
+    sinks: enemySinkLabels(record)
+  };
+}
+
+function enemySinkLabels(record: BattleRecord) {
+  const labels: string[] = [];
+  const before = record.before?.eNowHps ?? [];
+  const after = record.after?.eNowHps ?? [];
+  for (let index = 0; index < after.length; index += 1) {
+    if (safeNum(before[index]) > 0 && safeNum(after[index]) <= 0) labels.push("敵艦");
+  }
+  return labels;
 }
 
 function applyMapProgress(db: Database.Database, record: BattleRecord) {
@@ -1274,11 +1655,23 @@ function migrate(db: Database.Database) {
   if (currentVersion < 7) migrateToV7(db);
   if (currentVersion < 8) migrateToV8(db);
   if (currentVersion < 9) migrateToV9(db);
+  if (currentVersion < 10) migrateToV10(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
   repairFurnitureValues(db);
   repairMaps(db);
+  ensureQuestStates(db);
+}
+
+function migrateToV10(db: Database.Database) {
+  if (!columnExists(db, "quests", "period_key")) {
+    db.prepare("ALTER TABLE quests ADD COLUMN period_key TEXT NOT NULL DEFAULT 'once'").run();
+  }
+  if (!columnExists(db, "quests", "progress_json")) {
+    db.prepare("ALTER TABLE quests ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'").run();
+  }
+  ensureQuestStates(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -1547,7 +1940,9 @@ function createSchema(db: Database.Database) {
       id INTEGER PRIMARY KEY,
       active INTEGER NOT NULL,
       progress INTEGER NOT NULL,
-      completed INTEGER NOT NULL
+      completed INTEGER NOT NULL,
+      period_key TEXT NOT NULL,
+      progress_json TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS furniture (
       id INTEGER PRIMARY KEY,
@@ -1669,9 +2064,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       db.prepare("INSERT INTO build_docks (id, recipe_json, result_master_id, complete_time, state) VALUES (?, '{}', 0, 0, 0)").run(id);
     }
 
-    for (const id of [101, 102, 201]) {
-      db.prepare("INSERT INTO quests (id, active, progress, completed) VALUES (?, 0, 0, 0)").run(id);
-    }
+    ensureQuestStates(db);
 
     db.prepare("INSERT INTO furniture (id, owned_json, set_json, coins) VALUES (1, ?, ?, 200)").run(
       JSON.stringify(DEFAULT_FURNITURE_IDS),
@@ -1694,6 +2087,8 @@ function getSave(db: Database.Database): SaveState {
   settleCompletedRepairs(db);
   syncExpeditionDeckStates(db);
   settleMaterialRecovery(db);
+  ensureQuestStates(db);
+  refreshQuestPeriods(db);
 
   return {
     player: mapPlayer(player),
@@ -1847,7 +2242,9 @@ function mapQuest(row: Row): Quest {
     id: Number(row.id),
     active: Number(row.active),
     progress: Number(row.progress),
-    completed: Number(row.completed)
+    completed: Number(row.completed),
+    periodKey: String(row.period_key ?? "once"),
+    progressData: parseJson<JsonObject>(row.progress_json, {})
   };
 }
 

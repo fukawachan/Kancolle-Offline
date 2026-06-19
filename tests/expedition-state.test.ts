@@ -23,11 +23,11 @@ describe("persisted expedition lifecycle", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("migrates to schema v9 and seeds only the first expedition unlocked", () => {
+  it("migrates to schema v10 and seeds only the first expedition unlocked", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const state = store.getMissionMemberState();
 
-    expect(version.version).toBe(9);
+    expect(version.version).toBe(10);
     expect(state.api_list_items.find((item) => item.api_mission_id === 1)?.api_state).toBe(1);
     expect(state.api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(0);
   });
@@ -45,7 +45,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(9);
+    expect(version.version).toBe(10);
     expect(save.furniture.owned).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
     expect(save.furniture.set).toEqual({
       api_floor: 1,
