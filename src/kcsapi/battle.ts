@@ -7,6 +7,7 @@ import {
   selectSortieEncounter,
   type SelectedSortieEncounter
 } from "../master/sortie-data.js";
+import { normalizeDeckShipIds } from "../state/decks.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
 import { isAircraftSlotItem } from "./serializers.js";
 import {
@@ -1777,7 +1778,7 @@ function sortieDeck(save: SaveState) {
 }
 
 function fixedShipIds(shipIds: number[]) {
-  return [...shipIds, ...Array(6).fill(-1)].slice(0, 6).map((id) => (id > 0 ? id : -1));
+  return normalizeDeckShipIds(shipIds);
 }
 
 function normalizeFixed<T>(values: readonly T[], length: number, fill: T): T[] {

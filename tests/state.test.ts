@@ -123,6 +123,35 @@ describe("SQLite state store", () => {
     expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
   });
 
+  it("repairs legacy deck holes when reopening a save", () => {
+    store.registerAccount(15);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([1, 2, -1, 3, 4, -1]));
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const save = store.getSave();
+    const row = store.db.prepare("SELECT ship_ids_json FROM decks WHERE id = 1").get() as { ship_ids_json: string };
+
+    expect(save.decks[0].shipIds).toEqual([1, 2, 3, 4, -1, -1]);
+    expect(JSON.parse(row.ship_ids_json)).toEqual([1, 2, 3, 4, -1, -1]);
+  });
+
+  it("compacts following ships when removing a middle organize slot", () => {
+    store.registerAccount(15);
+    const extraShip1 = store.createShip(9);
+    const extraShip2 = store.createShip(10);
+    store.changeDeckShip(1, 2, 3);
+    store.changeDeckShip(1, 3, 4);
+    store.changeDeckShip(1, 4, extraShip1.id);
+    store.changeDeckShip(1, 5, extraShip2.id);
+
+    const changed = store.changeDeckShip(1, 3, -1);
+
+    expect(changed?.shipIds).toEqual([1, 2, 3, extraShip1.id, extraShip2.id, -1]);
+    expect(store.getSave().decks[0].shipIds).toEqual([1, 2, 3, extraShip1.id, extraShip2.id, -1]);
+  });
+
   it("applies material and inventory changes atomically", () => {
     store.registerAccount(15);
     const before = store.getSave();

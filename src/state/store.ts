@@ -54,6 +54,7 @@ import {
   type SupplyOptions
 } from "../kcsapi/supply.js";
 import { DEFAULT_PORT_BGM_ID } from "../resources/types.js";
+import { normalizeDeckShipIds } from "./decks.js";
 import type {
   BuildDock,
   Deck,
@@ -194,7 +195,7 @@ export function createStateStore(options: StateStoreOptions) {
       const targetIndex = Math.max(0, Math.min(5, Math.trunc(index)));
       const nextShipId = shipId > 0 && save.ships.some((ship) => ship.id === shipId) ? shipId : -1;
       const updatedDecks = save.decks.map((item) => {
-        const shipIds = normalizeFixed(item.shipIds, 6, -1).map((id) => (id > 0 ? id : -1));
+        const shipIds = normalizeDeckShipIds(item.shipIds);
         if (item.id === deckId && nextShipId > 0) {
           const srcIndex = shipIds.indexOf(nextShipId);
           if (srcIndex >= 0 && srcIndex !== targetIndex) {
@@ -224,6 +225,7 @@ export function createStateStore(options: StateStoreOptions) {
             seenShips.add(assignedShipId);
           }
         }
+        item.shipIds = normalizeDeckShipIds(item.shipIds);
       }
       const update = db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?");
       const tx = db.transaction(() => {
@@ -1661,7 +1663,28 @@ function migrate(db: Database.Database) {
   repairShipOnSlotValues(db);
   repairFurnitureValues(db);
   repairMaps(db);
+  repairDeckShipIds(db);
   ensureQuestStates(db);
+}
+
+function repairDeckShipIds(db: Database.Database) {
+  const rows = db.prepare("SELECT id, ship_ids_json FROM decks ORDER BY id").all() as Row[];
+  const update = db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?");
+  const seenShips = new Set<number>();
+
+  for (const row of rows) {
+    const current = parseJson<number[]>(row.ship_ids_json, [-1, -1, -1, -1, -1, -1]);
+    const deduped = normalizeDeckShipIds(current).map((shipId) => {
+      if (shipId <= 0) return -1;
+      if (seenShips.has(shipId)) return -1;
+      seenShips.add(shipId);
+      return shipId;
+    });
+    const next = normalizeDeckShipIds(deduped);
+    if (JSON.stringify(current) !== JSON.stringify(next)) {
+      update.run(JSON.stringify(next), Number(row.id));
+    }
+  }
 }
 
 function migrateToV10(db: Database.Database) {
@@ -2176,7 +2199,7 @@ function mapDeck(row: Row): Deck {
     id: Number(row.id),
     name: String(row.name),
     missionState: parseJson(row.mission_json, { state: 0, missionId: 0, completeTime: 0 }),
-    shipIds: parseJson<number[]>(row.ship_ids_json, [-1, -1, -1, -1, -1, -1])
+    shipIds: normalizeDeckShipIds(parseJson<number[]>(row.ship_ids_json, [-1, -1, -1, -1, -1, -1]))
   };
 }
 

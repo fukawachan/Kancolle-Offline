@@ -12,6 +12,7 @@ import {
 } from "../master/map-progress.js";
 import { effectiveShipSpeedValue } from "../master/ship-speed.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
+import { normalizeDeckShipIds } from "../state/decks.js";
 import type {
   BuildDock,
   Deck,
@@ -215,10 +216,7 @@ export function toSlotItem(item: SlotItem) {
 }
 
 export function toDeck(deck: Deck) {
-  const shipIds = [
-    ...deck.shipIds.filter((id) => id > 0),
-    ...Array(6).fill(-1)
-  ].slice(0, 6);
+  const shipIds = normalizeDeckShipIds(deck.shipIds);
   return {
     api_member_id: 1,
     api_id: deck.id,

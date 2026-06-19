@@ -1005,6 +1005,22 @@ describe("local kcsapi endpoints", () => {
     expect(new Set(allAssignedShips).size).toBe(allAssignedShips.length);
   });
 
+  it("compacts persisted organize slots after removing a middle ship through the API", async () => {
+    const extraShip1 = store.createShip(9);
+    const extraShip2 = store.createShip(10);
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 2, api_ship_id: 3 });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 3, api_ship_id: 4 });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 4, api_ship_id: extraShip1.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 5, api_ship_id: extraShip2.id });
+
+    const response = await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 3, api_ship_id: -1 });
+
+    const expectedShipIds = [1, 2, 3, extraShip1.id, extraShip2.id, -1];
+    expect(response.json().api_data.api_ship).toEqual(expectedShipIds);
+    expect(store.getSave().decks[0].shipIds).toEqual(expectedShipIds);
+    expect((await post("api_get_member/deck")).json().api_data[0].api_ship).toEqual(expectedShipIds);
+  });
+
   it("supports docks, arsenal, expeditions, items, and a deterministic first sortie loop", async () => {
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
     const expeditionShip1 = store.createShip(9);

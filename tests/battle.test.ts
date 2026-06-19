@@ -81,6 +81,19 @@ describe("sortie battle simulation", () => {
     expect(battle.record.result.mvp).toBeGreaterThanOrEqual(1);
   });
 
+  it("compacts legacy deck holes before computing friendly battle HP slots", () => {
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([1, 2, -1, 3, 4, -1]));
+
+    const save = store.getSave();
+    const expectedHps = [1, 2, 3, 4].map((shipId) => save.ships.find((ship) => ship.id === shipId)!.hp);
+    const battle = createSortieBattle(save, { formation: 1 });
+
+    expect(save.decks[0].shipIds).toEqual([1, 2, 3, 4, -1, -1]);
+    expect(battle.record.shipIds).toEqual([1, 2, 3, 4, -1, -1]);
+    expect(battle.payload.api_f_nowhps).toEqual([...expectedHps, 0, 0]);
+  });
+
   it("does not emit an aviation phase when neither side has active aircraft", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
 
