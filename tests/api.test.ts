@@ -213,10 +213,30 @@ describe("local kcsapi endpoints", () => {
     const slotItemMasterIds = (await post("api_get_member/slot_item")).json().api_data
       .map((item: any) => item.api_slotitem_id);
     expect(slotItemMasterIds).toEqual([1, 1, 2, 46]);
+    const furnitureById = new Map(start2Data.api_mst_furniture.map((item: any) => [item.api_id, item]));
+    expect(start2Data.api_mst_furniture.length).toBeGreaterThan(600);
+    expect(furnitureById.get(1)).toMatchObject({
+      api_type: 0,
+      api_no: 0,
+      api_title: "鎮守府の床",
+      api_bgm_id: 0,
+      api_outside_id: 0,
+      api_active_flag: 0
+    });
+    expect(furnitureById.get(38)).toMatchObject({ api_type: 1, api_no: 0, api_title: "普通の壁紙" });
+    expect(furnitureById.get(72)).toMatchObject({ api_type: 2, api_no: 0, api_title: "赤カーテンの窓", api_outside_id: 1 });
+    expect(furnitureById.get(102)).toMatchObject({ api_type: 3, api_no: 0, api_title: "なし" });
+    expect(furnitureById.get(133)).toMatchObject({ api_type: 4, api_no: 0, api_title: "なし" });
+    expect(furnitureById.get(164)).toMatchObject({ api_type: 5, api_no: 0, api_title: "ただの段ボール" });
     expect(start2Data.api_mst_furnituregraph).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ api_id: 1, api_no: 1, api_filename: "8807" }),
-        expect.objectContaining({ api_id: 6, api_no: 6, api_filename: "8280" })
+        expect.objectContaining({ api_id: 1, api_type: 0, api_no: 0, api_filename: "8807" }),
+        expect.objectContaining({ api_id: 38, api_type: 1, api_no: 0, api_filename: "1261" }),
+        expect.objectContaining({ api_id: 72, api_type: 2, api_no: 0, api_filename: "1850" }),
+        expect.objectContaining({ api_id: 102, api_type: 3, api_no: 0, api_filename: "2348" }),
+        expect.objectContaining({ api_id: 133, api_type: 4, api_no: 0, api_filename: "2373" }),
+        expect.objectContaining({ api_id: 164, api_type: 5, api_no: 0, api_filename: "3565" }),
+        expect.objectContaining({ api_id: 6, api_type: 0, api_no: 5, api_filename: "8280" })
       ])
     );
     expect(start2Data.api_mst_bgm.map((bgm: any) => bgm.api_id)).not.toContain(0);
@@ -356,7 +376,8 @@ describe("local kcsapi endpoints", () => {
       api_nickname: "Local Admiral",
       api_firstflag: 1,
       api_tutorial_progress: 100,
-      api_furniture: [1, 2, 3, 0, 4, 5]
+      api_furniture: [1, 38, 72, 102, 133, 164],
+      api_fcoin: 200
     });
     expect(ships.json().api_data.length).toBeGreaterThan(0);
     expect(deck.json().api_data).toHaveLength(4);
@@ -640,7 +661,14 @@ describe("local kcsapi endpoints", () => {
     await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3 });
     await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: 1 });
     await post("api_req_quest/start", { api_quest_id: 101 });
-    await post("api_req_furniture/change", { api_floor_id: 1, api_wall_id: 2, api_window_id: 3 });
+    await post("api_req_furniture/change", {
+      api_floor: 1,
+      api_wallpaper: 38,
+      api_window: 72,
+      api_wallhanging: 102,
+      api_shelf: 133,
+      api_desk: 164
+    });
 
     const port = (await post("api_port/port")).json().api_data;
     const quests = (await post("api_get_member/questlist")).json().api_data;
@@ -652,7 +680,71 @@ describe("local kcsapi endpoints", () => {
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_fuel).toBeGreaterThan(0);
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_slot[0]).toBe(1);
     expect(quests.api_list.find((quest: any) => quest.api_no === 101).api_state).toBe(2);
-    expect(furniture.api_set).toMatchObject({ api_floor: 1, api_wall: 2, api_window: 3 });
+    expect(port.api_basic.api_furniture).toEqual([1, 38, 72, 102, 133, 164]);
+    expect(furniture).toEqual(expect.arrayContaining([expect.objectContaining({ api_id: 1 }), expect.objectContaining({ api_id: 164 })]));
+  });
+
+  it("implements the client furniture inventory, purchase, layout, and jukebox protocol", async () => {
+    const initialPort = (await post("api_port/port")).json().api_data;
+    expect(initialPort.api_basic.api_furniture).toEqual([1, 38, 72, 102, 133, 164]);
+
+    const initialFurniture = (await post("api_get_member/furniture")).json().api_data;
+    expect(Array.isArray(initialFurniture)).toBe(true);
+    expect(initialFurniture.map((item: any) => item.api_id)).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
+
+    const buy = await post("api_req_furniture/buy", { api_type: 0, api_no: 1 });
+    expect(buy.json()).toMatchObject({ api_result: 1, api_data: { api_fcoin: 150 } });
+
+    const invalidChange = await post("api_req_furniture/change", {
+      api_floor: 38,
+      api_wallpaper: 38,
+      api_window: 72,
+      api_wallhanging: 102,
+      api_shelf: 133,
+      api_desk: 164
+    });
+    expect(invalidChange.json()).toMatchObject({ api_result: 400 });
+    expect(store.getSave().furniture.set.api_floor).toBe(1);
+
+    const change = await post("api_req_furniture/change", {
+      api_floor: 2,
+      api_wallpaper: 38,
+      api_window: 72,
+      api_wallhanging: 102,
+      api_shelf: 133,
+      api_desk: 164,
+      api_bgm_id: 101
+    });
+    expect(change.json()).toMatchObject({ api_result: 1 });
+
+    const changedPort = (await post("api_port/port")).json().api_data;
+    expect(changedPort.api_basic.api_furniture).toEqual([2, 38, 72, 102, 133, 164]);
+    expect(changedPort.api_basic.api_fcoin).toBe(150);
+    expect(changedPort.api_p_bgm_id).toBe(101);
+
+    const musicList = (await post("api_req_furniture/music_list")).json().api_data;
+    expect(Array.isArray(musicList)).toBe(true);
+    expect(musicList).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          api_id: 101,
+          api_name: "母港",
+          api_bgm_id: 101,
+          api_use_coin: 0,
+          api_bgm_flag: 1,
+          api_loops: expect.any(Number)
+        })
+      ])
+    );
+
+    expect((await post("api_req_furniture/music_play", { api_music_id: 101 })).json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_coin: 150 }
+    });
+    expect((await post("api_req_furniture/set_portbgm", { api_music_id: 101 })).json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_p_bgm_id: 101 }
+    });
   });
 
   it("returns ship capacities, speed, and star rating with their protocol meanings", async () => {

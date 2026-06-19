@@ -3,6 +3,12 @@ import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { mapMasterId, masterData } from "../master/data.js";
 import {
+  DEFAULT_FURNITURE_IDS,
+  DEFAULT_FURNITURE_SET,
+  normalizeFurnitureSet,
+  normalizeOwnedFurniture
+} from "../master/furniture.js";
+import {
   initialMapGauge,
   mapPhaseDefinitions,
   terminalMapPhase,
@@ -77,7 +83,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
@@ -337,10 +343,12 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE furniture SET set_json = ? WHERE id = 1").run(JSON.stringify({ ...current.set, ...patch }));
       return getSave(db).furniture;
     },
-    buyFurniture: (furnitureId: number) => {
+    buyFurniture: (furnitureId: number, price = 0) => {
       const current = getSave(db).furniture;
+      if (current.owned.includes(furnitureId)) return current;
       const owned = Array.from(new Set([...current.owned, furnitureId]));
-      db.prepare("UPDATE furniture SET owned_json = ?, coins = max(0, coins - 10) WHERE id = 1").run(JSON.stringify(owned));
+      const coins = Math.max(0, current.coins - Math.max(0, Math.trunc(price)));
+      db.prepare("UPDATE furniture SET owned_json = ?, coins = ? WHERE id = 1").run(JSON.stringify(owned), coins);
       return getSave(db).furniture;
     },
     startRepair: (shipId: number, dockId: number, highspeed: boolean): RepairStartResult => {
@@ -1237,10 +1245,16 @@ function migrate(db: Database.Database) {
   if (currentVersion < 6) migrateToV6(db);
   if (currentVersion < 7) migrateToV7(db);
   if (currentVersion < 8) migrateToV8(db);
+  if (currentVersion < 9) migrateToV9(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
+  repairFurnitureValues(db);
   repairMaps(db);
+}
+
+function migrateToV9(db: Database.Database) {
+  repairFurnitureValues(db);
 }
 
 function migrateToV8(db: Database.Database) {
@@ -1345,6 +1359,35 @@ function backfillShipOnSlotValues(db: Database.Database, refillEmptyAircraft: bo
     if (JSON.stringify(normalizeFixed(current, 5, 0)) !== JSON.stringify(next)) {
       update.run(JSON.stringify(next), Number(row.id));
     }
+  }
+}
+
+function repairFurnitureValues(db: Database.Database) {
+  const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'furniture'").get() as Row | undefined;
+  if (!table) return;
+
+  const row = db.prepare("SELECT owned_json, set_json, coins FROM furniture WHERE id = 1").get() as Row | undefined;
+  if (!row) {
+    db.prepare("INSERT INTO furniture (id, owned_json, set_json, coins) VALUES (1, ?, ?, 200)").run(
+      JSON.stringify(DEFAULT_FURNITURE_IDS),
+      JSON.stringify(DEFAULT_FURNITURE_SET)
+    );
+    return;
+  }
+
+  const owned = normalizeOwnedFurniture(parseJson<number[]>(row.owned_json, []));
+  const set = normalizeFurnitureSet(parseJson<Partial<FurnitureState["set"]>>(row.set_json, DEFAULT_FURNITURE_SET));
+  const coins = Math.max(0, Math.trunc(safeNum(row.coins, 200)));
+  if (
+    JSON.stringify(owned) !== JSON.stringify(parseJson<number[]>(row.owned_json, [])) ||
+    JSON.stringify(set) !== JSON.stringify(parseJson<Partial<FurnitureState["set"]>>(row.set_json, DEFAULT_FURNITURE_SET)) ||
+    coins !== Number(row.coins)
+  ) {
+    db.prepare("UPDATE furniture SET owned_json = ?, set_json = ?, coins = ? WHERE id = 1").run(
+      JSON.stringify(owned),
+      JSON.stringify(set),
+      coins
+    );
   }
 }
 
@@ -1603,8 +1646,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
     }
 
     db.prepare("INSERT INTO furniture (id, owned_json, set_json, coins) VALUES (1, ?, ?, 200)").run(
-      JSON.stringify([1, 2, 3, 4, 5, 6]),
-      JSON.stringify({ api_floor: 1, api_wall: 2, api_window: 3, api_chest: 4, api_desk: 5, api_object: 0 })
+      JSON.stringify(DEFAULT_FURNITURE_IDS),
+      JSON.stringify(DEFAULT_FURNITURE_SET)
     );
 
     seedMissingMaps(db);
@@ -1781,10 +1824,11 @@ function mapQuest(row: Row): Quest {
 }
 
 function mapFurniture(row: Row): FurnitureState {
+  const set = normalizeFurnitureSet(parseJson<Partial<FurnitureState["set"]>>(row.set_json, DEFAULT_FURNITURE_SET));
   return {
-    owned: parseJson<number[]>(row.owned_json, []),
-    set: parseJson(row.set_json, { api_floor: 1, api_wall: 2, api_window: 3, api_chest: 4, api_desk: 5, api_object: 6 }),
-    coins: Number(row.coins)
+    owned: normalizeOwnedFurniture(parseJson<number[]>(row.owned_json, [])),
+    set,
+    coins: Math.max(0, Math.trunc(safeNum(row.coins, 200)))
   };
 }
 

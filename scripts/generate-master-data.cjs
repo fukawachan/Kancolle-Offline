@@ -229,6 +229,23 @@ function applyStart2ShipOverrides(ships, start2Data) {
   });
 }
 
+function mapFurniture(entry) {
+  return {
+    api_id: num(entry.api_id),
+    api_type: num(entry.api_type),
+    api_no: num(entry.api_no),
+    api_title: entry.api_title || "",
+    api_description: entry.api_description || "",
+    api_rarity: num(entry.api_rarity),
+    api_price: num(entry.api_price),
+    api_saleflg: num(entry.api_saleflg),
+    api_bgm_id: num(entry.api_bgm_id),
+    api_version: num(entry.api_version, 1),
+    api_outside_id: num(entry.api_outside_id),
+    api_active_flag: num(entry.api_active_flag),
+  };
+}
+
 // ---- Main ----
 async function main() {
   console.log("Fetching equipment data...");
@@ -311,6 +328,9 @@ async function main() {
   const equipExslotShip = start2Data.api_mst_equip_exslot_ship || {};
   const equipLimitExslot = start2Data.api_mst_equip_limit_exslot || {};
   const equipShip = start2Data.api_mst_equip_ship || {};
+  const furniture = (start2Data.api_mst_furniture || [])
+    .map(mapFurniture)
+    .sort((a, b) => a.api_id - b.api_id);
 
   // ---- Generate TypeScript ----
   const ts = [];
@@ -318,7 +338,7 @@ async function main() {
   ts.push("// Auto-generated master data from kcwiki/kancolle-data");
   ts.push("// Generated: " + new Date().toISOString());
   ts.push("");
-  ts.push(`// Equipment: ${uniqueEquipment.length} entries, Ships: ${uniqueShips.length} entries`);
+  ts.push(`// Equipment: ${uniqueEquipment.length} entries, Ships: ${uniqueShips.length} entries, Furniture: ${furniture.length} entries`);
   ts.push("");
   ts.push("// ---- Equipment Master ----");
   ts.push("");
@@ -365,6 +385,15 @@ async function main() {
   ts.push(`export const EQUIP_SHIP = ${JSON.stringify(equipShip)};`);
   ts.push("");
 
+  ts.push("// ---- Furniture Master ----");
+  ts.push("");
+  ts.push("export const FURNITURE = [");
+  for (const item of furniture) {
+    ts.push(`  ${JSON.stringify(item)},`);
+  }
+  ts.push("];");
+  ts.push("");
+
   // Write output
   const outPath = path.join(__dirname, "..", "src", "master", "generated-data.ts");
   fs.writeFileSync(outPath, ts.join("\n"));
@@ -374,6 +403,7 @@ async function main() {
   console.log(`  Ship Types: ${shipTypes.length}`);
   console.log(`  Equip Types: ${uniqueEquipTypes.length}`);
   console.log(`  Equip Ship Rules: ${Object.keys(equipShip).length}`);
+  console.log(`  Furniture: ${furniture.length}`);
 
   // Quick validation
   const expectedEquipIds = [1, 2, 3, 4, 10, 37, 46];

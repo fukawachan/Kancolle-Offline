@@ -40,6 +40,8 @@ export type FurnitureResourceManifest = {
   movable: Map<number, FileResource>;
   scripts: Map<number, FileResource>;
   thumbnail: Map<number, FileResource>;
+  picture: Map<number, FileResource>;
+  outside: Map<string, FileResource>;
 };
 
 export type BgmResourceManifest = {

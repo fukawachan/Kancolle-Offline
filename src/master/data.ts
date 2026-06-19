@@ -4,6 +4,7 @@ import {
   EQUIP_LIMIT_EXSLOT,
   EQUIP_SHIP,
   EQUIP_TYPES,
+  FURNITURE,
   SHIPS,
   SHIP_TYPES,
   SLOT_ITEMS
@@ -88,14 +89,7 @@ export const masterData = {
   api_mst_mission: EXPEDITION_MASTERS,
   api_mst_maparea: MAP_AREAS,
   api_mst_mapinfo: NORMAL_MAP_INFOS,
-  api_mst_furniture: [
-    furnitureMaster(1, "Plain Floor", 0),
-    furnitureMaster(2, "White Wall", 1),
-    furnitureMaster(3, "Small Window", 2),
-    furnitureMaster(4, "Simple Chest", 3),
-    furnitureMaster(5, "Writing Desk", 4),
-    furnitureMaster(6, "Local Object", 5)
-  ],
+  api_mst_furniture: FURNITURE,
   api_mst_furnituregraph: [],
   api_mst_useitem: EXPEDITION_USEITEM_MASTERS,
   api_mst_payitem: [],
@@ -119,20 +113,6 @@ export const masterData = {
 };
 
 export type MasterData = typeof masterData;
-
-function furnitureMaster(api_id: number, api_title: string, api_type: number) {
-  return {
-    api_id,
-    api_type,
-    api_no: api_id,
-    api_title,
-    api_description: "Local starter furniture",
-    api_rarity: 0,
-    api_price: 0,
-    api_saleflg: 0,
-    api_season: 0
-  };
-}
 
 function mapMaster(
   areaId: number,

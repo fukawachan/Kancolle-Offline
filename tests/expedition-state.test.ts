@@ -23,13 +23,38 @@ describe("persisted expedition lifecycle", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("migrates to schema v8 and seeds only the first expedition unlocked", () => {
+  it("migrates to schema v9 and seeds only the first expedition unlocked", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const state = store.getMissionMemberState();
 
-    expect(version.version).toBe(8);
+    expect(version.version).toBe(9);
     expect(state.api_list_items.find((item) => item.api_mission_id === 1)?.api_state).toBe(1);
     expect(state.api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(0);
+  });
+
+  it("migrates legacy placeholder furniture to valid six-slot defaults", () => {
+    store.db.prepare("UPDATE furniture SET owned_json = ?, set_json = ?, coins = ? WHERE id = 1").run(
+      JSON.stringify([1, 2, 3, 4, 5, 6]),
+      JSON.stringify({ api_floor: 1, api_wall: 2, api_window: 3, api_chest: 4, api_desk: 5, api_object: 0 }),
+      200
+    );
+    store.db.prepare("UPDATE schema_meta SET version = 8").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
+    const save = store.getSave();
+
+    expect(version.version).toBe(9);
+    expect(save.furniture.owned).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
+    expect(save.furniture.set).toEqual({
+      api_floor: 1,
+      api_wall: 38,
+      api_window: 72,
+      api_object: 102,
+      api_chest: 133,
+      api_desk: 164
+    });
   });
 
   it("preserves v6 saves while clearing legacy placeholder mission state", () => {

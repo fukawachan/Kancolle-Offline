@@ -67,10 +67,22 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return slot[1].toLowerCase() === "btxt_flat" && collection ? firstResource(collection) : undefined;
   }
 
-  const furniture = pathname.match(/^\/kcs2\/resources\/furniture\/normal\/(\d{3})_\d{4}\.png$/i);
+  const furniture = pathname.match(/^\/kcs2\/resources\/furniture\/(normal|movable|scripts|thumbnail|picture)\/(\d{3})_\d{4}\.(png|json)$/i);
   if (furniture) {
-    const id = Number(furniture[1]);
-    return manifest.furniture.normal.get(id) || manifest.furniture.movable.get(id) || manifest.furniture.thumbnail.get(id);
+    const kind = furniture[1].toLowerCase();
+    const id = Number(furniture[2]);
+    const collection = furnitureCollection(manifest, kind);
+    const direct = collection?.get(id);
+    if (direct) return direct;
+    if (kind === "normal") {
+      return manifest.furniture.normal.get(id) || manifest.furniture.movable.get(id) || manifest.furniture.thumbnail.get(id);
+    }
+    return undefined;
+  }
+
+  const furnitureOutside = pathname.match(/^\/kcs2\/resources\/furniture\/outside\/window_bg_(\d+)-(\d+)\.png$/i);
+  if (furnitureOutside) {
+    return manifest.furniture.outside.get(`${Number(furnitureOutside[1])}-${Number(furnitureOutside[2])}`);
   }
 
   const portBgm = pathname.match(/^\/kcs2\/resources\/bgm\/port\/(\d{3})_\d{4}\.mp3$/i);
@@ -109,7 +121,9 @@ function emptyManifest(): ResourceManifest {
       normal: new Map(),
       movable: new Map(),
       scripts: new Map(),
-      thumbnail: new Map()
+      thumbnail: new Map(),
+      picture: new Map(),
+      outside: new Map()
     },
     bgm: {
       port: new Map(),
@@ -228,11 +242,26 @@ function slotCollection(manifest: ResourceManifest, rawKind: string) {
 }
 
 function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
-  const match = pathname.match(/^\/kcs2\/resources\/furniture\/(normal|movable|scripts|thumbnail)\/(\d{3})_(\d{4})\.(png|json)$/i);
+  const outside = pathname.match(/^\/kcs2\/resources\/furniture\/outside\/window_bg_(\d+)-(\d+)\.png$/i);
+  if (outside) {
+    const outsideId = Number(outside[1]);
+    const variant = Number(outside[2]);
+    manifest.furniture.outside.set(
+      `${outsideId}-${variant}`,
+      resource(cacheDir, pathname, meta, {
+        id: outsideId,
+        frame: String(variant),
+        extension: "png"
+      })
+    );
+    return;
+  }
+
+  const match = pathname.match(/^\/kcs2\/resources\/furniture\/(normal|movable|scripts|thumbnail|picture)\/(\d{3})_(\d{4})\.(png|json)$/i);
   if (!match) return;
 
-  const collection = manifest.furniture[match[1].toLowerCase() as keyof ResourceManifest["furniture"]];
-  collection.set(
+  const collection = furnitureCollection(manifest, match[1]);
+  collection?.set(
     Number(match[2]),
     resource(cacheDir, pathname, meta, {
       id: Number(match[2]),
@@ -240,6 +269,23 @@ function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, path
       extension: match[4].toLowerCase()
     })
   );
+}
+
+function furnitureCollection(manifest: ResourceManifest, rawKind: string) {
+  switch (rawKind.toLowerCase()) {
+    case "normal":
+      return manifest.furniture.normal;
+    case "movable":
+      return manifest.furniture.movable;
+    case "scripts":
+      return manifest.furniture.scripts;
+    case "thumbnail":
+      return manifest.furniture.thumbnail;
+    case "picture":
+      return manifest.furniture.picture;
+    default:
+      return undefined;
+  }
 }
 
 function addBgmResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {

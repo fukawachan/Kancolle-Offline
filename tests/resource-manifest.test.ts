@@ -59,6 +59,28 @@ describe("cached resource manifest", () => {
       frame: "8280",
       pathname: "/kcs2/resources/furniture/scripts/006_8280.json"
     });
+    expect(manifest.furniture.picture.get(280)).toMatchObject({
+      id: 280,
+      frame: "5376",
+      pathname: "/kcs2/resources/furniture/picture/280_5376.png"
+    });
+    expect(manifest.furniture.outside.get("1-1")).toMatchObject({
+      id: 1,
+      frame: "1",
+      pathname: "/kcs2/resources/furniture/outside/window_bg_1-1.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/furniture/normal/038_0000.png", manifest)).toMatchObject({
+      id: 38,
+      frame: "1261"
+    });
+    expect(resolveMappedResource("/kcs2/resources/furniture/picture/280_0000.png", manifest)).toMatchObject({
+      id: 280,
+      frame: "5376"
+    });
+    expect(resolveMappedResource("/kcs2/resources/furniture/outside/window_bg_1-1.png", manifest)).toMatchObject({
+      id: 1,
+      frame: "1"
+    });
     expect(manifest.bgm.port.get(0)).toMatchObject({
       id: 0,
       frame: "7138",

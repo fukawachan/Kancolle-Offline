@@ -12,6 +12,14 @@ import {
   type ShipMaster
 } from "../master/catalog.js";
 import { mapMasterId, masterData } from "../master/data.js";
+import {
+  DEFAULT_FURNITURE_SET,
+  FURNITURE_SLOT_ORDER,
+  furnitureMasterById,
+  furnitureMasterByTypeNo,
+  furnitureMatchesSlot,
+  type FurnitureSlotKey
+} from "../master/furniture.js";
 import { normalRoutingMap } from "../master/routing-data.js";
 import type { RouteEvaluation } from "../master/routing.js";
 import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
@@ -38,6 +46,7 @@ import {
   toBuildDock,
   toDeck,
   toFurniture,
+  toFurnitureList,
   toMapInfo,
   toMaterialValues,
   toMaterials,
@@ -111,7 +120,7 @@ register("api_get_member/useitem", (_input, context) => {
   const save = context.stateStore.getSave();
   return apiOk(toUseItems(save.materials, save.useItems));
 });
-register("api_get_member/furniture", (_input, context) => apiOk(toFurniture(context.stateStore.getSave().furniture, context.resourceManifest)));
+register("api_get_member/furniture", (_input, context) => apiOk(toFurnitureList(context.stateStore.getSave().furniture)));
 register("api_get_member/kdock", (_input, context) => apiOk(context.stateStore.getSave().buildDocks.map(toBuildDock)));
 register("api_get_member/ndock", (_input, context) => {
   const save = context.stateStore.getSave();
@@ -272,21 +281,37 @@ register("api_req_quest/clearitemget", (input, context) => {
 });
 
 register("api_req_furniture/change", (input, context) => {
-  const patch = {
-    api_floor: num(input.body.api_floor_id, 1),
-    api_wall: num(input.body.api_wall_id, 2),
-    api_window: num(input.body.api_window_id, 3),
-    api_chest: num(input.body.api_chest_id, 4),
-    api_desk: num(input.body.api_desk_id, 5),
-    api_object: num(input.body.api_object_id, 6)
-  };
+  const patch = furnitureChangePatch(input.body);
+  const save = context.stateStore.getSave();
+  const owned = new Set(save.furniture.owned);
+  for (const slot of FURNITURE_SLOT_ORDER) {
+    const id = patch[slot];
+    if (!owned.has(id)) return apiError(`Furniture ${id} is not owned`, 400);
+    if (!furnitureMatchesSlot(id, slot)) return apiError(`Furniture ${id} does not fit ${slot}`, 400);
+  }
+
+  const bgmId = input.body.api_bgm_id == null ? -1 : num(input.body.api_bgm_id, -1);
+  if (bgmId !== -1) context.stateStore.setPortBgm(normalizePortBgmId(bgmId, context.resourceManifest));
+
   return apiOk(toFurniture(context.stateStore.updateFurnitureSet(patch), context.resourceManifest));
 });
-register("api_req_furniture/buy", (input, context) => apiOk(toFurniture(context.stateStore.buyFurniture(num(input.body.api_id, 1)), context.resourceManifest)));
-register("api_req_furniture/music_list", (_input, context) => apiOk({ api_list: portBgmMaster(context.resourceManifest) }));
-register("api_req_furniture/music_play", () => apiOk({ api_id: 0 }));
+register("api_req_furniture/buy", (input, context) => {
+  const master = resolveFurniturePurchase(input.body);
+  if (!master) return apiError("Unknown furniture", 400);
+  if (num(input.body.api_discount_flag, 0) === 1) return apiError("Furniture craftsman discounts are not available", 400);
+  if (master.api_price > 0 && master.api_saleflg !== 1) return apiError("Furniture is not on sale", 400);
+
+  const current = context.stateStore.getSave().furniture;
+  if (!current.owned.includes(master.api_id) && current.coins < master.api_price) {
+    return apiError("Insufficient furniture coins", 400);
+  }
+
+  return apiOk(toFurniture(context.stateStore.buyFurniture(master.api_id, master.api_price), context.resourceManifest));
+});
+register("api_req_furniture/music_list", (_input, context) => apiOk(portBgmJukeboxMaster(context.resourceManifest)));
+register("api_req_furniture/music_play", (_input, context) => apiOk({ api_coin: context.stateStore.getSave().furniture.coins }));
 register("api_req_furniture/set_portbgm", (input, context) =>
-  apiOk({ api_p_bgm_id: context.stateStore.setPortBgm(normalizePortBgmId(num(input.body.api_id, 0), context.resourceManifest)) })
+  apiOk({ api_p_bgm_id: context.stateStore.setPortBgm(normalizePortBgmId(num(input.body.api_music_id ?? input.body.api_id, 0), context.resourceManifest)) })
 );
 register("api_req_furniture/radio_play", () => apiOk({ api_id: 0 }));
 
@@ -627,6 +652,22 @@ function pictureBookList(input: HandlerInput, resourceManifest: ResourceManifest
   return [];
 }
 
+function furnitureChangePatch(body: Record<string, unknown>): Record<FurnitureSlotKey, number> {
+  return {
+    api_floor: num(body.api_floor ?? body.api_floor_id, DEFAULT_FURNITURE_SET.api_floor),
+    api_wall: num(body.api_wallpaper ?? body.api_wall_id, DEFAULT_FURNITURE_SET.api_wall),
+    api_window: num(body.api_window ?? body.api_window_id, DEFAULT_FURNITURE_SET.api_window),
+    api_object: num(body.api_wallhanging ?? body.api_object_id, DEFAULT_FURNITURE_SET.api_object),
+    api_chest: num(body.api_shelf ?? body.api_chest_id, DEFAULT_FURNITURE_SET.api_chest),
+    api_desk: num(body.api_desk ?? body.api_desk_id, DEFAULT_FURNITURE_SET.api_desk)
+  };
+}
+
+function resolveFurniturePurchase(body: Record<string, unknown>) {
+  if (body.api_id != null) return furnitureMasterById(num(body.api_id, 0));
+  return furnitureMasterByTypeNo(num(body.api_type, -1), num(body.api_no, -1));
+}
+
 function furnitureGraph(resourceManifest: ResourceManifest) {
   const ids = new Set<number>([
     ...resourceManifest.furniture.normal.keys(),
@@ -638,7 +679,7 @@ function furnitureGraph(resourceManifest: ResourceManifest) {
   return [...ids]
     .sort((a, b) => a - b)
     .map((id) => {
-      const master = masterData.api_mst_furniture.find((item) => item.api_no === id || item.api_id === id);
+      const master = furnitureMasterById(id);
       const file =
         resourceManifest.furniture.normal.get(id) ||
         resourceManifest.furniture.scripts.get(id) ||
@@ -646,7 +687,7 @@ function furnitureGraph(resourceManifest: ResourceManifest) {
         resourceManifest.furniture.thumbnail.get(id);
       return {
         api_id: id,
-        api_no: id,
+        api_no: master?.api_no ?? id,
         api_type: master?.api_type ?? Math.max(0, (id - 1) % 6),
         api_filename: file?.frame ?? String(id),
         api_version: file?.version ?? "1"
@@ -673,6 +714,24 @@ function portBgmMaster(resourceManifest: ResourceManifest) {
     .filter((bgm) => bgm.id > 0)
     .sort((a, b) => a.id - b.id)
     .map((bgm) => bgmEntry(bgm, bgm.id === DEFAULT_PORT_BGM_ID ? "母港" : "Port"));
+}
+
+function portBgmJukeboxMaster(resourceManifest: ResourceManifest) {
+  return [...resourceManifest.bgm.port.values()]
+    .filter((bgm) => bgm.id > 0)
+    .sort((a, b) => a.id - b.id)
+    .map((bgm) => {
+      const label = bgm.id === DEFAULT_PORT_BGM_ID ? "母港" : `Local Port BGM ${String(bgm.id).padStart(3, "0")}`;
+      return {
+        api_id: bgm.id,
+        api_name: label,
+        api_description: "",
+        api_bgm_id: bgm.id,
+        api_use_coin: 0,
+        api_bgm_flag: 1,
+        api_loops: 1
+      };
+    });
 }
 
 function bgmEntry(bgm: ResourceManifest["bgm"]["port"] extends Map<number, infer T> ? T : never, label: string) {

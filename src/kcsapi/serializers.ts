@@ -1,5 +1,11 @@
 import { masterData } from "../master/data.js";
 import {
+  furnitureMasterById,
+  furnitureSetArray,
+  normalizeFurnitureSet,
+  normalizeOwnedFurniture
+} from "../master/furniture.js";
+import {
   mapGaugeRequirement,
   mapGaugeStage,
   mapPhaseDefinitions
@@ -42,11 +48,11 @@ export function toBasic(player: Player, furniture?: FurnitureState, resourceMani
     api_max_kagu: 200,
     api_playtime: 0,
     api_tutorial: player.tutorialProgress,
-    api_furniture: toBasicFurniture(furniture, resourceManifest),
+    api_furniture: toBasicFurniture(furniture),
     api_count_deck: 4,
     api_count_kdock: 4,
     api_count_ndock: 4,
-    api_fcoin: 200,
+    api_fcoin: furniture?.coins ?? 200,
     api_st_win: 0,
     api_st_lose: 0,
     api_ms_count: 0,
@@ -283,10 +289,21 @@ export function toQuestList(quests: Quest[]) {
 
 export function toFurniture(furniture: FurnitureState, resourceManifest?: ResourceManifest) {
   return {
-    api_list: furniture.owned.map((id) => ({ api_id: id, api_furniture_no: id, api_furniture_type: (id - 1) % 6 })),
-    api_set: normalizeFurnitureSet(furniture.set, resourceManifest),
+    api_list: toFurnitureList(furniture),
+    api_set: normalizeFurnitureSet(furniture.set),
     api_fcoin: furniture.coins
   };
+}
+
+export function toFurnitureList(furniture: FurnitureState) {
+  return normalizeOwnedFurniture(furniture.owned).map((id) => {
+    const master = furnitureMasterById(id);
+    return {
+      api_id: id,
+      api_furniture_no: master?.api_no ?? id,
+      api_furniture_type: master?.api_type ?? 0
+    };
+  });
 }
 
 export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
@@ -316,37 +333,12 @@ export function toRequireInfo(save: SaveState, resourceManifest?: ResourceManife
     api_unsetslot: toUnsetSlot(save),
     api_kdock: save.buildDocks.map(toBuildDock),
     api_useitem: toUseItems(save.materials, save.useItems),
-    api_furniture: toFurniture(save.furniture, resourceManifest).api_list
+    api_furniture: toFurnitureList(save.furniture)
   };
 }
 
-function toBasicFurniture(furniture?: FurnitureState, resourceManifest?: ResourceManifest) {
-  const set = normalizeFurnitureSet(furniture?.set, resourceManifest);
-  return [
-    set.api_floor,
-    set.api_wall,
-    set.api_window,
-    set.api_object,
-    set.api_chest,
-    set.api_desk
-  ];
-}
-
-function normalizeFurnitureSet(set?: Partial<FurnitureState["set"]>, resourceManifest?: ResourceManifest) {
-  const normalized = {
-    api_floor: set?.api_floor ?? 1,
-    api_wall: set?.api_wall ?? 2,
-    api_window: set?.api_window ?? 3,
-    api_chest: set?.api_chest ?? 4,
-    api_desk: set?.api_desk ?? 5,
-    api_object: set?.api_object ?? 0
-  };
-
-  if (resourceManifest && normalized.api_object > 0 && !resourceManifest.furniture.normal.has(normalized.api_object)) {
-    normalized.api_object = 0;
-  }
-
-  return normalized;
+function toBasicFurniture(furniture?: FurnitureState) {
+  return furnitureSetArray(furniture?.set);
 }
 
 export function normalizePortBgmId(portBgmId: number, resourceManifest?: ResourceManifest) {
