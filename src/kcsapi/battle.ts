@@ -15,11 +15,20 @@ import {
   fighterPower,
   resolveBattleDamage
 } from "./battle-formulas.js";
+import {
+  generatePracticeBatch,
+  practiceBaseShipExp,
+  practiceMemberExp,
+  practiceRivalById,
+  practiceSeededBonus,
+  type PracticeRival
+} from "./practice.js";
 
 export type BattleInput = {
   formation?: number;
   deckId?: number;
   practiceEnemyId?: number;
+  practiceRivals?: PracticeRival[];
 };
 
 export type BattleMode = "sortie" | "practice" | "combined";
@@ -27,6 +36,13 @@ export type BattleMode = "sortie" | "practice" | "combined";
 type Side = 0 | 1;
 
 type BattleSortieContext = SelectedSortieEncounter & {
+  seed: number;
+};
+
+type PracticeResultContext = {
+  playerLevel: number;
+  enemyLevel: number;
+  enemyShipLevels: number[];
   seed: number;
 };
 
@@ -188,6 +204,9 @@ export type BattleRecord = {
   deckId: number;
   escortDeckId?: number;
   practiceEnemyId?: number;
+  practiceEnemyLevel?: number;
+  practiceSeed?: number;
+  playerLevel?: number;
   shipIds: number[];
   shipMasterIds: number[];
   escortShipIds?: number[];
@@ -271,17 +290,6 @@ export type BattleSettlementRecord = {
   escort?: FleetSettlementSlot[];
 };
 
-export type PracticeRival = {
-  id: number;
-  name: string;
-  level: number;
-  rank: string;
-  comment: string;
-  flag: number;
-  medals: number;
-  ships: { id: number; masterId: number; level: number; star: number }[];
-};
-
 type DamageInput = {
   attackPower: number;
   armor: number;
@@ -316,82 +324,6 @@ const RADAR_TYPES = new Set([12, 13]);
 const SLOT_MASTER_BY_ID = new Map<number, (typeof masterData.api_mst_slotitem)[number]>(
   [...masterData.api_mst_slotitem, ...DEEP_SEA_SLOT_MASTERS].map((slot) => [slot.api_id, slot] as const)
 );
-
-const PRACTICE_RIVALS: PracticeRival[] = [
-  {
-    id: 1,
-    name: "Local Training Fleet",
-    level: 5,
-    rank: "少佐",
-    comment: "Offline practice opponent",
-    flag: 1,
-    medals: 0,
-    ships: [
-      { id: 101, masterId: 9, level: 3, star: 2 },
-      { id: 102, masterId: 10, level: 3, star: 2 }
-    ]
-  },
-  {
-    id: 2,
-    name: "Local Patrol Fleet",
-    level: 8,
-    rank: "中佐",
-    comment: "Steady sparring partner",
-    flag: 1,
-    medals: 0,
-    ships: [
-      { id: 201, masterId: 1, level: 5, star: 3 },
-      { id: 202, masterId: 2, level: 5, star: 3 }
-    ]
-  },
-  {
-    id: 3,
-    name: "Local Cruiser Fleet",
-    level: 12,
-    rank: "大佐",
-    comment: "Light cruiser exercises",
-    flag: 1,
-    medals: 1,
-    ships: [
-      { id: 301, masterId: 54, level: 8, star: 4 },
-      { id: 302, masterId: 9, level: 6, star: 3 }
-    ]
-  },
-  {
-    id: 4,
-    name: "Local Carrier Fleet",
-    level: 15,
-    rank: "少将",
-    comment: "Air wing drill",
-    flag: 1,
-    medals: 1,
-    ships: [
-      { id: 401, masterId: 277, level: 10, star: 5 },
-      { id: 402, masterId: 10, level: 8, star: 4 }
-    ]
-  },
-  {
-    id: 5,
-    name: "Local Battleship Fleet",
-    level: 20,
-    rank: "中将",
-    comment: "Heavy fleet exercise",
-    flag: 1,
-    medals: 2,
-    ships: [
-      { id: 501, masterId: 77, level: 12, star: 5 },
-      { id: 502, masterId: 54, level: 10, star: 4 }
-    ]
-  }
-];
-
-export function practiceRivals() {
-  return PRACTICE_RIVALS.map((rival) => ({ ...rival, ships: rival.ships.map((ship) => ({ ...ship })) }));
-}
-
-export function practiceRivalById(id: number) {
-  return practiceRivals().find((rival) => rival.id === id) ?? practiceRivals()[0];
-}
 
 export function resolveDamage(input: DamageInput) {
   const targetHp = Math.max(0, Math.trunc(input.targetHp ?? Number.MAX_SAFE_INTEGER));
@@ -457,9 +389,10 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
 
 export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
   const deck = save.decks.find((item) => item.id === (input.deckId ?? 1)) ?? save.decks[0];
-  const rival = practiceRivalById(input.practiceEnemyId ?? 1);
+  const rivals = input.practiceRivals ?? generatePracticeBatch().rivals;
+  const rival = practiceRivalById(rivals, input.practiceEnemyId ?? 1);
   const formation: [number, number, number] = [battleFormation(input), 1, 1];
-  const seed = rival.id * 13007 + formation[0] * 101;
+  const seed = practiceBattleSeed(rival, formation[0]);
   const rng = new BattleRng(seed);
   const friendly = friendlyUnits(save, deck.shipIds);
   const enemy = rival.ships.map((ship, index) => practiceEnemyUnit(ship.masterId, ship.level, index + 1));
@@ -471,11 +404,19 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
   const afterF = fixedHp(friendly);
   const afterE = fixedHp(enemy);
-  const result = battleResult(friendly, enemy, "practice");
+  const result = battleResult(friendly, enemy, "practice", undefined, {
+    playerLevel: save.player.level,
+    enemyLevel: rival.level,
+    enemyShipLevels: rival.ships.map((ship) => ship.level),
+    seed
+  });
   const record: BattleRecord = {
     mode: "practice",
     deckId: deck.id,
     practiceEnemyId: rival.id,
+    practiceEnemyLevel: rival.level,
+    practiceSeed: seed,
+    playerLevel: save.player.level,
     shipIds: fixedShipIds(deck.shipIds),
     shipMasterIds: fixedShipMasterIds(save, deck.shipIds),
     enemyIds: fixedEnemyIds(enemy),
@@ -594,7 +535,10 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
       ...record.phases,
       night: hougeki
     },
-    result: { ...battleResult(friendly, enemy, record.mode, record.sortie), mvpCombined: record.result.mvpCombined }
+    result: {
+      ...battleResult(friendly, enemy, record.mode, record.sortie, practiceResultContext(record, enemy)),
+      mvpCombined: record.result.mvpCombined
+    }
   };
   const payload: Record<string, unknown> = {
     api_deck_id: record.deckId,
@@ -1270,14 +1214,25 @@ function applyDamage(
   return damage;
 }
 
-function battleResult(friendly: BattleUnit[], enemy: BattleUnit[], mode: BattleMode = "sortie", sortie?: BattleSortieContext): BattleResultRecord {
+function battleResult(
+  friendly: BattleUnit[],
+  enemy: BattleUnit[],
+  mode: BattleMode = "sortie",
+  sortie?: BattleSortieContext,
+  practice?: PracticeResultContext
+): BattleResultRecord {
   const enemyTotalHp = enemy.reduce((sum, unit) => sum + unit.maxHp, 0);
   const enemyRemainingHp = enemy.reduce((sum, unit) => sum + Math.max(0, unit.hp), 0);
   const sunk = enemy.filter((unit) => unit.hp <= 0).length;
   const damageRatio = enemyTotalHp > 0 ? (enemyTotalHp - enemyRemainingHp) / enemyTotalHp : 1;
   const rank = sunk === enemy.length ? "S" : damageRatio >= 0.7 ? "A" : damageRatio >= 0.4 ? "B" : "C";
   const mvp = [...friendly].sort((a, b) => b.damageDealt - a.damageDealt || a.position - b.position)[0]?.position ?? 1;
-  const baseExp = rank === "S" ? 40 : rank === "A" ? 35 : rank === "B" ? 30 : 20;
+  const baseExp = mode === "practice" && practice
+    ? practiceBaseShipExp(practice.enemyShipLevels, rank, practiceSeededBonus(practice.seed))
+    : rank === "S" ? 40 : rank === "A" ? 35 : rank === "B" ? 30 : 20;
+  const memberExp = mode === "practice" && practice
+    ? practiceMemberExp(practice.playerLevel, practice.enemyLevel, rank)
+    : baseExp * 2;
   const drop = mode === "practice" || !sortie ? null : selectSortieDrop({
     mapId: sortie.mapId,
     node: sortie.node,
@@ -1289,8 +1244,8 @@ function battleResult(friendly: BattleUnit[], enemy: BattleUnit[], mode: BattleM
     rank,
     mvp,
     baseExp,
-    getExp: baseExp * 2,
-    memberExp: baseExp * 2,
+    getExp: memberExp,
+    memberExp,
     dropShipId: drop?.shipId ?? 0,
     dropShipName: drop?.shipName ?? "",
     dropShipType: drop?.shipType ?? ""
@@ -1386,6 +1341,23 @@ function sortieBattleContext(save: SaveState, seed: number): BattleSortieContext
   if (!session) return undefined;
   const encounter = selectSortieEncounter(session.areaId, session.mapNo, session.node, seed);
   return encounter ? { ...encounter, seed } : undefined;
+}
+
+function practiceBattleSeed(rival: PracticeRival, formation: number) {
+  return rival.ships.reduce(
+    (sum, ship, index) => sum + ship.masterId * (index + 1) * 17 + ship.level * (index + 3) * 31,
+    rival.id * 13007 + formation * 101 + rival.level * 997
+  );
+}
+
+function practiceResultContext(record: BattleRecord, enemy: BattleUnit[]): PracticeResultContext | undefined {
+  if (record.mode !== "practice") return undefined;
+  return {
+    playerLevel: safeNum(record.playerLevel, 1),
+    enemyLevel: safeNum(record.practiceEnemyLevel, 1),
+    enemyShipLevels: enemy.map((unit) => unit.level),
+    seed: safeNum(record.practiceSeed, record.practiceEnemyId ?? 1)
+  };
 }
 
 function supportPhase(

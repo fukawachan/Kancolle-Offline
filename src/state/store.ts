@@ -31,6 +31,12 @@ import {
   type ExpeditionOutcome,
   type ExpeditionRunSnapshot
 } from "../kcsapi/expedition.js";
+import {
+  clonePracticeBatch,
+  generatePracticeBatch,
+  isPracticeBatch,
+  practicePeriodKey
+} from "../kcsapi/practice.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
 import { isAircraftSlotItem } from "../kcsapi/serializers.js";
 import {
@@ -84,6 +90,7 @@ const defaultOptions: PlayerOptions = {
 
 export const LOCAL_WORLD_ID = 15;
 const SCHEMA_VERSION = 9;
+const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
@@ -543,6 +550,7 @@ export function createStateStore(options: StateStoreOptions) {
     updatePracticeBattle: (record: JsonObject) => recordBattleSession(db, "practice", record),
     lastPracticeBattle: () => lastBattleSession(db, "practice"),
     applyPracticeBattleResult: () => applyBattleResult(db, "practice"),
+    practiceBatch: () => practiceBatch(db),
     practiceStates: () => practiceStates(db),
     recordCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
     updateCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
@@ -1128,6 +1136,26 @@ function writeBattleSession(db: Database.Database, id: string, state: JsonObject
 function readBattleSession(db: Database.Database, id: string) {
   const row = db.prepare("SELECT state_json FROM battle_sessions WHERE id = ?").get(id) as Row | undefined;
   return row ? parseJson<JsonObject>(row.state_json, {}) : null;
+}
+
+function practiceBatch(db: Database.Database) {
+  const now = Date.now();
+  const periodKey = practicePeriodKey(now);
+  const saved = readBattleSession(db, PRACTICE_BATCH_SESSION_ID);
+  if (isPracticeBatch(saved) && saved.periodKey === periodKey) {
+    return {
+      ...clonePracticeBatch(saved),
+      states: practiceStates(db)
+    };
+  }
+
+  const batch = generatePracticeBatch(periodKey, now);
+  writeBattleSession(db, PRACTICE_BATCH_SESSION_ID, batch as unknown as JsonObject);
+  writeBattleSession(db, PRACTICE_STATES_SESSION_ID, {});
+  return {
+    ...clonePracticeBatch(batch),
+    states: {}
+  };
 }
 
 function practiceStates(db: Database.Database) {

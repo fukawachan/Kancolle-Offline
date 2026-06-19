@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { shipApiExp, shipLevelForExp, shipLevelupInfo, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
+import { practiceBaseShipExp, practiceMemberExp, shipTotalExpForPracticeLevel } from "../src/kcsapi/practice.js";
 
 describe("battle experience helpers", () => {
   it("uses deterministic cumulative ship experience thresholds", () => {
@@ -22,5 +23,32 @@ describe("battle experience helpers", () => {
     expect(shipApiExp(0, 1)).toEqual([0, 100, 0]);
     expect(shipApiExp(50, 1)).toEqual([50, 50, 50]);
     expect(shipApiExp(100, 2)).toEqual([100, 200, 0]);
+  });
+
+  it("calculates practice ship experience from the enemy flagship and second ship levels", () => {
+    expect(practiceBaseShipExp([80, 1], "A", 0)).toBe(557);
+    expect(practiceBaseShipExp([80, 80], "A", 0)).toBe(567);
+    expect(practiceBaseShipExp([99, 1], "A", 0)).toBe(597);
+
+    const base = practiceBaseShipExp([80, 80], "A", 0);
+    expect(practiceBaseShipExp([80, 80], "S", 0)).toBe(Math.floor(base * 1.2));
+    expect(practiceBaseShipExp([80, 80], "B", 0)).toBe(base);
+    expect(practiceBaseShipExp([80, 80], "C", 0)).toBe(Math.floor(base * 0.64));
+  });
+
+  it("uses post-marriage cumulative experience plus the practice offset for level 100 and above", () => {
+    expect(shipTotalExpForPracticeLevel(80)).toBe(383_000);
+    expect(shipTotalExpForPracticeLevel(99)).toBe(1_000_000);
+    expect(shipTotalExpForPracticeLevel(100)).toBe(1_000_000);
+    expect(shipTotalExpForPracticeLevel(120)).toBe(1_255_000);
+    expect(shipTotalExpForPracticeLevel(188)).toBe(20_200_000);
+  });
+
+  it("calculates practice member experience from commander level difference and rank", () => {
+    expect(practiceMemberExp(80, 85, "S")).toBe(160);
+    expect(practiceMemberExp(80, 85, "A")).toBe(120);
+    expect(practiceMemberExp(80, 85, "B")).toBe(96);
+    expect(practiceMemberExp(80, 85, "C")).toBe(80);
+    expect(practiceMemberExp(90, 85, "S")).toBe(20);
   });
 });

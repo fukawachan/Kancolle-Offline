@@ -1570,6 +1570,57 @@ describe("local kcsapi endpoints", () => {
     expect(store.getSave().ships).toHaveLength(beforeShipCount);
   });
 
+  it("refreshes generated practice rivals at JST exercise windows and reuses the batch for battle", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-18T17:59:00.000Z"));
+
+    const signature = (practiceData: any) =>
+      practiceData.api_list
+        .map((item: any) => `${item.api_enemy_id}:${item.api_enemy_level}:${item.api_enemy_flag_ship}:${item.api_enemy_name}`)
+        .join("|");
+
+    const before = (await post("api_get_member/practice")).json().api_data;
+    const beforeSignature = signature(before);
+    expect(before.api_list).toHaveLength(5);
+
+    const beforeInfos = [];
+    for (const rival of before.api_list) {
+      expect(rival.api_enemy_level).toBeGreaterThanOrEqual(80);
+      expect(rival.api_enemy_level).toBeLessThanOrEqual(120);
+
+      const info = (await post("api_req_member/get_practice_enemyinfo", { api_member_id: rival.api_enemy_id })).json().api_data;
+      const ships = info.api_deck.api_ships;
+      beforeInfos.push({ rival, ships });
+
+      expect(ships.length).toBeGreaterThanOrEqual(2);
+      expect(ships.length).toBeLessThanOrEqual(6);
+      expect(rival.api_enemy_flag_ship).toBe(ships[0].api_ship_id);
+      expect(ships.every((ship: any) => ship.api_level >= 80 && ship.api_level <= 188)).toBe(true);
+    }
+
+    const first = beforeInfos[0];
+    const battle = (await post("api_req_practice/battle", {
+      api_deck_id: 1,
+      api_enemy_id: first.rival.api_enemy_id,
+      api_formation_id: 1
+    })).json().api_data;
+    expect(battle.api_ship_ke.filter((id: number) => id > 0)).toEqual(first.ships.map((ship: any) => ship.api_ship_id));
+    expect(battle.api_ship_lv.filter((_level: number, index: number) => battle.api_ship_ke[index] > 0))
+      .toEqual(first.ships.map((ship: any) => ship.api_level));
+
+    await post("api_req_practice/battle_result");
+    const challengedBefore = (await post("api_get_member/practice")).json().api_data;
+    expect(signature(challengedBefore)).toBe(beforeSignature);
+    expect(challengedBefore.api_list.find((item: any) => item.api_enemy_id === first.rival.api_enemy_id).api_state)
+      .toBeGreaterThan(0);
+
+    vi.setSystemTime(new Date("2026-06-18T18:00:00.000Z"));
+    const after = (await post("api_get_member/practice")).json().api_data;
+    expect(after.api_list).toHaveLength(5);
+    expect(signature(after)).not.toBe(beforeSignature);
+    expect(after.api_list.every((item: any) => item.api_state === 0)).toBe(true);
+  });
+
   it("supports a playable practice battle loop with settlement fields", async () => {
     const practice = await post("api_get_member/practice");
     const practiceData = practice.json().api_data;
