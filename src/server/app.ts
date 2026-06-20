@@ -15,6 +15,11 @@ import { LOCAL_WORLD_ID } from "../state/store.js";
 import type { StateStore } from "../state/store.js";
 import { registerDebugRoutes } from "../debug/index.js";
 
+const TRANSPARENT_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+  "base64"
+);
+
 export type BuildAppOptions = {
   cacheDir: string;
   stateStore: StateStore;
@@ -230,6 +235,10 @@ async function readVoiceFallback(cacheDir: string, url: string) {
 async function readPngFallback(cacheDir: string, url: string) {
   const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
   const resolvedCacheDir = path.resolve(cacheDir);
+
+  if (/^\/kcs2\/resources\/area\/sally\/00[3-7]\.png$/i.test(pathname)) {
+    return TRANSPARENT_PNG;
+  }
 
   if (/\.jpe?g$/i.test(pathname)) {
     const fallbackPath = path.resolve(resolvedCacheDir, `.${pathname.replace(/\.jpe?g$/i, ".png")}`);

@@ -238,6 +238,41 @@ describe("local Fastify server", () => {
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
+  it("falls back to transparent normal-map sally area images when the cache lacks an area title", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+    const transparentPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+      "base64"
+    ).toString();
+
+    for (const areaId of [3, 4, 5, 6, 7]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/kcs2/resources/area/sally/${String(areaId).padStart(3, "0")}.png`
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["content-type"]).toContain("image/png");
+      expect(response.body).toBe(transparentPng);
+    }
+
+    const withVersion = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/area/sally/004.png?version=6.2.1.0"
+    });
+    const cachedArea = await app.inject({ method: "GET", url: "/kcs2/resources/area/sally/001.png" });
+
+    expect(withVersion.statusCode).toBe(200);
+    expect(withVersion.body).toBe(transparentPng);
+    expect(cachedArea.statusCode).toBe(200);
+    expect(cachedArea.headers["content-type"]).toContain("image/png");
+    expect(cachedArea.body).not.toBe(transparentPng);
+  });
+
   it("falls back to cache-backed battle and fanfare BGM when the client asks with a stale frame", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
