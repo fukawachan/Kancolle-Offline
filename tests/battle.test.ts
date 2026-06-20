@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createSortieBattle, createNightBattlePayload, resolveDamage } from "../src/kcsapi/battle.js";
+import { createPracticeBattle, createSortieBattle, createNightBattlePayload, resolveDamage } from "../src/kcsapi/battle.js";
 import { ENEMY_UNIT_TEMPLATES } from "../src/master/sortie-data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
@@ -77,7 +77,7 @@ describe("sortie battle simulation", () => {
       expect(target).toBeLessThan(activeEnemyCount);
       expect(raigeki.api_edam[target]).toBeGreaterThanOrEqual(raigeki.api_fydam[attackerIndex]);
     }
-    expect(battle.record.result.rank).toMatch(/[SABC]/);
+    expect(battle.record.result.rank).toMatch(/[SABCDE]/);
     expect(battle.record.result.mvp).toBeGreaterThanOrEqual(1);
   });
 
@@ -160,6 +160,73 @@ describe("sortie battle simulation", () => {
     expect(battle.payload.api_stage_flag).toEqual([1, 0, 0]);
     expect(battle.payload.api_kouku?.api_stage2).toBeNull();
     expect(battle.payload.api_kouku?.api_stage3).toBeNull();
+  });
+
+  it("uses practice enemy carrier loadouts for aerial combat", () => {
+    const rival = {
+      id: 1,
+      name: "Carrier Practice",
+      level: 120,
+      rank: "元帥",
+      comment: "carrier loadout",
+      flag: 1,
+      medals: 4,
+      ships: [
+        {
+          id: 101,
+          masterId: 277,
+          level: 120,
+          star: 5,
+          slotMasterIds: [22, 52, 23, 54],
+          onSlot: [18, 18, 27, 10, 0]
+        }
+      ]
+    };
+
+    const battle = createPracticeBattle(store.getSave(), {
+      practiceEnemyId: 1,
+      practiceRivals: [rival],
+      formation: 1
+    });
+    const kouku = battle.payload.api_kouku;
+
+    expect(battle.payload.api_eSlot[0]).toEqual([22, 52, 23, 54, -1]);
+    expect(kouku).not.toBeNull();
+    expect(kouku?.api_plane_from[1]).toEqual([1]);
+    expect(kouku?.api_stage1.api_e_count).toBeGreaterThan(0);
+    expect(
+      kouku?.api_stage3?.api_frai_flag.some((flag) => flag > 0) ||
+      kouku?.api_stage3?.api_fbak_flag.some((flag) => flag > 0)
+    ).toBe(true);
+  });
+
+  it("treats a low-level fleet crushed by high-level practice enemies as a defeat", () => {
+    const rival = {
+      id: 1,
+      name: "High Level Practice",
+      level: 120,
+      rank: "元帥",
+      comment: "high level fleet",
+      flag: 1,
+      medals: 4,
+      ships: [131, 143, 150, 151, 152, 153].map((masterId, index) => ({
+        id: 101 + index,
+        masterId,
+        level: 120,
+        star: 5,
+        slotMasterIds: [9, 9, 36, 25],
+        onSlot: [0, 0, 0, 5, 0]
+      }))
+    };
+
+    const battle = createPracticeBattle(store.getSave(), {
+      practiceEnemyId: 1,
+      practiceRivals: [rival],
+      formation: 1
+    });
+
+    expect(battle.record.after.fNowHps.some((hp) => hp === 1)).toBe(true);
+    expect(["D", "E"]).toContain(battle.record.result.rank);
   });
 
   it("reports interception without an airstrike when all attack aircraft are shot down", () => {

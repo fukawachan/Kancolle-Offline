@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
+import { createResourceManifest } from "../src/resources/manifest.js";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
@@ -1097,7 +1098,7 @@ describe("local kcsapi endpoints", () => {
       api_hougeki1: expect.any(Object)
     });
     expect(result.json().api_data).toMatchObject({
-      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_win_rank: expect.stringMatching(/[SABCDE]/),
       api_get_exp: expect.any(Number),
       api_get_ship_exp: expect.any(Array)
     });
@@ -1540,7 +1541,7 @@ describe("local kcsapi endpoints", () => {
       expect(nightData[key], key).toHaveLength(6);
     }
     expect(result.json().api_data).toMatchObject({
-      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_win_rank: expect.stringMatching(/[SABCDE]/),
       api_mvp: expect.any(Number),
       api_get_exp: expect.any(Number),
       api_get_ship: expect.any(Object),
@@ -1637,6 +1638,46 @@ describe("local kcsapi endpoints", () => {
     expect(after.api_list.every((item: any) => item.api_state === 0)).toBe(true);
   });
 
+  it("regenerates stale practice batches that contain uncached ships or legacy loadout data", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-18T18:30:00.000Z"));
+
+    const staleBatch = {
+      periodKey: "2026-06-19T03:00+09:00",
+      generatedAt: Date.now(),
+      rivals: [
+        {
+          id: 1,
+          name: "Stale Fleet",
+          level: 100,
+          rank: "大将",
+          comment: "legacy cached batch",
+          flag: 1,
+          medals: 2,
+          ships: [
+            { id: 101, masterId: 744, level: 120, star: 4 },
+            { id: 102, masterId: 9, level: 120, star: 4 }
+          ]
+        }
+      ]
+    };
+    store.db.prepare("INSERT INTO battle_sessions (id, state_json) VALUES (?, ?)").run("practice_batch", JSON.stringify(staleBatch));
+    store.db.prepare("INSERT INTO battle_sessions (id, state_json) VALUES (?, ?)").run("practice_states", JSON.stringify({ 1: 6 }));
+
+    const manifest = await createResourceManifest(path.resolve("cache"));
+    const practice = (await post("api_get_member/practice")).json().api_data;
+
+    expect(practice.api_list).toHaveLength(5);
+    expect(practice.api_list.every((item: any) => item.api_state === 0)).toBe(true);
+    for (const rival of practice.api_list) {
+      expect(rival.api_enemy_flag_ship).not.toBe(744);
+      const info = (await post("api_req_member/get_practice_enemyinfo", { api_member_id: rival.api_enemy_id })).json().api_data;
+      for (const ship of info.api_deck.api_ships) {
+        expect(manifest.ship.banner.has(ship.api_ship_id), `banner exists for ${ship.api_ship_id}`).toBe(true);
+      }
+    }
+  });
+
   it("supports a playable practice battle loop with settlement fields", async () => {
     const practice = await post("api_get_member/practice");
     const practiceData = practice.json().api_data;
@@ -1698,7 +1739,7 @@ describe("local kcsapi endpoints", () => {
       api_n_mother_list: expect.any(Array)
     });
     expect(result.json().api_data).toMatchObject({
-      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_win_rank: expect.stringMatching(/[SABCDE]/),
       api_get_ship_exp: expect.any(Array),
       api_get_exp_lvup: expect.any(Array)
     });
@@ -1764,7 +1805,7 @@ describe("local kcsapi endpoints", () => {
     });
     expect(night.json().api_data.api_f_nowhps_combined).toHaveLength(6);
     expect(result.json().api_data).toMatchObject({
-      api_win_rank: expect.stringMatching(/[SABC]/),
+      api_win_rank: expect.stringMatching(/[SABCDE]/),
       api_get_ship_exp: expect.any(Array),
       api_get_exp_lvup: expect.any(Array),
       api_mvp_combined: expect.any(Number),
