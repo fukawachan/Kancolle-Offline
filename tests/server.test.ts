@@ -47,7 +47,7 @@ describe("local Fastify server", () => {
     expect(response.body).toContain("id=\"game_frame\"");
   });
 
-  it("resets the local edit-name input metrics so client positioning aligns with the game UI", async () => {
+  it("uses font-relative edit-name input metrics so client positioning aligns with the game UI", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
@@ -64,7 +64,8 @@ describe("local Fastify server", () => {
     expect(editboxRule).toContain("box-sizing: border-box");
     expect(editboxRule).toContain("display: block");
     expect(editboxRule).toContain("width: 100%");
-    expect(editboxRule).toContain("height: 100%");
+    expect(editboxRule).toContain("height: 1em");
+    expect(editboxRule).not.toContain("height: 100%");
     expect(editboxRule).toContain("margin: 0");
     expect(editboxRule).toContain("padding: 0");
     expect(editboxRule).toContain("line-height: 1");

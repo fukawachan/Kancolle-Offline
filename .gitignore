@@ -5,3 +5,6 @@ dist/
 coverage/
 *.log
 .DS_Store
+.nvmrc
+.node-version
+.npmrc

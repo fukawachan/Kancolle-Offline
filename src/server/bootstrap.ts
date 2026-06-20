@@ -45,7 +45,7 @@ export function renderBootstrap(query: Record<string, unknown>) {
         box-sizing: border-box;
         display: block;
         width: 100%;
-        height: 100%;
+        height: 1em;
         margin: 0;
         padding: 0;
         border: 0;
