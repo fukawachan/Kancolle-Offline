@@ -47,6 +47,31 @@ describe("local Fastify server", () => {
     expect(response.body).toContain("id=\"game_frame\"");
   });
 
+  it("resets the local edit-name input metrics so client positioning aligns with the game UI", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/kcs2/index.php?api_root=/kcsapi&api_token=test-token"
+    });
+
+    const editboxRule = response.body.match(/#r_editbox\s*\{[^}]+\}/)?.[0] ?? "";
+
+    expect(editboxRule).toContain("box-sizing: border-box");
+    expect(editboxRule).toContain("display: block");
+    expect(editboxRule).toContain("width: 100%");
+    expect(editboxRule).toContain("height: 100%");
+    expect(editboxRule).toContain("margin: 0");
+    expect(editboxRule).toContain("padding: 0");
+    expect(editboxRule).toContain("line-height: 1");
+    expect(editboxRule).toContain("appearance: none");
+    expect(editboxRule).toContain("-webkit-appearance: none");
+  });
+
   it("installs a local osapi inspection bridge before the cached client bundle", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

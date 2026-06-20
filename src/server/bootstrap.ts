@@ -43,10 +43,18 @@ export function renderBootstrap(query: Record<string, unknown>) {
       }
       #r_editbox {
         box-sizing: border-box;
+        display: block;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
         border: 0;
         outline: 0;
         background: transparent;
         color: #000;
+        line-height: 1;
+        appearance: none;
+        -webkit-appearance: none;
       }
     </style>
   </head>
