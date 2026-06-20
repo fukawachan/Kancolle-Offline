@@ -95,6 +95,21 @@ describe("quest api", () => {
     expect((await post("api_port/port")).json().api_data.api_parallel_quest_count).toBe(questCap);
   });
 
+  it("serves accepted quests in the client active quest tab", async () => {
+    for (const questId of [101, 202, 235, 301, 601, 701]) {
+      const started = await post("api_req_quest/start", { api_quest_id: questId });
+      expect(started.json().api_result).toBe(1);
+    }
+
+    const activeTab = (await post("api_get_member/questlist", { api_tab_id: 9 })).json().api_data;
+    const activeQuestIds = activeTab.api_list.map((quest: any) => quest.api_no);
+
+    expect(activeTab.api_count).toBe(6);
+    expect(activeTab.api_exec_count).toBe(6);
+    expect(activeQuestIds).toEqual([101, 202, 235, 301, 601, 701]);
+    expect(activeTab.api_list.every((quest: any) => quest.api_state === 2 || quest.api_state === 3)).toBe(true);
+  });
+
   it("evaluates A01 from the current fleet, grants rewards once, and unlocks A02", async () => {
     const before = store.getSave();
     const shirayukiBefore = before.ships.filter((ship) => ship.masterId === 10).length;

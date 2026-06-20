@@ -28,6 +28,7 @@ type QuestListEntry = {
 };
 
 const SORTIE_RESULT_ORDER = ["E", "D", "C", "B", "A", "S", "SS"];
+const CLIENT_ACTIVE_QUEST_TAB_ID = 9;
 const SHIP_TYPE_ALIASES = new Map<string, number[]>([
   ["海防艦", [1]],
   ["駆逐", [2]],
@@ -89,7 +90,7 @@ export function buildQuestList(save: SaveState, options: QuestListOptions = {}) 
   const questStates = questStateMap(save.quests);
   const visible = QUEST_DEFINITIONS
     .filter((definition) => definitionVisible(definition, questStates))
-    .filter((definition) => tabId <= 0 || definition.category === tabId);
+    .filter((definition) => definitionMatchesQuestListTab(definition, questStates.get(definition.id), tabId));
 
   const completedIds = visible
     .filter((definition) => questStates.get(definition.id)?.completed === 1)
@@ -200,6 +201,12 @@ function definitionVisible(definition: QuestDefinition, states: Map<number, Ques
   const state = states.get(definition.id);
   if (state?.completed === 1) return true;
   return definition.prerequisites.every((id) => states.get(id)?.completed === 1);
+}
+
+function definitionMatchesQuestListTab(definition: QuestDefinition, state: Quest | undefined, tabId: number) {
+  if (tabId <= 0) return true;
+  if (tabId === CLIENT_ACTIVE_QUEST_TAB_ID) return state?.active === 1 && state.completed !== 1;
+  return definition.category === tabId;
 }
 
 function questStateMap(quests: readonly Quest[]) {
