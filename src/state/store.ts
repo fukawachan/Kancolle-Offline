@@ -244,6 +244,23 @@ export function createStateStore(options: StateStoreOptions) {
       }
       return getSave(db).decks.find((item) => item.id === deckId);
     },
+    clearDeckFollowerShips: (deckId: number) => {
+      const save = getSave(db);
+      const deck = save.decks.find((item) => item.id === deckId);
+      if (!deck || deckIsAway(db, deckId)) return null;
+      const shipIds = normalizeDeckShipIds(deck.shipIds);
+      const nextShipIds = [shipIds[0] > 0 ? shipIds[0] : -1, -1, -1, -1, -1, -1];
+      const tx = db.transaction(() => {
+        db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?").run(JSON.stringify(nextShipIds), deckId);
+        if (deckId === 1 && nextShipIds[save.player.flagshipPosition - 1] <= 0) {
+          const firstShipIdx = nextShipIds.findIndex((id) => id > 0);
+          const nextPosition = firstShipIdx >= 0 ? firstShipIdx + 1 : 1;
+          db.prepare("UPDATE players SET flagship_position = ? WHERE id = 1").run(nextPosition);
+        }
+      });
+      tx();
+      return getSave(db).decks.find((item) => item.id === deckId);
+    },
     toggleShipLock: (shipId: number, explicit?: number) => {
       const ship = getSave(db).ships.find((item) => item.id === shipId);
       if (!ship) return null;

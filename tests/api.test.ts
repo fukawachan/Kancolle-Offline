@@ -1027,6 +1027,26 @@ describe("local kcsapi endpoints", () => {
     expect((await post("api_get_member/deck")).json().api_data[0].api_ship).toEqual(expectedShipIds);
   });
 
+  it("clears follower ships through the organize API while preserving the flagship", async () => {
+    const extraShip1 = store.createShip(9);
+    const extraShip2 = store.createShip(10);
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 2, api_ship_id: 3 });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 3, api_ship_id: 4 });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 4, api_ship_id: extraShip1.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 5, api_ship_id: extraShip2.id });
+
+    const response = await post("api_req_hensei/change", { api_id: 1, api_ship_idx: -1, api_ship_id: -2 });
+
+    const expectedShipIds = [1, -1, -1, -1, -1, -1];
+    expect(response.json().api_data.api_ship).toEqual(expectedShipIds);
+    expect(response.json().api_data.api_flagship).toBe(1);
+    expect(store.getSave().decks[0].shipIds).toEqual(expectedShipIds);
+    expect((await post("api_get_member/deck")).json().api_data[0]).toMatchObject({
+      api_flagship: 1,
+      api_ship: expectedShipIds
+    });
+  });
+
   it("supports docks, arsenal, expeditions, items, and a deterministic first sortie loop", async () => {
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(10, 1);
     const expeditionShip1 = store.createShip(9);

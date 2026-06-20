@@ -189,7 +189,11 @@ register("api_req_member/set_friendly_request", () => apiOk({}));
 register("api_req_member/set_oss_condition", () => apiOk({}));
 
 register("api_req_hensei/change", (input, context) => {
-  const deck = context.stateStore.changeDeckShip(num(input.body.api_id, 1), num(input.body.api_ship_idx, 0), num(input.body.api_ship_id, -1));
+  const deckId = num(input.body.api_id, 1);
+  const shipId = num(input.body.api_ship_id, -1);
+  const deck = shipId === -2
+    ? context.stateStore.clearDeckFollowerShips(deckId)
+    : context.stateStore.changeDeckShip(deckId, num(input.body.api_ship_idx, 0), shipId);
   return apiOk(deck ? toDeck(deck) : {});
 });
 register("api_req_hensei/lock", (input, context) => apiOk({ api_locked: context.stateStore.toggleShipLock(num(input.body.api_ship_id, 1)) }));

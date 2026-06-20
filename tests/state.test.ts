@@ -152,6 +152,21 @@ describe("SQLite state store", () => {
     expect(store.getSave().decks[0].shipIds).toEqual([1, 2, 3, extraShip1.id, extraShip2.id, -1]);
   });
 
+  it("clears follower ships while preserving the flagship", () => {
+    store.registerAccount(15);
+    const extraShip1 = store.createShip(9);
+    const extraShip2 = store.createShip(10);
+    store.changeDeckShip(1, 2, 3);
+    store.changeDeckShip(1, 3, 4);
+    store.changeDeckShip(1, 4, extraShip1.id);
+    store.changeDeckShip(1, 5, extraShip2.id);
+
+    const changed = store.clearDeckFollowerShips(1);
+
+    expect(changed?.shipIds).toEqual([1, -1, -1, -1, -1, -1]);
+    expect(store.getSave().decks[0].shipIds).toEqual([1, -1, -1, -1, -1, -1]);
+  });
+
   it("applies material and inventory changes atomically", () => {
     store.registerAccount(15);
     const before = store.getSave();
