@@ -38,7 +38,7 @@ describe("quest api", () => {
     });
   }
 
-  it("serves real questlist pages by tab while advertising an unlimited active quest cap", async () => {
+  it("serves the full quest list by client period tabs while advertising an unlimited active quest cap", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const questCap = start2.api_mst_const.api_parallel_quest_max.api_int_value;
     expect(questCap).toBeGreaterThan(5);
@@ -47,7 +47,7 @@ describe("quest api", () => {
     expect(port.api_parallel_quest_count).toBe(questCap);
 
     const page = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
-    expect(page.api_count).toBeGreaterThan(5);
+    expect(page.api_count).toBe(446);
     expect(page.api_page_count).toBe(Math.ceil(page.api_count / 5));
     expect(page.api_disp_page).toBe(1);
     expect(page.api_completed_kind).toEqual(expect.any(Number));
@@ -67,13 +67,20 @@ describe("quest api", () => {
     expect(secondPage.api_list).toHaveLength(5);
     expect(secondPage.api_list.map((quest: any) => quest.api_no)).toEqual(page.api_list.slice(5, 10).map((quest: any) => quest.api_no));
 
-    const compositionPage = (await post("api_get_member/questlist", { api_tab_id: 1 })).json().api_data;
-    expect(compositionPage.api_count).toBe(1);
-    expect(compositionPage.api_list.every((quest: any) => quest.api_category === 1)).toBe(true);
-
-    const sortiePage = (await post("api_get_member/questlist", { api_tab_id: 2 })).json().api_data;
-    expect(sortiePage.api_list.every((quest: any) => quest.api_category === 2)).toBe(true);
-    expect(sortiePage.api_list.map((quest: any) => quest.api_no)).toContain(202);
+    const tabs = [
+      { tabId: 1, count: 23, types: [2, 4, 5], sampleId: 201 },
+      { tabId: 2, count: 19, types: [3], sampleId: 213 },
+      { tabId: 3, count: 14, types: [6], sampleId: 249 },
+      { tabId: 4, count: 27, types: [7], sampleId: 284 },
+      { tabId: 5, count: 363, types: [1], sampleId: 101 }
+    ];
+    for (const { tabId, count, types, sampleId } of tabs) {
+      const tab = (await post("api_get_member/questlist", { api_tab_id: tabId })).json().api_data;
+      expect(tab.api_count).toBe(count);
+      expect(tab.api_list).toHaveLength(count);
+      expect(tab.api_list.every((quest: any) => types.includes(quest.api_type))).toBe(true);
+      expect(tab.api_list.map((quest: any) => quest.api_no)).toContain(sampleId);
+    }
   });
 
   it("allows more than five active quests and returns the real active count", async () => {
@@ -110,13 +117,13 @@ describe("quest api", () => {
     expect(activeTab.api_list.every((quest: any) => quest.api_state === 2 || quest.api_state === 3)).toBe(true);
   });
 
-  it("evaluates A01 from the current fleet, grants rewards once, and unlocks A02", async () => {
+  it("evaluates A01 from the current fleet, grants client-compatible rewards once, and keeps A02 visible", async () => {
     const before = store.getSave();
     const shirayukiBefore = before.ships.filter((ship) => ship.masterId === 10).length;
 
     await post("api_req_quest/start", { api_quest_id: 101 });
 
-    const activeList = (await post("api_get_member/questlist", { api_tab_id: 1 })).json().api_data;
+    const activeList = (await post("api_get_member/questlist", { api_tab_id: 5 })).json().api_data;
     expect(activeList.api_list.find((quest: any) => quest.api_no === 101)).toMatchObject({
       api_state: 3,
       api_progress_flag: 0
@@ -126,22 +133,27 @@ describe("quest api", () => {
     expect(clear.json()).toMatchObject({
       api_result: 1,
       api_data: {
-        api_material: expect.any(Array),
+        api_material: [20, 20, 0, 0],
         api_bounus: expect.arrayContaining([
           expect.objectContaining({
-            api_type: "ship",
+            api_type: 0xb,
+            api_count: 1,
             api_item: expect.objectContaining({ api_ship_id: 10 })
           })
         ])
       }
     });
+    for (const bonus of clear.json().api_data.api_bounus) {
+      expect(typeof bonus.api_type).toBe("number");
+      expect(typeof bonus.api_count).toBe("number");
+    }
 
     const after = store.getSave();
     expect(after.materials.fuel).toBe(before.materials.fuel + 20);
     expect(after.materials.ammo).toBe(before.materials.ammo + 20);
     expect(after.ships.filter((ship) => ship.masterId === 10)).toHaveLength(shirayukiBefore + 1);
 
-    const nextList = (await post("api_get_member/questlist", { api_tab_id: 1 })).json().api_data;
+    const nextList = (await post("api_get_member/questlist", { api_tab_id: 5 })).json().api_data;
     expect(nextList.api_c_list).toEqual(expect.arrayContaining([101]));
     expect(nextList.api_list.find((quest: any) => quest.api_no === 102)).toMatchObject({
       api_title: "「駆逐隊」を編成せよ！",
@@ -150,6 +162,41 @@ describe("quest api", () => {
 
     const duplicate = await post("api_req_quest/clearitemget", { api_quest_id: 101 });
     expect(duplicate.json()).toMatchObject({ api_result: 400 });
+  });
+
+  it("serializes material quest bonuses with numeric client payloads", async () => {
+    store.setQuestState(101, 0, 1);
+    store.changeDeckShip(1, 2, 3);
+    store.changeDeckShip(1, 3, 4);
+    const before = store.getSave();
+
+    const started = await post("api_req_quest/start", { api_quest_id: 102 });
+    expect(started.json().api_result).toBe(1);
+
+    const clear = await post("api_req_quest/clearitemget", { api_quest_id: 102 });
+    expect(clear.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_material: [30, 30, 30, 0],
+        api_bounus: expect.arrayContaining([
+          expect.objectContaining({
+            api_type: 1,
+            api_count: 1,
+            api_item: expect.objectContaining({ api_id: 6, api_name: "高速建造材" })
+          })
+        ])
+      }
+    });
+    for (const bonus of clear.json().api_data.api_bounus) {
+      expect(typeof bonus.api_type).toBe("number");
+      expect(typeof bonus.api_count).toBe("number");
+    }
+
+    const after = store.getSave();
+    expect(after.materials.fuel).toBe(before.materials.fuel + 30);
+    expect(after.materials.ammo).toBe(before.materials.ammo + 30);
+    expect(after.materials.steel).toBe(before.materials.steel + 30);
+    expect(after.materials.buildKit).toBe(before.materials.buildKit + 1);
   });
 
   it("consumes prepared equipment for exchange quests when claiming rewards", async () => {
@@ -168,14 +215,20 @@ describe("quest api", () => {
     expect(clear.json()).toMatchObject({
       api_result: 1,
       api_data: {
+        api_material: [0, 200, 0, 200],
         api_bounus: expect.arrayContaining([
           expect.objectContaining({
-            api_type: "equipment",
-            api_item: expect.objectContaining({ api_slotitem_id: 168 })
+            api_type: 0xc,
+            api_count: 1,
+            api_item: expect.objectContaining({ api_id: 168, api_name: "九六式陸攻" })
           })
         ])
       }
     });
+    for (const bonus of clear.json().api_data.api_bounus) {
+      expect(typeof bonus.api_type).toBe("number");
+      expect(typeof bonus.api_count).toBe("number");
+    }
 
     const after = store.getSave();
     expect(after.slotItems.filter((item) => item.masterId === 37)).toHaveLength(0);

@@ -29,6 +29,13 @@ type QuestListEntry = {
 
 const SORTIE_RESULT_ORDER = ["E", "D", "C", "B", "A", "S", "SS"];
 const CLIENT_ACTIVE_QUEST_TAB_ID = 9;
+const CLIENT_PERIOD_TABS: Record<number, QuestDefinition["period"]> = {
+  1: "daily",
+  2: "weekly",
+  3: "monthly",
+  4: "quarterly",
+  5: "once"
+};
 const SHIP_TYPE_ALIASES = new Map<string, number[]>([
   ["海防艦", [1]],
   ["駆逐", [2]],
@@ -89,7 +96,6 @@ export function buildQuestList(save: SaveState, options: QuestListOptions = {}) 
   const requestedPageNo = options.pageNo == null ? undefined : Math.max(1, Math.trunc(options.pageNo));
   const questStates = questStateMap(save.quests);
   const visible = QUEST_DEFINITIONS
-    .filter((definition) => definitionVisible(definition, questStates))
     .filter((definition) => definitionMatchesQuestListTab(definition, questStates.get(definition.id), tabId));
 
   const completedIds = visible
@@ -118,9 +124,7 @@ export function buildQuestList(save: SaveState, options: QuestListOptions = {}) 
 }
 
 export function questIsVisible(save: SaveState, questId: number) {
-  const definition = QUEST_BY_ID.get(questId);
-  if (!definition) return false;
-  return definitionVisible(definition, questStateMap(save.quests));
+  return QUEST_BY_ID.has(questId);
 }
 
 export function evaluateQuest(definition: QuestDefinition, save: SaveState, state: Quest): QuestEvaluation {
@@ -197,16 +201,11 @@ function selectRewards(definition: QuestDefinition) {
   }));
 }
 
-function definitionVisible(definition: QuestDefinition, states: Map<number, Quest>) {
-  const state = states.get(definition.id);
-  if (state?.completed === 1) return true;
-  return definition.prerequisites.every((id) => states.get(id)?.completed === 1);
-}
-
 function definitionMatchesQuestListTab(definition: QuestDefinition, state: Quest | undefined, tabId: number) {
   if (tabId <= 0) return true;
   if (tabId === CLIENT_ACTIVE_QUEST_TAB_ID) return state?.active === 1 && state.completed !== 1;
-  return definition.category === tabId;
+  const period = CLIENT_PERIOD_TABS[tabId];
+  return period == null ? false : definition.period === period;
 }
 
 function questStateMap(quests: readonly Quest[]) {

@@ -90,14 +90,15 @@ type Row = Record<string, unknown>;
 type RepairStartResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
 type RepairCompleteResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
 type QuestClearResult =
-  | { ok: true; save: SaveState; bonuses: QuestBonus[] }
+  | { ok: true; save: SaveState; materialRewards: readonly [number, number, number, number]; bonuses: QuestBonus[] }
   | { ok: false; error: string };
 type QuestBonus = {
-  type: string;
+  type: number;
   name: string;
   count: number;
   item?: JsonObject;
 };
+type QuestMaterialRewardName = Extract<QuestReward, { kind: "material" }>["material"];
 
 const defaultOptions: PlayerOptions = {
   bgmFlag: 1,
@@ -140,6 +141,24 @@ const QUEST_CONSUMPTION_USEITEMS = new Map<string, number>([
   ["新型兵装資材", 94],
   ["航空特別増加食", 102]
 ]);
+const QUEST_BONUS_TYPE = {
+  material: 1,
+  ship: 0xb,
+  equipment: 0xc,
+  useitem: 0xd,
+  furniture: 0xe,
+  warResult: 0x12
+} as const;
+const QUEST_REWARD_MATERIAL_IDS: Record<QuestMaterialRewardName, number> = {
+  fuel: 1,
+  ammo: 2,
+  steel: 3,
+  bauxite: 4,
+  repairKit: 5,
+  buildKit: 6,
+  devmat: 7,
+  screw: 8
+};
 
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
@@ -1021,9 +1040,10 @@ function clearQuest(db: Database.Database, questId: number, selectedRewards: num
 
   const bonuses: QuestBonus[] = [];
   const rewardSelections = [...selectedRewards];
+  const materialRewards = definition.materialRewards;
   const tx = db.transaction(() => {
     consumeQuestRequirements(db, definition, save);
-    const [fuel, ammo, steel, bauxite] = definition.materialRewards;
+    const [fuel, ammo, steel, bauxite] = materialRewards;
     addMaterials(db, { fuel, ammo, steel, bauxite });
 
     let choiceIndex = 0;
@@ -1042,7 +1062,7 @@ function clearQuest(db: Database.Database, questId: number, selectedRewards: num
       .run(questId);
   });
   tx();
-  return { ok: true, save: getSave(db), bonuses };
+  return { ok: true, save: getSave(db), materialRewards, bonuses };
 }
 
 function consumeQuestRequirements(db: Database.Database, definition: QuestDefinition, save: SaveState) {
@@ -1150,14 +1170,19 @@ function applyQuestReward(db: Database.Database, reward: QuestReward, bonuses: Q
   const amount = "amount" in reward ? Math.max(1, Math.trunc(Number(reward.amount ?? 1))) : 1;
   if (reward.kind === "material") {
     addMaterials(db, { [reward.material]: amount });
-    bonuses.push({ type: "material", name: reward.name, count: amount, item: { api_material: reward.material } });
+    bonuses.push({
+      type: QUEST_BONUS_TYPE.material,
+      name: reward.name,
+      count: amount,
+      item: { api_id: QUEST_REWARD_MATERIAL_IDS[reward.material], api_name: reward.name }
+    });
     return;
   }
   if (reward.kind === "ship") {
     const ships = Array.from({ length: amount }, () => createShip(db, reward.masterId));
     for (const ship of ships) {
       bonuses.push({
-        type: "ship",
+        type: QUEST_BONUS_TYPE.ship,
         name: reward.name,
         count: 1,
         item: { api_id: ship.id, api_ship_id: ship.masterId, api_name: reward.name }
@@ -1169,27 +1194,109 @@ function applyQuestReward(db: Database.Database, reward: QuestReward, bonuses: Q
     const items = Array.from({ length: amount }, () => createSlotItem(db, reward.masterId));
     for (const item of items) {
       bonuses.push({
-        type: "equipment",
+        type: QUEST_BONUS_TYPE.equipment,
         name: reward.name,
         count: 1,
-        item: { api_id: item.id, api_slotitem_id: item.masterId, api_name: reward.name }
+        item: { api_id: item.masterId, api_slotitem_id: item.masterId, api_name: reward.name, api_slotitem_level: item.level }
       });
     }
     return;
   }
   if (reward.kind === "useitem") {
     addUseItem(db, reward.itemId, amount);
-    bonuses.push({ type: "useitem", name: reward.name, count: amount, item: { api_useitem_id: reward.itemId } });
+    bonuses.push({
+      type: QUEST_BONUS_TYPE.useitem,
+      name: reward.name,
+      count: amount,
+      item: { api_id: reward.itemId, api_useitem_id: reward.itemId, api_name: reward.name }
+    });
     return;
   }
   if (reward.kind === "furniture") {
     grantFurniture(db, reward.furnitureId);
-    bonuses.push({ type: "furniture", name: reward.name, count: amount, item: { api_furniture_id: reward.furnitureId } });
+    bonuses.push({
+      type: QUEST_BONUS_TYPE.furniture,
+      name: reward.name,
+      count: amount,
+      item: { api_id: reward.furnitureId, api_furniture_id: reward.furnitureId, api_name: reward.name }
+    });
     return;
   }
   if (reward.kind === "special") {
-    bonuses.push({ type: "special", name: reward.name, count: amount });
+    applySpecialQuestReward(db, reward.name, amount, bonuses);
   }
+}
+
+function applySpecialQuestReward(db: Database.Database, name: string, amount: number, bonuses: QuestBonus[]) {
+  const warResult = /^戦果(\d+)$/.exec(name);
+  if (warResult) {
+    bonuses.push({
+      type: QUEST_BONUS_TYPE.warResult,
+      name,
+      count: Math.trunc(safeNum(warResult[1])),
+      item: { api_name: name }
+    });
+    return;
+  }
+
+  const slotitem = slotitemRewardByName(name);
+  if (slotitem) {
+    for (let index = 0; index < amount; index += 1) {
+      const item = createSlotItem(db, slotitem.masterId);
+      if (slotitem.level > 0) {
+        db.prepare("UPDATE slot_items SET level = ? WHERE id = ?").run(slotitem.level, item.id);
+      }
+      bonuses.push({
+        type: QUEST_BONUS_TYPE.equipment,
+        name,
+        count: 1,
+        item: {
+          api_id: slotitem.masterId,
+          api_slotitem_id: slotitem.masterId,
+          api_name: slotitem.name,
+          api_slotitem_level: slotitem.level
+        }
+      });
+    }
+    return;
+  }
+
+  const useitem = masterData.api_mst_useitem.find((item) => item.api_name === name);
+  if (useitem) {
+    addUseItem(db, useitem.api_id, amount);
+    bonuses.push({
+      type: QUEST_BONUS_TYPE.useitem,
+      name,
+      count: amount,
+      item: { api_id: useitem.api_id, api_useitem_id: useitem.api_id, api_name: useitem.api_name }
+    });
+    return;
+  }
+
+  const furniture = masterData.api_mst_furniture.find((item) =>
+    item.api_title === name || item.api_title.includes(name) || name.includes(item.api_title)
+  );
+  if (furniture) {
+    grantFurniture(db, furniture.api_id);
+    bonuses.push({
+      type: QUEST_BONUS_TYPE.furniture,
+      name,
+      count: amount,
+      item: { api_id: furniture.api_id, api_furniture_id: furniture.api_id, api_name: furniture.api_title }
+    });
+  }
+}
+
+function slotitemRewardByName(name: string) {
+  const match = /^(.*?)★\+?(\d+)$/.exec(name);
+  const itemName = (match?.[1] ?? name).trim();
+  const master = masterData.api_mst_slotitem.find((item) => item.api_name === itemName);
+  if (!master) return null;
+  return {
+    masterId: master.api_id,
+    name: master.api_name,
+    level: Math.max(0, Math.trunc(safeNum(match?.[2])))
+  };
 }
 
 function grantFurniture(db: Database.Database, furnitureId: number) {

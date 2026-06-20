@@ -295,7 +295,7 @@ register("api_req_quest/clearitemget", (input, context) => {
   if (!cleared.ok) return apiError(cleared.error, 400);
   return apiOk({
     api_quest: toQuestList(cleared.save, questListOptions(input)),
-    api_material: toMaterials(cleared.save.materials),
+    api_material: cleared.materialRewards,
     api_bounus: cleared.bonuses.map(toQuestBonus)
   });
 });
@@ -632,7 +632,7 @@ function selectedRewardNos(input: HandlerInput) {
   return values;
 }
 
-function toQuestBonus(bonus: { type: string; name: string; count: number; item?: Record<string, unknown> }) {
+function toQuestBonus(bonus: { type: number; name: string; count: number; item?: Record<string, unknown> }) {
   return {
     api_type: bonus.type,
     api_count: bonus.count,
