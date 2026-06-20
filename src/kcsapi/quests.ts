@@ -85,7 +85,7 @@ const EQUIPMENT_TYPE_ALIASES = new Map<string, number[]>([
 
 export function buildQuestList(save: SaveState, options: QuestListOptions = {}) {
   const tabId = Math.max(0, Math.trunc(options.tabId ?? 0));
-  const pageNo = Math.max(1, Math.trunc(options.pageNo ?? 1));
+  const requestedPageNo = options.pageNo == null ? undefined : Math.max(1, Math.trunc(options.pageNo));
   const questStates = questStateMap(save.quests);
   const visible = QUEST_DEFINITIONS
     .filter((definition) => definitionVisible(definition, questStates))
@@ -100,9 +100,9 @@ export function buildQuestList(save: SaveState, options: QuestListOptions = {}) 
     .map((definition) => buildQuestListEntry(definition, save, questStates.get(definition.id) ?? defaultQuestState(definition.id)));
 
   const pageCount = Math.max(1, Math.ceil(listable.length / QUEST_PAGE_SIZE));
-  const currentPage = Math.min(pageNo, pageCount);
+  const currentPage = Math.min(requestedPageNo ?? 1, pageCount);
   const start = (currentPage - 1) * QUEST_PAGE_SIZE;
-  const page = listable.slice(start, start + QUEST_PAGE_SIZE);
+  const page = requestedPageNo == null ? listable : listable.slice(start, start + QUEST_PAGE_SIZE);
 
   return {
     api_count: listable.length,

@@ -294,7 +294,7 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
     api_basic: toBasic(save.player, save.furniture, resourceManifest),
     api_log: [],
     api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),
-    api_parallel_quest_count: save.quests.filter((quest) => quest.active === 1 && quest.completed !== 1).length,
+    api_parallel_quest_count: masterData.api_mst_const.api_parallel_quest_max.api_int_value,
     api_combined_flag: save.player.combinedFleet
   };
 }

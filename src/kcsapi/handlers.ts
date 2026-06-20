@@ -598,9 +598,11 @@ function normalizeApiPath(path: string) {
 }
 
 function questListOptions(input: HandlerInput) {
+  const pageNo = input.body.api_page_no ?? input.body.api_page ?? input.body.api_pageno ??
+    input.query.api_page_no ?? input.query.api_page ?? input.query.api_pageno;
   return {
     tabId: num(input.body.api_tab_id ?? input.query.api_tab_id, 0),
-    pageNo: num(input.body.api_page_no ?? input.body.api_page ?? input.query.api_page_no ?? input.query.api_page, 1)
+    ...(pageNo == null || pageNo === "" ? {} : { pageNo: num(pageNo, 1) })
   };
 }
 

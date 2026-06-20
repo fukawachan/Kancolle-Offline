@@ -40,7 +40,11 @@ describe("quest api", () => {
 
   it("serves real questlist pages by tab while advertising an unlimited active quest cap", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
-    expect(start2.api_mst_const.api_parallel_quest_max.api_int_value).toBeGreaterThan(5);
+    const questCap = start2.api_mst_const.api_parallel_quest_max.api_int_value;
+    expect(questCap).toBeGreaterThan(5);
+
+    const port = (await post("api_port/port")).json().api_data;
+    expect(port.api_parallel_quest_count).toBe(questCap);
 
     const page = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
     expect(page.api_count).toBeGreaterThan(5);
@@ -49,7 +53,7 @@ describe("quest api", () => {
     expect(page.api_completed_kind).toEqual(expect.any(Number));
     expect(page.api_c_list).toEqual(expect.any(Array));
     expect(page.api_exec_count).toBe(0);
-    expect(page.api_list).toHaveLength(5);
+    expect(page.api_list.length).toBe(page.api_count);
     expect(page.api_list[0]).toMatchObject({
       api_no: 101,
       api_title: "はじめての「編成」！",
@@ -57,6 +61,11 @@ describe("quest api", () => {
       api_get_material: [20, 20, 0, 0],
       api_state: 1
     });
+
+    const secondPage = (await post("api_get_member/questlist", { api_tab_id: 0, api_pageno: 2 })).json().api_data;
+    expect(secondPage.api_disp_page).toBe(2);
+    expect(secondPage.api_list).toHaveLength(5);
+    expect(secondPage.api_list.map((quest: any) => quest.api_no)).toEqual(page.api_list.slice(5, 10).map((quest: any) => quest.api_no));
 
     const compositionPage = (await post("api_get_member/questlist", { api_tab_id: 1 })).json().api_data;
     expect(compositionPage.api_count).toBe(1);
@@ -68,6 +77,8 @@ describe("quest api", () => {
   });
 
   it("allows more than five active quests and returns the real active count", async () => {
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    const questCap = start2.api_mst_const.api_parallel_quest_max.api_int_value;
     for (const questId of [101, 202, 235, 301, 601, 701]) {
       const started = await post("api_req_quest/start", { api_quest_id: questId });
       expect(started.json().api_result).toBe(1);
@@ -76,12 +87,12 @@ describe("quest api", () => {
     const port = (await post("api_port/port")).json().api_data;
     const list = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
 
-    expect(port.api_parallel_quest_count).toBe(6);
+    expect(port.api_parallel_quest_count).toBe(questCap);
     expect(list.api_exec_count).toBe(6);
 
     const stopped = await post("api_req_quest/stop", { api_quest_id: 235 });
     expect(stopped.json().api_result).toBe(1);
-    expect((await post("api_port/port")).json().api_data.api_parallel_quest_count).toBe(5);
+    expect((await post("api_port/port")).json().api_data.api_parallel_quest_count).toBe(questCap);
   });
 
   it("evaluates A01 from the current fleet, grants rewards once, and unlocks A02", async () => {
