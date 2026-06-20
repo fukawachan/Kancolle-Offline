@@ -429,6 +429,24 @@ describe("local kcsapi endpoints", () => {
     expect(destroyShip.api_material).toEqual([992, 992, 994, 990, 10, 10, 49, 5]);
   });
 
+  it("returns createitem slot payloads expected by the arsenal client", async () => {
+    const craft = (await post("api_req_kousyou/createitem", { api_item1: 10, api_item2: 10, api_item3: 10, api_item4: 10 })).json().api_data;
+
+    expect(Array.isArray(craft.api_get_items)).toBe(true);
+    expect(craft.api_get_items).toEqual([craft.api_slot_item]);
+    expect(craft.api_get_items[0]).toMatchObject({
+      api_id: 5,
+      api_slotitem_id: 1,
+      api_locked: 0,
+      api_level: 0,
+      api_alv: 0
+    });
+    expect(craft.api_unset_items).toEqual([
+      { api_type3: 1, api_slot_list: [1, 2, 3, 5] },
+      { api_type3: 14, api_slot_list: [4] }
+    ]);
+  });
+
   it("settles natural material recovery consistently through port and material endpoints", async () => {
     const baseline = Date.now();
     store.db.prepare("UPDATE materials SET fuel = 100, ammo = 200, steel = 300, bauxite = 400 WHERE player_id = 1").run();

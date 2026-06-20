@@ -366,6 +366,18 @@ export function toUnsetSlot(save: SaveState) {
   return groups;
 }
 
+export function toUnsetSlotItems(save: SaveState) {
+  return Object.entries(toUnsetSlot(save))
+    .map(([key, slotList]) => {
+      const match = key.match(/^api_slottype(\d+)$/);
+      return {
+        api_type3: match ? Number(match[1]) : 0,
+        api_slot_list: slotList
+      };
+    })
+    .sort((a, b) => a.api_type3 - b.api_type3);
+}
+
 export function toMapInfo(save: SaveState) {
   return save.maps.map((map) => {
     const master = masterData.api_mst_mapinfo.find((item) => item.api_id === map.id);

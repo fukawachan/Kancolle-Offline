@@ -56,6 +56,7 @@ import {
   toShip,
   toSlotItem,
   toUnsetSlot,
+  toUnsetSlotItems,
   toUseItems
 } from "./serializers.js";
 import { normalizeSupplyKind } from "./supply.js";
@@ -351,7 +352,16 @@ register("api_req_kousyou/createitem", (input, context) => {
   context.stateStore.consumeMaterials({ ...recipe, devmat: 1 });
   const item = context.stateStore.createSlotItem(num(input.body.api_item1, 10) >= 20 ? 2 : 1);
   context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "equipment" });
-  return apiOk({ api_create_flag: 1, api_shizai_flag: 1, api_slot_item: toSlotItem(item), api_material: toMaterialValues(context.stateStore.getSave().materials) });
+  const save = context.stateStore.getSave();
+  const slotItem = toSlotItem(item);
+  return apiOk({
+    api_create_flag: 1,
+    api_shizai_flag: 1,
+    api_slot_item: slotItem,
+    api_get_items: [slotItem],
+    api_unset_items: toUnsetSlotItems(save),
+    api_material: toMaterialValues(save.materials)
+  });
 });
 register("api_req_kousyou/destroyitem2", (input, context) => {
   const itemIds = csvNums(input.body.api_slotitem_ids ?? input.body.api_slotitem_id, [1]);
