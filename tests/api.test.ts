@@ -657,7 +657,11 @@ describe("local kcsapi endpoints", () => {
 
   it("persists profile, fleet, lock, supply, equipment, quest, and furniture mutations", async () => {
     await post("api_req_member/updatecomment", { api_cmt: "offline sortie ready" });
-    await post("api_req_member/updatedeckname", { api_id: 1, api_name: "First Local Fleet" });
+    const deckName = await post("api_req_member/updatedeckname", {
+      api_id: 1,
+      api_name: "First Local Fleet",
+      api_name_id: "local-inspection-2-test"
+    });
     await post("api_req_hensei/lock", { api_ship_id: 1 });
     await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3 });
     await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: 1 });
@@ -676,6 +680,7 @@ describe("local kcsapi endpoints", () => {
     const furniture = (await post("api_get_member/furniture")).json().api_data;
 
     expect(port.api_basic.api_comment).toBe("offline sortie ready");
+    expect(deckName.json()).toMatchObject({ api_result: 1, api_data: { api_name: "First Local Fleet" } });
     expect(port.api_deck_port[0].api_name).toBe("First Local Fleet");
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_locked).toBe(1);
     expect(port.api_ship.find((ship: any) => ship.api_id === 1).api_fuel).toBeGreaterThan(0);

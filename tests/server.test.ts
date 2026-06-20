@@ -47,6 +47,88 @@ describe("local Fastify server", () => {
     expect(response.body).toContain("id=\"game_frame\"");
   });
 
+  it("installs a local osapi inspection bridge before the cached client bundle", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/kcs2/index.php?api_root=/kcsapi&osapi_root=osapi.dmm.com&api_token=test-token"
+    });
+
+    const bridgeIndex = response.body.indexOf("installLocalOsapiBridge");
+    const clientIndex = response.body.indexOf("/kcs2/js/main.js");
+    expect(bridgeIndex).toBeGreaterThan(-1);
+    expect(clientIndex).toBeGreaterThan(-1);
+    expect(bridgeIndex).toBeLessThan(clientIndex);
+
+    const bridgeScript = extractScriptContaining(response.body, "installLocalOsapiBridge");
+    const originalPostMessages: unknown[][] = [];
+    const messageEvents: FakeMessageEvent[] = [];
+    const listeners: Record<string, Array<(event: FakeMessageEvent) => void>> = {};
+    const fakeWindow: any = {
+      __KANCOLLE_LOCAL__: { query: { osapi_root: "osapi.dmm.com" } },
+      location: {
+        href: "http://127.0.0.1:3020/kcs2/index.php?osapi_root=osapi.dmm.com",
+        search: "?osapi_root=osapi.dmm.com"
+      },
+      parent: null,
+      postMessage: (...args: unknown[]) => {
+        originalPostMessages.push(args);
+        return "native-postMessage";
+      },
+      addEventListener: (type: string, listener: (event: FakeMessageEvent) => void) => {
+        listeners[type] = [...(listeners[type] ?? []), listener];
+      },
+      removeEventListener: (type: string, listener: (event: FakeMessageEvent) => void) => {
+        listeners[type] = (listeners[type] ?? []).filter((item) => item !== listener);
+      },
+      dispatchEvent: (event: FakeMessageEvent) => {
+        messageEvents.push(event);
+        for (const listener of listeners[event.type] ?? []) listener(event);
+        return true;
+      }
+    };
+    fakeWindow.parent = fakeWindow;
+    const context = {
+      window: fakeWindow,
+      URL,
+      URLSearchParams,
+      MessageEvent: FakeMessageEvent,
+      setTimeout: (callback: () => void) => {
+        callback();
+        return 0;
+      }
+    };
+
+    createContext(context);
+    runInContext(bridgeScript, context);
+
+    let received: FakeMessageEvent | undefined;
+    fakeWindow.addEventListener("message", (event: FakeMessageEvent) => {
+      received = event;
+    });
+
+    expect(() => fakeWindow.parent.postMessage("2\tFirst Fleet", "https://osapi.dmm.com")).not.toThrow();
+    expect(received).toMatchObject({
+      type: "message",
+      origin: "https://osapi.dmm.com",
+      data: expect.stringMatching(/^local-inspection-2-/)
+    });
+    expect(originalPostMessages).toEqual([]);
+
+    expect(fakeWindow.parent.postMessage("0\titem", "https://osapi.dmm.com")).toBe("native-postMessage");
+    expect(fakeWindow.parent.postMessage("2\tFirst Fleet", "https://example.com")).toBe("native-postMessage");
+    expect(originalPostMessages).toEqual([
+      ["0\titem", "https://osapi.dmm.com"],
+      ["2\tFirst Fleet", "https://example.com"]
+    ]);
+    expect(messageEvents).toHaveLength(1);
+  });
+
   it("serves the local launcher and single-world registration page", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
@@ -323,3 +405,25 @@ describe("local Fastify server", () => {
     });
   });
 });
+
+function extractScriptContaining(html: string, marker: string) {
+  const markerIndex = html.indexOf(marker);
+  expect(markerIndex).toBeGreaterThan(-1);
+  const scriptStart = html.lastIndexOf("<script>", markerIndex);
+  const scriptEnd = html.indexOf("</script>", markerIndex);
+  expect(scriptStart).toBeGreaterThan(-1);
+  expect(scriptEnd).toBeGreaterThan(scriptStart);
+  return html.slice(scriptStart + "<script>".length, scriptEnd);
+}
+
+class FakeMessageEvent {
+  type: string;
+  data?: unknown;
+  origin?: string;
+  source?: unknown;
+
+  constructor(type: string, init: Partial<FakeMessageEvent> = {}) {
+    this.type = type;
+    Object.assign(this, init);
+  }
+}
