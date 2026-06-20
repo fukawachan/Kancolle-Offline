@@ -708,6 +708,27 @@ describe("local kcsapi endpoints", () => {
     expect(furniture).toEqual(expect.arrayContaining([expect.objectContaining({ api_id: 1 }), expect.objectContaining({ api_id: 164 })]));
   });
 
+  it("renames the fleet selected by the client deck id field", async () => {
+    const deckName = await post("api_req_member/updatedeckname", {
+      api_deck_id: 2,
+      api_name: "Second Local Fleet",
+      api_name_id: "second-local-fleet"
+    });
+
+    const decks = (await post("api_get_member/deck")).json().api_data;
+
+    expect(deckName.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_id: 2, api_name: "Second Local Fleet" }
+    });
+    expect(decks.map((deck: any) => [deck.api_id, deck.api_name])).toEqual([
+      [1, "First Fleet"],
+      [2, "Second Local Fleet"],
+      [3, "Fleet 3"],
+      [4, "Fleet 4"]
+    ]);
+  });
+
   it("implements the client furniture inventory, purchase, layout, and jukebox protocol", async () => {
     const initialPort = (await post("api_port/port")).json().api_data;
     expect(initialPort.api_basic.api_furniture).toEqual([1, 38, 72, 102, 133, 164]);

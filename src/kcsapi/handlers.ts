@@ -164,7 +164,10 @@ register("api_req_member/updatecomment", (input, context) => {
   const player = context.stateStore.updateComment(str(input.body.api_cmt, ""));
   return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
 });
-register("api_req_member/updatedeckname", (input, context) => apiOk(toDeck(context.stateStore.renameDeck(num(input.body.api_id, 1), str(input.body.api_name, "Fleet"))!)));
+register("api_req_member/updatedeckname", (input, context) => {
+  const deckId = num(input.body.api_deck_id ?? input.body.api_id, 1);
+  return apiOk(toDeck(context.stateStore.renameDeck(deckId, str(input.body.api_name, "Fleet"))!));
+});
 register("api_req_member/update_tutorial_progress", (input, context) => {
   const player = context.stateStore.updateTutorialProgress(num(input.body.api_progress, 100));
   return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
