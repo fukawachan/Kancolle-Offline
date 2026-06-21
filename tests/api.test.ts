@@ -1646,6 +1646,51 @@ describe("local kcsapi endpoints", () => {
     expect(combinedBattle.api_fParam_combined).toHaveLength(6);
   });
 
+  it("returns enemy combined fleet payload fields when sortie data has an escort fleet", async () => {
+    let patchedNode: ReturnType<typeof sortieNodes>[number] | undefined;
+    let originalEscortIds: number[][] = [];
+
+    try {
+      const escort = store.createShip(119);
+      await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort.id });
+      await post("api_req_hensei/combined", { api_combined_type: 1 });
+      await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+      await post("api_req_map/next");
+      const session = store.getSave().sortieSession!;
+      patchedNode = sortieNodes().find((item) => item.mapId === 11 && item.node === session.node)!;
+      originalEscortIds = patchedNode.encounters.map((encounter) => [...((encounter as any).enemyCombinedShipIds ?? [])]);
+      for (const encounter of patchedNode.encounters) {
+        (encounter as any).enemyCombinedShipIds = [1502, 1503];
+      }
+
+      const battle = await post("api_req_combined_battle/battle", { api_formation: 1 });
+      const data = battle.json().api_data;
+
+      expect(data.api_ship_ke_combined).toHaveLength(6);
+      expect(data.api_ship_ke_combined.slice(0, 2)).toEqual([1502, 1503]);
+      expect(data.api_e_nowhps_combined).toHaveLength(6);
+      expect(data.api_e_nowhps_combined[0]).toBe(ENEMY_UNIT_TEMPLATES[1502].hp);
+      expect(data.api_eParam_combined).toHaveLength(6);
+      expect(data.api_eParam_combined[0]).toEqual([
+        ENEMY_UNIT_TEMPLATES[1502].firepower,
+        ENEMY_UNIT_TEMPLATES[1502].torpedo,
+        ENEMY_UNIT_TEMPLATES[1502].aa,
+        ENEMY_UNIT_TEMPLATES[1502].armor
+      ]);
+      expect(data.api_eSlot_combined).toHaveLength(6);
+      expect(data.api_eSlot_combined[0][0]).toBeGreaterThan(0);
+      expect(data.api_nowhps_combined).toHaveLength(13);
+    } finally {
+      patchedNode?.encounters.forEach((encounter, index) => {
+        if (originalEscortIds[index].length > 0) {
+          (encounter as any).enemyCombinedShipIds = originalEscortIds[index];
+        } else {
+          delete (encounter as any).enemyCombinedShipIds;
+        }
+      });
+    }
+  });
+
   it("applies sortie battle results once and exposes night battle fields", async () => {
     const beforeSortie = store.getSave();
     const beforeFleet = beforeSortie.decks[0].shipIds

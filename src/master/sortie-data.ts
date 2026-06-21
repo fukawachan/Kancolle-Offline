@@ -22,6 +22,7 @@ export type EnemyUnitTemplate = {
 export type SortieEncounter = {
   key: string;
   shipIds: readonly number[];
+  enemyCombinedShipIds?: readonly number[];
   formation: number;
   weight: number;
 };
@@ -57,6 +58,7 @@ export type SelectedSortieEncounter = {
   isBoss: boolean;
   enemyFleetKey: string;
   shipIds: readonly number[];
+  enemyCombinedShipIds: readonly number[];
   formation: number;
 };
 
@@ -136,6 +138,7 @@ export function selectSortieEncounter(
     isBoss: node.isBoss,
     enemyFleetKey: encounter.key,
     shipIds: encounter.shipIds,
+    enemyCombinedShipIds: encounter.enemyCombinedShipIds ?? [],
     formation: encounter.formation
   };
 }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCombinedBattle, createPracticeBattle, createSortieBattle, createNightBattlePayload, resolveDamage } from "../src/kcsapi/battle.js";
-import { ENEMY_UNIT_TEMPLATES } from "../src/master/sortie-data.js";
+import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
 describe("sortie battle simulation", () => {
@@ -966,6 +966,45 @@ describe("sortie battle simulation", () => {
       enemies.forEach((enemy, index) => {
         enemy.hp = originals[index].hp;
         enemy.armor = originals[index].armor;
+      });
+    }
+  });
+
+  it("populates enemy combined fleet payloads from sortie encounter data", () => {
+    const node = sortieNodes().find((item) => item.mapId === 11 && item.node === 1)!;
+    const originalEscortIds = node.encounters.map((encounter) => [...((encounter as any).enemyCombinedShipIds ?? [])]);
+    for (const encounter of node.encounters) {
+      (encounter as any).enemyCombinedShipIds = [1502, 1503];
+    }
+    store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    try {
+      const battle = createCombinedBattle(store.getSave(), { formation: 1 });
+      const payload = battle.payload as any;
+
+      expect(payload.api_ship_ke_combined).toHaveLength(6);
+      expect(payload.api_ship_ke_combined.slice(0, 2)).toEqual([1502, 1503]);
+      expect(payload.api_e_nowhps_combined).toHaveLength(6);
+      expect(payload.api_e_nowhps_combined[0]).toBe(ENEMY_UNIT_TEMPLATES[1502].hp);
+      expect(payload.api_eParam_combined).toHaveLength(6);
+      expect(payload.api_eParam_combined[0]).toEqual([
+        ENEMY_UNIT_TEMPLATES[1502].firepower,
+        ENEMY_UNIT_TEMPLATES[1502].torpedo,
+        ENEMY_UNIT_TEMPLATES[1502].aa,
+        ENEMY_UNIT_TEMPLATES[1502].armor
+      ]);
+      expect(payload.api_eSlot_combined).toHaveLength(6);
+      expect(payload.api_eSlot_combined[0][0]).toBeGreaterThan(0);
+      expect(payload.api_nowhps_combined).toHaveLength(13);
+      expect(battle.record.units?.enemyCombined?.map((unit) => unit.masterId)).toEqual([1502, 1503]);
+    } finally {
+      node.encounters.forEach((encounter, index) => {
+        if (originalEscortIds[index].length > 0) {
+          (encounter as any).enemyCombinedShipIds = originalEscortIds[index];
+        } else {
+          delete (encounter as any).enemyCombinedShipIds;
+        }
       });
     }
   });

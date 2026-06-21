@@ -540,7 +540,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const sortie = sortieBattleContext(save, seed);
   const formation: [number, number, number] = [friendlyFormation, sortie?.formation ?? 1, 1];
   const enemy = enemyUnits(sortie?.shipIds ?? fallbackEnemyShipIds(save.sortieSession?.node ?? 1));
-  const enemyCombined: BattleUnit[] = [];
+  const enemyCombined = enemyUnits(sortie?.enemyCombinedShipIds ?? []);
   const beforeF = fixedHp(friendly);
   const beforeEscort = fixedHp(escort);
   const beforeE = fixedHp(enemy);
@@ -796,10 +796,11 @@ function combinedBattlePayload(
 }
 
 function combinedNightFields(record: BattleRecord) {
+  const enemyCombined = recordEnemyCombinedUnitsFrom(record);
   const fNowHps = normalizeFixed(record.after.fCombinedNowHps ?? record.before.fCombinedNowHps ?? [], 6, 0);
   const eNowHps = normalizeFixed(record.after.eCombinedNowHps ?? record.before.eCombinedNowHps ?? [], 6, 0);
   const fMaxHps = fixedMaxHpFromMasters(record.escortShipMasterIds ?? [], fNowHps);
-  const eMaxHps = normalizeFixed([], 6, 0);
+  const eMaxHps = fixedMaxHp(enemyCombined);
   return {
     api_f_nowhps_combined: fNowHps,
     api_f_maxhps_combined: fMaxHps,
@@ -807,11 +808,11 @@ function combinedNightFields(record: BattleRecord) {
     api_e_maxhps_combined: eMaxHps,
     api_nowhps_combined: [-1, ...fNowHps, ...eNowHps],
     api_maxhps_combined: [-1, ...fMaxHps, ...eMaxHps],
-    api_ship_ke_combined: normalizeFixed([], 6, -1),
-    api_ship_lv_combined: normalizeFixed([], 6, 0),
+    api_ship_ke_combined: fixedEnemyIds(enemyCombined),
+    api_ship_lv_combined: fixedUnitValues(enemyCombined, (unit) => unit.level, 0),
     api_fParam_combined: fixedParamsFromMasters(record.escortShipMasterIds ?? []),
-    api_eParam_combined: Array.from({ length: 6 }, () => [0, 0, 0, 0]),
-    api_eSlot_combined: Array.from({ length: 6 }, () => [])
+    api_eParam_combined: fixedUnitValues(enemyCombined, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
+    api_eSlot_combined: fixedUnitValues(enemyCombined, (unit) => fixedSlotIds(unit.slots), [])
   };
 }
 
@@ -2037,6 +2038,16 @@ function recordEscortUnitsFrom(record: BattleRecord): BattleUnit[] {
       };
       return unit;
     })
+    .filter((unit): unit is BattleUnit => Boolean(unit));
+}
+
+function recordEnemyCombinedUnitsFrom(record: BattleRecord): BattleUnit[] {
+  const hps = record.after.eCombinedNowHps ?? record.before.eCombinedNowHps ?? [];
+  const snapshots = record.units?.enemyCombined;
+  if (!snapshots?.length) return [];
+  return snapshots
+    .filter((snapshot) => snapshot.position <= 6)
+    .map((snapshot) => unitFromSnapshot(snapshot, hps[snapshot.position - 1] ?? snapshot.maxHp))
     .filter((unit): unit is BattleUnit => Boolean(unit));
 }
 
