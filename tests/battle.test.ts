@@ -22,6 +22,25 @@ describe("sortie battle simulation", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
+  function withEnemyTemplatePatch(patch: Partial<(typeof ENEMY_UNIT_TEMPLATES)[number]>, callback: () => void) {
+    const enemyIds = [1501, 1502, 1503];
+    const originals = enemyIds.map((id) => ({
+      id,
+      hp: ENEMY_UNIT_TEMPLATES[id].hp,
+      shipType: ENEMY_UNIT_TEMPLATES[id].shipType,
+      firepower: ENEMY_UNIT_TEMPLATES[id].firepower,
+      torpedo: ENEMY_UNIT_TEMPLATES[id].torpedo,
+      armor: ENEMY_UNIT_TEMPLATES[id].armor,
+      aa: ENEMY_UNIT_TEMPLATES[id].aa
+    }));
+    for (const id of enemyIds) Object.assign(ENEMY_UNIT_TEMPLATES[id], patch);
+    try {
+      callback();
+    } finally {
+      for (const original of originals) Object.assign(ENEMY_UNIT_TEMPLATES[original.id], original);
+    }
+  }
+
   it("uses the documented armor roll and ammo modifier in deterministic damage", () => {
     expect(resolveDamage({ attackPower: 30, armor: 5, armorRoll: 2, ammoModifier: 1 })).toBe(25);
     expect(resolveDamage({ attackPower: 4, armor: 20, armorRoll: 0, ammoModifier: 1, targetHp: 20 })).toBe(1);
@@ -175,6 +194,88 @@ describe("sortie battle simulation", () => {
     expect(battle.payload.api_stage_flag).toEqual([1, 0, 0]);
     expect(battle.payload.api_kouku?.api_stage2).toBeNull();
     expect(battle.payload.api_kouku?.api_stage3).toBeNull();
+  });
+
+  it("does not let carrier aircraft torpedo stats participate in closing torpedo combat", () => {
+    const akagi = store.createShip(277);
+    const torpedoBomber = store.createSlotItem(16);
+    store.equipSlotItem(akagi.id, 0, torpedoBomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([akagi.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ hp: 500, firepower: 0, torpedo: 0, armor: 300, aa: 0 }, () => {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_fParam[0][1]).toBeGreaterThan(0);
+      expect(battle.payload.api_e_nowhps.some((hp: number) => hp > 0)).toBe(true);
+      expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
+    });
+  });
+
+  it("requires a native torpedo stat for closing torpedo eligibility", () => {
+    const yamato = store.createShip(131);
+    const torpedo = store.createSlotItem(13);
+    store.equipSlotItem(yamato.id, 0, torpedo.id);
+    store.changeDeckShip(1, 0, yamato.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([yamato.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ hp: 500, firepower: 0, torpedo: 0, armor: 300, aa: 0 }, () => {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_fParam[0][1]).toBeGreaterThan(0);
+      expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
+    });
+  });
+
+  it("prevents moderately damaged ships from joining the closing torpedo salvo", () => {
+    const fubuki = store.createShip(9);
+    store.changeDeckShip(1, 0, fubuki.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([fubuki.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(Math.floor(fubuki.maxHp / 2), fubuki.id);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ hp: 500, firepower: 0, torpedo: 0, armor: 300, aa: 0 }, () => {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
+    });
+  });
+
+  it("does not target submarines during closing torpedo combat", () => {
+    const fubuki = store.createShip(9);
+    store.changeDeckShip(1, 0, fubuki.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([fubuki.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ hp: 500, shipType: 13, firepower: 0, torpedo: 0, armor: 300, aa: 0 }, () => {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
+    });
+  });
+
+  it("keeps opening torpedoes independent from closing torpedo damage-state eligibility", () => {
+    const kitakami = store.createShip(119);
+    const midgetSub = store.createSlotItem(41);
+    store.equipSlotItem(kitakami.id, 0, midgetSub.id);
+    store.changeDeckShip(1, 0, kitakami.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([kitakami.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE ships SET hp = 1 WHERE id = ?").run(kitakami.id);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ hp: 500, firepower: 0, torpedo: 0, armor: 300, aa: 0 }, () => {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_opening_atack?.api_frai[0] ?? -1).toBeGreaterThanOrEqual(0);
+      expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
+    });
   });
 
   it("uses practice enemy carrier loadouts for aerial combat", () => {

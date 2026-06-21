@@ -124,6 +124,7 @@ export type BattleUnit = {
   hpFloor: number;
   maxHp: number;
   firepower: number;
+  baseTorpedo: number;
   torpedo: number;
   aa: number;
   baseAsw: number;
@@ -160,6 +161,7 @@ type BattleUnitSnapshot = {
   hpFloor: number;
   maxHp: number;
   firepower: number;
+  baseTorpedo: number;
   torpedo: number;
   aa: number;
   baseAsw: number;
@@ -1413,11 +1415,11 @@ function torpedoPhase(
   let fired = false;
   for (const attacker of friendly) {
     if (!canFire(attacker)) continue;
-    const target = randomAlive(enemy, rng);
+    const target = randomTorpedoTarget(enemy, rng);
     if (!target) continue;
     const attackerIdx = attacker.position - 1;
     const targetIdx = target.position - 1;
-    const power = (attacker.torpedo + 5) * formationModifier(formation, "torpedo") * damageStateModifier(attacker);
+    const power = (torpedoSalvoPower(attacker) + 5) * formationModifier(formation, "torpedo") * damageStateModifier(attacker);
     const critical = rng.chance(0.125);
     const damage = rng.chance(0.9) ? applyDamage(target, power, 180, attacker.ammoModifier, rng, 1, critical) : 0;
     attacker.damageDealt += damage;
@@ -1430,11 +1432,11 @@ function torpedoPhase(
   }
   for (const attacker of enemy) {
     if (!canFire(attacker)) continue;
-    const target = randomAlive(friendly, rng);
+    const target = randomTorpedoTarget(friendly, rng);
     if (!target) continue;
     const attackerIdx = attacker.position - 1;
     const targetIdx = target.position - 1;
-    const power = (attacker.torpedo + 5) * damageStateModifier(attacker);
+    const power = (torpedoSalvoPower(attacker) + 5) * damageStateModifier(attacker);
     const critical = rng.chance(0.125);
     const damage = rng.chance(0.9) ? applyDamage(target, power, 180, attacker.ammoModifier, rng, 0, critical) : 0;
     attacker.damageDealt += damage;
@@ -1449,13 +1451,30 @@ function torpedoPhase(
 }
 
 function canClosingTorpedo(unit: BattleUnit) {
-  return isOperable(unit) && unit.torpedo > 0 && damageState(unit) < 3;
+  return canTorpedoSalvo(unit) && damageState(unit) < 2;
 }
 
 function canOpeningTorpedo(unit: BattleUnit) {
-  if (!canClosingTorpedo(unit)) return false;
+  if (!canTorpedoSalvo(unit)) return false;
   if (OPENING_TORPEDO_SHIP_TYPES.has(unit.shipType)) return true;
   return countEquipTypes(unit, MIDGET_SUBMARINE_TYPES) > 0;
+}
+
+function canTorpedoSalvo(unit: BattleUnit) {
+  return isOperable(unit) && !CARRIER_TYPES.has(unit.shipType) && unit.baseTorpedo > 0 && torpedoSalvoPower(unit) > 0;
+}
+
+function randomTorpedoTarget(units: BattleUnit[], rng: BattleRng) {
+  const livingSurfaceTargets = units.filter((unit) => isOperable(unit) && !SUBMARINE_TYPES.has(unit.shipType));
+  return livingSurfaceTargets.length > 0 ? rng.pick(livingSurfaceTargets) : undefined;
+}
+
+function torpedoSalvoPower(unit: BattleUnit) {
+  const aircraftTorpedo = unit.equippedSlots.reduce(
+    (sum, slot) => sum + (isAircraftSlotItem(slot.slotMaster) ? safeNum(slot.slotMaster.api_raig) : 0),
+    0
+  );
+  return Math.max(0, unit.torpedo - aircraftTorpedo);
 }
 
 function applyDamage(
@@ -1624,6 +1643,7 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     hpFloor: 0,
     maxHp: ship.maxHp,
     firepower: statValue(master?.api_houg) + equipSum("api_houg"),
+    baseTorpedo: statValue(master?.api_raig),
     torpedo: statValue(master?.api_raig) + equipSum("api_raig"),
     aa: statValue(master?.api_tyku) + equipSum("api_tyku"),
     baseAsw,
@@ -1802,6 +1822,7 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     hpFloor: 0,
     maxHp: template.hp,
     firepower: template.firepower,
+    baseTorpedo: template.torpedo,
     torpedo: template.torpedo,
     aa: template.aa,
     baseAsw: 0,
@@ -1884,6 +1905,7 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
     hpFloor: 1,
     maxHp,
     firepower: leveledStat(master?.api_houg, ship.level, 0) + equipSum("api_houg"),
+    baseTorpedo: leveledStat(master?.api_raig, ship.level, 0),
     torpedo: leveledStat(master?.api_raig, ship.level, 0) + equipSum("api_raig"),
     aa: leveledStat(master?.api_tyku, ship.level, 0) + equipSum("api_tyku"),
     baseAsw,
@@ -1939,6 +1961,7 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
         hpFloor: 0,
         maxHp: record.before.fNowHps[index] || hp,
         firepower: statValue(master?.api_houg),
+        baseTorpedo: statValue(master?.api_raig),
         torpedo: statValue(master?.api_raig),
         aa: statValue(master?.api_tyku),
         baseAsw,
@@ -1987,6 +2010,7 @@ function recordEscortUnitsFrom(record: BattleRecord): BattleUnit[] {
         hpFloor: 0,
         maxHp: record.before.fCombinedNowHps?.[index] || hp,
         firepower: statValue(master?.api_houg),
+        baseTorpedo: statValue(master?.api_raig),
         torpedo: statValue(master?.api_raig),
         aa: statValue(master?.api_tyku),
         baseAsw,
@@ -2018,6 +2042,7 @@ function snapshotUnits(units: BattleUnit[]): BattleUnitSnapshot[] {
     hpFloor: unit.hpFloor,
     maxHp: unit.maxHp,
     firepower: unit.firepower,
+    baseTorpedo: unit.baseTorpedo,
     torpedo: unit.torpedo,
     aa: unit.aa,
     baseAsw: unit.baseAsw,
@@ -2084,6 +2109,7 @@ function unitFromSnapshot(snapshot: BattleUnitSnapshot, hp: number): BattleUnit 
     hpFloor: safeNum(snapshot.hpFloor, 0),
     maxHp: snapshot.maxHp,
     firepower: snapshot.firepower,
+    baseTorpedo: safeNum(snapshot.baseTorpedo, snapshot.torpedo),
     torpedo: snapshot.torpedo,
     aa: snapshot.aa,
     baseAsw: snapshot.baseAsw,
