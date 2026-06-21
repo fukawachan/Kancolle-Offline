@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCombinedBattle, createPracticeBattle, createSortieBattle, createNightBattlePayload, resolveDamage } from "../src/kcsapi/battle.js";
-import { ENEMY_UNIT_TEMPLATES } from "../src/master/sortie-data.js";
+import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
 describe("sortie battle simulation", () => {
@@ -970,6 +970,45 @@ describe("sortie battle simulation", () => {
     }
   });
 
+  it("populates enemy combined fleet payloads from sortie encounter data", () => {
+    const node = sortieNodes().find((item) => item.mapId === 11 && item.node === 1)!;
+    const originalEscortIds = node.encounters.map((encounter) => [...((encounter as any).enemyCombinedShipIds ?? [])]);
+    for (const encounter of node.encounters) {
+      (encounter as any).enemyCombinedShipIds = [1502, 1503];
+    }
+    store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    try {
+      const battle = createCombinedBattle(store.getSave(), { formation: 1 });
+      const payload = battle.payload as any;
+
+      expect(payload.api_ship_ke_combined).toHaveLength(6);
+      expect(payload.api_ship_ke_combined.slice(0, 2)).toEqual([1502, 1503]);
+      expect(payload.api_e_nowhps_combined).toHaveLength(6);
+      expect(payload.api_e_nowhps_combined[0]).toBe(ENEMY_UNIT_TEMPLATES[1502].hp);
+      expect(payload.api_eParam_combined).toHaveLength(6);
+      expect(payload.api_eParam_combined[0]).toEqual([
+        ENEMY_UNIT_TEMPLATES[1502].firepower,
+        ENEMY_UNIT_TEMPLATES[1502].torpedo,
+        ENEMY_UNIT_TEMPLATES[1502].aa,
+        ENEMY_UNIT_TEMPLATES[1502].armor
+      ]);
+      expect(payload.api_eSlot_combined).toHaveLength(6);
+      expect(payload.api_eSlot_combined[0][0]).toBeGreaterThan(0);
+      expect(payload.api_nowhps_combined).toHaveLength(13);
+      expect(battle.record.units?.enemyCombined?.map((unit) => unit.masterId)).toEqual([1502, 1503]);
+    } finally {
+      node.encounters.forEach((encounter, index) => {
+        if (originalEscortIds[index].length > 0) {
+          (encounter as any).enemyCombinedShipIds = originalEscortIds[index];
+        } else {
+          delete (encounter as any).enemyCombinedShipIds;
+        }
+      });
+    }
+  });
+
   it("uses the combined fleet escort as the night battle force", () => {
     const escortKitakami = store.createShip(119);
     const torpedoA = store.createSlotItem(13);
@@ -1002,6 +1041,166 @@ describe("sortie battle simulation", () => {
     expect(hougeki.api_at_list[friendlyAttackIndex]).toBe(0);
     expect(hougeki.api_sp_list[friendlyAttackIndex]).toBe(5);
     expect(hougeki.api_si_list[friendlyAttackIndex]).toEqual(expect.arrayContaining([13, 14]));
+  });
+
+  describe("battle core acceptance scenarios", () => {
+    it("acceptance: 1-1 normal battle emits day combat phases and a result record", () => {
+      store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      const enemyIds = battle.payload.api_ship_ke.filter((id: number) => id > 0);
+
+      expect(enemyIds.length).toBeGreaterThan(0);
+      expect(battle.payload.api_formation).toEqual([1, expect.any(Number), 1]);
+      expect(battle.payload.api_hougeki1.api_at_list.length).toBeGreaterThan(0);
+      expect(battle.payload.api_raigeki).toMatchObject({
+        api_frai: expect.any(Array),
+        api_erai: expect.any(Array)
+      });
+      expect(battle.record.result.rank).toMatch(/[SABCDE]/);
+      expect(battle.record.result.mvp).toBeGreaterThanOrEqual(1);
+    });
+
+    it("acceptance: carrier normal battle includes aerial combat payloads", () => {
+      const akagi = store.createShip(277);
+      const fighter = store.createSlotItem(20);
+      const bomber = store.createSlotItem(23);
+      store.equipSlotItem(akagi.id, 0, fighter.id);
+      store.equipSlotItem(akagi.id, 2, bomber.id);
+      store.changeDeckShip(1, 0, akagi.id);
+      store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      const kouku = battle.payload.api_kouku;
+
+      expect(battle.payload.api_stage_flag[0]).toBe(1);
+      expect(kouku).not.toBeNull();
+      expect(kouku?.api_plane_from[0]).toEqual([1]);
+      expect(kouku?.api_stage1.api_f_count).toBeGreaterThan(0);
+      expect(kouku?.api_stage3?.api_edam).toHaveLength(6);
+    });
+
+    it("acceptance: practice enemy carrier contributes its aircraft to aerial combat", () => {
+      const rival = {
+        id: 1,
+        name: "Carrier Acceptance",
+        level: 120,
+        rank: "元帥",
+        comment: "carrier loadout",
+        flag: 1,
+        medals: 4,
+        ships: [
+          {
+            id: 101,
+            masterId: 277,
+            level: 120,
+            star: 5,
+            slotMasterIds: [22, 52, 23, 54],
+            onSlot: [18, 18, 27, 10, 0]
+          }
+        ]
+      };
+
+      const battle = createPracticeBattle(store.getSave(), {
+        practiceEnemyId: 1,
+        practiceRivals: [rival],
+        formation: 1
+      });
+
+      expect(battle.payload.api_eSlot[0]).toEqual([22, 52, 23, 54, -1]);
+      expect(battle.payload.api_kouku?.api_plane_from[1]).toEqual([1]);
+      expect(battle.payload.api_kouku?.api_stage1.api_e_count).toBeGreaterThan(0);
+      expect(battle.payload.api_kouku?.api_stage3?.api_fdam).toHaveLength(6);
+    });
+
+    it("acceptance: combined fleet aerial battle exposes escort HP and combined stage3 arrays", () => {
+      const akagi = store.createShip(277);
+      const fighter = store.createSlotItem(20);
+      const bomber = store.createSlotItem(23);
+      const escort = store.createShip(119);
+      store.equipSlotItem(akagi.id, 0, fighter.id);
+      store.equipSlotItem(akagi.id, 2, bomber.id);
+      store.changeDeckShip(1, 0, akagi.id);
+      store.changeDeckShip(2, 0, escort.id);
+      store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+      store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+      const battle = createCombinedBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_f_nowhps_combined).toHaveLength(6);
+      expect(battle.payload.api_f_nowhps_combined[0]).toBeGreaterThan(0);
+      expect(battle.payload.api_kouku?.api_stage3_combined).toBeTruthy();
+      expect(battle.payload.api_kouku?.api_stage3_combined?.api_edam).toHaveLength(6);
+    });
+
+    it("acceptance: night torpedo cut-in keeps torpedo snapshots and two-hit damage", () => {
+      const torpedoA = store.createSlotItem(13);
+      const torpedoB = store.createSlotItem(14);
+      store.equipSlotItem(1, 0, torpedoA.id);
+      store.equipSlotItem(1, 1, torpedoB.id);
+
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      const night = createNightBattlePayload({
+        ...battle.record,
+        after: {
+          ...battle.record.after,
+          fNowHps: [...battle.record.before.fNowHps],
+          eNowHps: [20, 20, 0, 0, 0, 0]
+        }
+      });
+      const hougeki = night.api_hougeki as any;
+      const cutInIndex = hougeki.api_sp_list.indexOf(5);
+
+      expect(cutInIndex).toBeGreaterThanOrEqual(0);
+      expect(hougeki.api_si_list[cutInIndex]).toEqual(expect.arrayContaining([13, 14]));
+      expect(hougeki.api_damage[cutInIndex]).toHaveLength(2);
+    });
+
+    it("acceptance: AACI can shoot all enemy attack aircraft down before stage3", () => {
+      const defender = store.createShip(1);
+      const highAngleA = store.createSlotItem(3);
+      const highAngleB = store.createSlotItem(10);
+      const radar = store.createSlotItem(30);
+      store.equipSlotItem(defender.id, 0, highAngleA.id);
+      store.equipSlotItem(defender.id, 1, highAngleB.id);
+      store.equipSlotItem(defender.id, 2, radar.id);
+      store.changeDeckShip(1, 0, defender.id);
+      const rival = {
+        id: 1,
+        name: "AACI Acceptance",
+        level: 120,
+        rank: "元帥",
+        comment: "small carrier loadout",
+        flag: 1,
+        medals: 4,
+        ships: [
+          {
+            id: 101,
+            masterId: 277,
+            level: 120,
+            star: 5,
+            slotMasterIds: [23],
+            onSlot: [3, 0, 0, 0, 0]
+          }
+        ]
+      };
+
+      const battle = createPracticeBattle(store.getSave(), {
+        practiceEnemyId: 1,
+        practiceRivals: [rival],
+        formation: 1
+      });
+      const kouku = battle.payload.api_kouku;
+
+      expect(kouku?.api_air_fire).toMatchObject({
+        api_idx: 0,
+        api_kind: 5,
+        api_use_items: [3, 10, 30]
+      });
+      expect(kouku?.api_stage2?.api_e_count).toBe(2);
+      expect(kouku?.api_stage2?.api_e_lostcount).toBe(2);
+      expect(kouku?.api_stage3).toBeNull();
+    });
   });
 });
 

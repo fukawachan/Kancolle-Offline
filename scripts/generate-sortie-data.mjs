@@ -242,6 +242,7 @@ function buildPointData(point, dropData, shipByJapaneseName, fallbackEncounters 
       return {
         key,
         shipIds: parsed.shipIds,
+        ...(parsed.enemyCombinedShipIds.length > 0 ? { enemyCombinedShipIds: parsed.enemyCombinedShipIds } : {}),
         formation: parsed.formation,
         weight: rankCounts.reduce((sum, count) => sum + count, 0)
       };
@@ -294,6 +295,7 @@ function parseWikiPointEncounters(point, wikiRaw) {
     encounters.push({
       key: `wiki:${point.mapId}-${point.point}-${suffix || "1"}/${formation}`,
       shipIds,
+      enemyCombinedShipIds: [],
       formation,
       weight: 1
     });
@@ -309,10 +311,12 @@ function formationId(value) {
 }
 
 function parseEnemyFleetKey(key) {
-  const shipIds = [...key.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
+  const [mainFleetKey, escortFleetKey = ""] = key.split(/\s*(?:\|\||\+護衛\+|\+escort\+)\s*/i, 2);
+  const shipIds = [...mainFleetKey.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
+  const enemyCombinedShipIds = [...escortFleetKey.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
   const formation = Number(key.match(/\/(\d+)$/)?.[1] ?? 1);
   if (shipIds.length === 0) throw new Error(`Cannot parse enemy fleet: ${key}`);
-  return { shipIds, formation };
+  return { shipIds, enemyCombinedShipIds, formation };
 }
 
 function enemyShipMaster(enemy, enemyId, onSlot, slotCount) {
@@ -398,7 +402,7 @@ function validateGeneratedData(maps, enemyTemplates, enemyShips, enemySlots) {
     }
     for (const point of map.points) {
       for (const encounter of point.encounters) {
-        for (const shipId of encounter.shipIds) {
+        for (const shipId of [...encounter.shipIds, ...(encounter.enemyCombinedShipIds ?? [])]) {
           if (!enemyTemplates[shipId] || !enemyShipIds.has(shipId)) throw new Error(`Missing enemy ${shipId}`);
           for (const slotId of enemyTemplates[shipId].slots) {
             if (slotId > 0 && !enemySlotIds.has(slotId)) throw new Error(`Missing enemy slot ${slotId}`);
