@@ -31,6 +31,7 @@ Primary community references:
 - Damage calculations: `https://en.kancollewiki.net/Damage_Calculations`
 - Night battle: `https://en.kancollewiki.net/Combat/Night_Battle`
 - Combined fleet: `https://en.kancollewiki.net/Combined_fleet`
+- Anti-installation combat: `https://en.kancollewiki.net/Combat/Anti-Installation`
 
 Local client field discovery notes:
 
@@ -145,6 +146,17 @@ git diff --check
 # no output
 ```
 
+Land-target filtering continuation on 2026-06-21:
+
+- Added explicit combat target classification:
+  - `EnemyTargetKind = "surface" | "submarine" | "installation"`
+  - `enemyTargetKind(masterId, shipType)`
+  - `shipTargetKind(shipType)`
+- Added a curated normal-map installation enemy master ID set in `src/master/enemy-classification.ts`.
+- Wired `BattleUnit.targetKind` and battle-unit snapshots so sortie, practice, combined, and night-continuation paths keep the classification.
+- Opening and closing torpedo target pools now allow only `targetKind === "surface"`, excluding both submarines and installations.
+- Classification is ID-based; names and `stype` alone are intentionally not used because they produce false positives.
+
 ## Known Limits Of The Current Implementation
 
 Current code is a better first-stage simulation, not a full official-server clone. Known gaps:
@@ -254,6 +266,7 @@ Done:
 - Opening torpedo supports torpedo cruisers, submarines, submarine carriers, and midget-sub equipment.
 - Opening ASW eligibility is checked with ship type, level, displayed ASW, sonar, autogyro, and equipment ASW inputs.
 - Opening ASW attack power uses the community base shape: base ASW square root, equipment ASW, and sonar/depth-charge synergy.
+- Opening and closing torpedo target selection excludes submarines and land-based installations through `BattleUnit.targetKind`.
 
 Still needed:
 
@@ -335,13 +348,14 @@ Still needed:
 
 ### Phase 8: Data And Generator Support
 
-Status: not started.
+Status: partially complete.
 
 Needed:
 
 - Extend `scripts/generate-sortie-data.mjs` only if local sortie data lacks fields required for real battle behavior.
 - Add enemy combined fleet data if source data exposes it.
-- Add installation/land-base target classification if available.
+- Keep the curated installation ID set in `src/master/enemy-classification.ts` updated when new enemy master data is added.
+- Optionally move installation classification into generated sortie data if the source exposes a reliable non-name field.
 - Preserve the no-runtime-network rule.
 - Add generator tests or snapshot checks so regenerated data remains KCSAPI-compatible.
 

@@ -23,15 +23,21 @@ describe("sortie battle simulation", () => {
   });
 
   function withEnemyTemplatePatch(patch: Partial<(typeof ENEMY_UNIT_TEMPLATES)[number]>, callback: () => void) {
-    const enemyIds = [1501, 1502, 1503];
+    const enemyIds = [1501, 1502, 1503, 1505, 1506];
     const originals = enemyIds.map((id) => ({
       id,
+      masterId: ENEMY_UNIT_TEMPLATES[id].masterId,
+      level: ENEMY_UNIT_TEMPLATES[id].level,
       hp: ENEMY_UNIT_TEMPLATES[id].hp,
       shipType: ENEMY_UNIT_TEMPLATES[id].shipType,
       firepower: ENEMY_UNIT_TEMPLATES[id].firepower,
       torpedo: ENEMY_UNIT_TEMPLATES[id].torpedo,
       armor: ENEMY_UNIT_TEMPLATES[id].armor,
-      aa: ENEMY_UNIT_TEMPLATES[id].aa
+      aa: ENEMY_UNIT_TEMPLATES[id].aa,
+      luck: ENEMY_UNIT_TEMPLATES[id].luck,
+      range: ENEMY_UNIT_TEMPLATES[id].range,
+      slots: [...ENEMY_UNIT_TEMPLATES[id].slots],
+      onSlot: [...ENEMY_UNIT_TEMPLATES[id].onSlot]
     }));
     for (const id of enemyIds) Object.assign(ENEMY_UNIT_TEMPLATES[id], patch);
     try {
@@ -260,6 +266,42 @@ describe("sortie battle simulation", () => {
     });
   });
 
+  it("does not target installations during closing torpedo combat", () => {
+    const fubuki = store.createShip(9);
+    store.changeDeckShip(1, 0, fubuki.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([fubuki.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ masterId: 1573, hp: 500, shipType: 10, firepower: 0, torpedo: 0, armor: 300, aa: 0 }, () => {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+      expect(battle.payload.api_ship_ke[0]).toBe(1573);
+      expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
+    });
+  });
+
+  it("skips installations when selecting closing torpedo targets from a mixed fleet", () => {
+    const fubuki = store.createShip(9);
+    store.changeDeckShip(1, 0, fubuki.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([fubuki.id, -1, -1, -1, -1, -1]));
+    store.db.prepare("UPDATE sortie_sessions SET seed = 2, node = 3 WHERE id = 1").run();
+
+    withEnemyTemplatePatch({ hp: 500, firepower: 0, torpedo: 0, armor: 300, aa: 0, slots: [], onSlot: [] }, () => {
+      const original = { ...ENEMY_UNIT_TEMPLATES[1505], slots: [...ENEMY_UNIT_TEMPLATES[1505].slots], onSlot: [...ENEMY_UNIT_TEMPLATES[1505].onSlot] };
+      Object.assign(ENEMY_UNIT_TEMPLATES[1505], { masterId: 1573, shipType: 10 });
+      try {
+        const battle = createSortieBattle(store.getSave(), { formation: 1 });
+
+        expect(battle.payload.api_ship_ke.slice(0, 3)).toEqual([1573, 1501, 1501]);
+        expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBeGreaterThan(0);
+      } finally {
+        Object.assign(ENEMY_UNIT_TEMPLATES[1505], original);
+      }
+    });
+  });
+
   it("keeps opening torpedoes independent from closing torpedo damage-state eligibility", () => {
     const kitakami = store.createShip(119);
     const midgetSub = store.createSlotItem(41);
@@ -276,6 +318,41 @@ describe("sortie battle simulation", () => {
       expect(battle.payload.api_opening_atack?.api_frai[0] ?? -1).toBeGreaterThanOrEqual(0);
       expect(battle.payload.api_raigeki?.api_frai[0] ?? -1).toBe(-1);
     });
+  });
+
+  it("does not target installation practice enemies during opening torpedo combat", () => {
+    const kitakami = store.createShip(119);
+    store.changeDeckShip(1, 0, kitakami.id);
+    store.db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1")
+      .run(JSON.stringify([kitakami.id, -1, -1, -1, -1, -1]));
+    const rival = {
+      id: 1,
+      name: "Installation Practice",
+      level: 120,
+      rank: "元帥",
+      comment: "land target",
+      flag: 1,
+      medals: 4,
+      ships: [
+        {
+          id: 101,
+          masterId: 1573,
+          level: 120,
+          star: 5,
+          slotMasterIds: [],
+          onSlot: [0, 0, 0, 0, 0]
+        }
+      ]
+    };
+
+    const battle = createPracticeBattle(store.getSave(), {
+      practiceEnemyId: 1,
+      practiceRivals: [rival],
+      formation: 1
+    });
+
+    expect(battle.payload.api_ship_ke[0]).toBe(1573);
+    expect(battle.payload.api_opening_atack?.api_frai[0] ?? -1).toBe(-1);
   });
 
   it("uses practice enemy carrier loadouts for aerial combat", () => {

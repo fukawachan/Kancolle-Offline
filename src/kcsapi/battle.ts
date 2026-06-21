@@ -1,4 +1,5 @@
 import { masterData } from "../master/data.js";
+import { enemyTargetKind, shipTargetKind, type EnemyTargetKind } from "../master/enemy-classification.js";
 import {
   DEEP_SEA_SLOT_MASTERS,
   ENEMY_UNIT_TEMPLATES,
@@ -134,6 +135,7 @@ export type BattleUnit = {
   range: number;
   ammoModifier: number;
   shipType: number;
+  targetKind: EnemyTargetKind;
   slots: number[];
   equippedSlots: EquippedSlot[];
   airSlots: AirSlot[];
@@ -171,6 +173,7 @@ type BattleUnitSnapshot = {
   range: number;
   ammoModifier: number;
   shipType: number;
+  targetKind?: EnemyTargetKind;
   slots: number[];
   equippedSlots: BattleUnitSlotSnapshot[];
   onSlot: number[];
@@ -1219,7 +1222,7 @@ function equippedSlotMasterIds(unit: BattleUnit, typeIds: Set<number>, limit: nu
 }
 
 function openingAswPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng): HougekiPayload | null {
-  const submarineTargets = enemy.filter((unit) => SUBMARINE_TYPES.has(unit.shipType));
+  const submarineTargets = enemy.filter((unit) => unit.targetKind === "submarine");
   if (submarineTargets.length === 0) return null;
   const payload = emptyHougeki(false);
   for (const attacker of attackOrder(friendly)) {
@@ -1465,7 +1468,7 @@ function canTorpedoSalvo(unit: BattleUnit) {
 }
 
 function randomTorpedoTarget(units: BattleUnit[], rng: BattleRng) {
-  const livingSurfaceTargets = units.filter((unit) => isOperable(unit) && !SUBMARINE_TYPES.has(unit.shipType));
+  const livingSurfaceTargets = units.filter((unit) => isOperable(unit) && unit.targetKind === "surface");
   return livingSurfaceTargets.length > 0 ? rng.pick(livingSurfaceTargets) : undefined;
 }
 
@@ -1653,6 +1656,7 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     range: Math.max(safeNum(master?.api_leng, 1), ...slotMasters.map((item) => safeNum(item.api_leng, 0))),
     ammoModifier: ammoModifier(ship.ammo, ship.maxAmmo),
     shipType: safeNum(master?.api_stype, 2),
+    targetKind: shipTargetKind(safeNum(master?.api_stype, 2)),
     slots: slots.length ? slots : [1],
     equippedSlots,
     airSlots,
@@ -1832,6 +1836,7 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     range: template.range,
     ammoModifier: 1,
     shipType: template.shipType,
+    targetKind: enemyTargetKind(template.masterId, template.shipType),
     slots: template.slots.length ? [...template.slots] : [1501],
     equippedSlots,
     airSlots,
@@ -1915,6 +1920,7 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
     range: Math.max(safeNum(master?.api_leng, 1), ...slotMasters.map((slot) => safeNum(slot.api_leng, 0))),
     ammoModifier: 1,
     shipType: safeNum(master?.api_stype, 2),
+    targetKind: enemyTargetKind(ship.masterId, safeNum(master?.api_stype, 2)),
     slots: slots.length ? slots : [1],
     equippedSlots,
     airSlots,
@@ -1971,6 +1977,7 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
         range: safeNum(master?.api_leng, 1),
         ammoModifier: 1,
         shipType: safeNum(master?.api_stype, 2),
+        targetKind: shipTargetKind(safeNum(master?.api_stype, 2)),
         slots: [1],
         equippedSlots: [],
         airSlots: [],
@@ -2020,6 +2027,7 @@ function recordEscortUnitsFrom(record: BattleRecord): BattleUnit[] {
         range: safeNum(master?.api_leng, 1),
         ammoModifier: 1,
         shipType: safeNum(master?.api_stype, 2),
+        targetKind: shipTargetKind(safeNum(master?.api_stype, 2)),
         slots: [1],
         equippedSlots: [],
         airSlots: [],
@@ -2052,6 +2060,7 @@ function snapshotUnits(units: BattleUnit[]): BattleUnitSnapshot[] {
     range: unit.range,
     ammoModifier: unit.ammoModifier,
     shipType: unit.shipType,
+    targetKind: unit.targetKind,
     slots: [...unit.slots],
     equippedSlots: unit.equippedSlots.map((slot) => ({
       index: slot.index,
@@ -2119,6 +2128,7 @@ function unitFromSnapshot(snapshot: BattleUnitSnapshot, hp: number): BattleUnit 
     range: snapshot.range,
     ammoModifier: snapshot.ammoModifier,
     shipType: snapshot.shipType,
+    targetKind: snapshot.targetKind ?? (snapshot.side === 1 ? enemyTargetKind(snapshot.masterId, snapshot.shipType) : shipTargetKind(snapshot.shipType)),
     slots: [...snapshot.slots],
     equippedSlots,
     airSlots,
