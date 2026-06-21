@@ -319,6 +319,23 @@ describe("local Fastify server", () => {
     expect(fanfare.headers["content-type"]).toContain("audio/mpeg");
   });
 
+  it("serves cached character-up art for legacy ship power-up image requests", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/power_up/0131_5449.png?version=71"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/png");
+    expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+  });
+
   it("falls back to an audible default port BGM when the client asks with a stale or legacy id", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

@@ -264,9 +264,13 @@ register("api_req_kaisou/slot_deprive", (input, context) => {
 });
 register("api_req_kaisou/lock", (input, context) => apiOk({ api_locked: context.stateStore.lockSlotItem(num(input.body.api_slotitem_id ?? input.body.api_item_id, 1)) }));
 register("api_req_kaisou/powerup", (input, context) => {
-  const save = context.stateStore.getSave();
   const ship = context.stateStore.modernizeShip(num(input.body.api_id, 1), csvNums(input.body.api_id_items, []));
-  return apiOk({ api_powerup_flag: 1, api_ship: ship ? toShip(ship, save.slotItems) : null });
+  const save = context.stateStore.getSave();
+  return apiOk({
+    api_powerup_flag: ship ? 1 : 0,
+    api_ship: ship ? toShip(ship, save.slotItems) : null,
+    api_deck: save.decks.map(toDeck)
+  });
 });
 register("api_req_kaisou/remodeling", (input, context) => {
   const save = context.stateStore.getSave();

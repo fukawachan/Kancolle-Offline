@@ -24,6 +24,8 @@ export type ShipResourceManifest = {
   albumStatus: Map<number, FileResource>;
   banner: Map<number, FileResource>;
   card: Map<number, FileResource>;
+  characterUp: Map<number, FileResource>;
+  characterUpDamaged: Map<number, FileResource>;
   full: Map<number, FileResource>;
 };
 

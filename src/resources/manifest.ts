@@ -52,10 +52,10 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return resource;
   }
 
-  const shipAlbum = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card)\/(\d{4})_(\d{4})\.png$/i);
-  if (shipAlbum) {
-    const collection = shipCollection(manifest, shipAlbum[1]);
-    return collection?.get(Number(shipAlbum[2]));
+  const shipImage = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card|character_up|character_up_dmg|power_up|power_up_dmg)\/(\d{4})_(\d{4})\.png$/i);
+  if (shipImage) {
+    const collection = shipCollection(manifest, shipImage[1]);
+    return collection?.get(Number(shipImage[2]));
   }
 
   const slot = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|btxt_flat|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
@@ -108,6 +108,8 @@ function emptyManifest(): ResourceManifest {
       albumStatus: new Map(),
       banner: new Map(),
       card: new Map(),
+      characterUp: new Map(),
+      characterUpDamaged: new Map(),
       full: new Map()
     },
     slot: {
@@ -182,7 +184,7 @@ function addShipResource(manifest: ResourceManifest, cacheDir: string, pathname:
     return;
   }
 
-  const image = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card)\/(\d{4})_(\d{4})\.png$/i);
+  const image = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card|character_up|character_up_dmg)\/(\d{4})_(\d{4})\.png$/i);
   if (!image) return;
 
   const collection = shipCollection(manifest, image[1]);
@@ -219,6 +221,12 @@ function shipCollection(manifest: ResourceManifest, rawKind: string) {
       return manifest.ship.banner;
     case "card":
       return manifest.ship.card;
+    case "character_up":
+    case "power_up":
+      return manifest.ship.characterUp;
+    case "character_up_dmg":
+    case "power_up_dmg":
+      return manifest.ship.characterUpDamaged;
     default:
       return undefined;
   }

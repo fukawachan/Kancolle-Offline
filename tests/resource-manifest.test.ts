@@ -22,6 +22,26 @@ describe("cached resource manifest", () => {
       id: 6,
       pathname: expect.stringMatching(/^\/kcs2\/resources\/ship\/card\/0006_\d{4}\.png$/)
     });
+    expect(manifest.ship.characterUp.get(131)).toMatchObject({
+      id: 131,
+      frame: "7543",
+      pathname: "/kcs2/resources/ship/character_up/0131_7543.png"
+    });
+    expect(manifest.ship.characterUpDamaged.get(131)).toMatchObject({
+      id: 131,
+      frame: "3346",
+      pathname: "/kcs2/resources/ship/character_up_dmg/0131_3346.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/ship/power_up/0131_5449.png", manifest)).toMatchObject({
+      id: 131,
+      frame: "7543",
+      pathname: "/kcs2/resources/ship/character_up/0131_7543.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/ship/power_up_dmg/0131_0000.png", manifest)).toMatchObject({
+      id: 131,
+      frame: "3346",
+      pathname: "/kcs2/resources/ship/character_up_dmg/0131_3346.png"
+    });
     expect(manifest.slot.card.get(1)).toMatchObject({
       id: 1,
       pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/card\/0001_\d{4}\.png$/)

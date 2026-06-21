@@ -842,6 +842,35 @@ describe("local kcsapi endpoints", () => {
     }
   });
 
+  it("returns the updated ship and deck list after modernization", async () => {
+    const yamato = store.createShip(131);
+    const consumed = store.createShip(9);
+
+    const response = await post("api_req_kaisou/powerup", {
+      api_id: yamato.id,
+      api_id_items: consumed.id,
+      api_slot_dest_flag: 0,
+      api_limited_feed_type: 0
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_powerup_flag: 1,
+        api_ship: {
+          api_id: yamato.id,
+          api_ship_id: 131
+        },
+        api_deck: expect.arrayContaining([
+          expect.objectContaining({
+            api_id: 1,
+            api_ship: expect.any(Array)
+          })
+        ])
+      }
+    });
+  });
+
   it("preserves HP values at the client damage-state thresholds", async () => {
     for (const hp of [75, 50, 25]) {
       store.db.prepare("UPDATE ships SET hp = ?, max_hp = 100 WHERE id = 1").run(hp);
