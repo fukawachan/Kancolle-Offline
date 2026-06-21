@@ -42,6 +42,24 @@ describe("local kcsapi endpoints", () => {
     });
   }
 
+  function expectBattlePhasePlaceholders(data: any) {
+    expect(data).toHaveProperty("api_air_base_attack");
+    expect(data).toHaveProperty("api_opening_taisen");
+    expect(data).toHaveProperty("api_opening_atack");
+    expect(data).toHaveProperty("api_kouku2");
+    expect(data).toHaveProperty("api_friendly_info");
+    expect(data).toHaveProperty("api_friendly_kouku");
+    expect(data).toHaveProperty("api_friendly_battle");
+  }
+
+  function expectFixedFleetArrays(data: any) {
+    for (const key of ["api_f_nowhps", "api_f_maxhps", "api_e_nowhps", "api_e_maxhps", "api_fParam", "api_eParam", "api_eSlot"]) {
+      expect(data[key], key).toHaveLength(6);
+    }
+    expect(data.api_nowhps).toHaveLength(13);
+    expect(data.api_maxhps).toHaveLength(13);
+  }
+
   it("returns structurally complete start2 master data and option settings", async () => {
     const start2 = await post("api_start2/getData");
     const options = await post("api_start2/get_option_setting");
@@ -1596,6 +1614,36 @@ describe("local kcsapi endpoints", () => {
     for (const key of ["api_frai_flag", "api_erai_flag", "api_fbak_flag", "api_ebak_flag", "api_fcl_flag", "api_ecl_flag", "api_fdam", "api_edam"]) {
       expect(data.api_kouku.api_stage3_combined[key], key).toHaveLength(6);
     }
+  });
+
+  it("keeps battle endpoint payload contracts stable for the HTML5 client", async () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter.id });
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: bomber.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: akagi.id });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const sortieBattle = (await post("api_req_sortie/battle", { api_formation: 1 })).json().api_data;
+    expectBattlePhasePlaceholders(sortieBattle);
+    expectFixedFleetArrays(sortieBattle);
+
+    const airBattle = (await post("api_req_sortie/airbattle", { api_formation: 1 })).json().api_data;
+    expectBattlePhasePlaceholders(airBattle);
+    expectFixedFleetArrays(airBattle);
+
+    const escort = store.createShip(119);
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort.id });
+    await post("api_req_hensei/combined", { api_combined_type: 1 });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+    const combinedBattle = (await post("api_req_combined_battle/battle", { api_formation: 1 })).json().api_data;
+    expectBattlePhasePlaceholders(combinedBattle);
+    expectFixedFleetArrays(combinedBattle);
+    expect(combinedBattle.api_f_nowhps_combined).toHaveLength(6);
+    expect(combinedBattle.api_fParam_combined).toHaveLength(6);
   });
 
   it("applies sortie battle results once and exposes night battle fields", async () => {

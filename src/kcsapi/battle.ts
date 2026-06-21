@@ -10,11 +10,19 @@ import {
 } from "../master/sortie-data.js";
 import { normalizeDeckShipIds } from "../state/decks.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
+import { selectGenericAaci, type AaciEquipmentSummary } from "./battle/aaci.js";
 import { isAircraftSlotItem } from "./serializers.js";
 import {
+  antiAirStage2Shootdown,
+  aswAttackPower as resolveAswAttackPower,
   BattleRng,
   airState as resolveAirState,
+  canOpeningAswByStats,
+  classifyNightAttack,
+  damageStateModifierFor,
   fighterPower,
+  formationModifierFor,
+  nightBattlePower,
   resolveBattleDamage
 } from "./battle-formulas.js";
 import {
@@ -35,6 +43,39 @@ export type BattleInput = {
 };
 
 export type BattleMode = "sortie" | "practice" | "combined";
+export type BattleEndpointKind =
+  | "sortieDay"
+  | "sortieAir"
+  | "sortieNight"
+  | "practiceDay"
+  | "practiceNight"
+  | "combinedDay"
+  | "combinedAir"
+  | "combinedNight";
+
+export type BattleFleetKind = "main" | "escort" | "enemyMain" | "enemyEscort";
+
+export type BattleFleet = {
+  kind: BattleFleetKind;
+  side: Side;
+  units: BattleUnit[];
+  formation: number;
+  combinedType?: number;
+};
+
+export type BattleContext = {
+  endpoint: BattleEndpointKind;
+  mode: BattleMode;
+  seed: number;
+  rng: BattleRng;
+  formation: [number, number, number];
+  fleets: BattleFleet[];
+};
+
+export type BattlePhaseResult = {
+  name: "airBase" | "kouku" | "kouku2" | "openingTaisen" | "openingAtack" | "shelling" | "raigeki" | "night";
+  payload: KoukuPayload | HougekiPayload | RaigekiPayload | Record<string, unknown> | null;
+};
 
 type Side = 0 | 1;
 
@@ -72,7 +113,7 @@ type EquippedSlot = {
   proficiency: number;
 };
 
-type BattleUnit = {
+export type BattleUnit = {
   side: Side;
   position: number;
   apiIndex: number;
@@ -85,6 +126,8 @@ type BattleUnit = {
   firepower: number;
   torpedo: number;
   aa: number;
+  baseAsw: number;
+  asw: number;
   armor: number;
   luck: number;
   range: number;
@@ -119,6 +162,8 @@ type BattleUnitSnapshot = {
   firepower: number;
   torpedo: number;
   aa: number;
+  baseAsw: number;
+  asw: number;
   armor: number;
   luck: number;
   range: number;
@@ -233,12 +278,18 @@ export type BattleRecord = {
     fCombinedOnSlotByShipId?: Record<number, number[]>;
   };
   phases: {
+    airBaseAttack: Record<string, unknown> | null;
     kouku: KoukuPayload | null;
+    kouku2: KoukuPayload | null;
+    openingTaisen: HougekiPayload | null;
+    openingAtack: RaigekiPayload | null;
     hougeki1: HougekiPayload;
     hougeki2: HougekiPayload | null;
     hougeki3: HougekiPayload | null;
     raigeki: RaigekiPayload | null;
     night?: HougekiPayload;
+    friendlyKouku?: KoukuPayload | null;
+    friendlyBattle?: HougekiPayload | null;
   };
   units?: {
     friendly: BattleUnitSnapshot[];
@@ -318,10 +369,19 @@ const OPENING_AIRSTRIKE_TYPES = new Set([7, 8, 11, 57]);
 const TORPEDO_BOMBER_TYPES = new Set([8]);
 const CONTACT_TYPES = new Set([8, 9, 10]);
 const CARRIER_TYPES = new Set([7, 11, 18]);
+const BATTLESHIP_TYPES = new Set([8, 9, 10, 12]);
+const SUBMARINE_TYPES = new Set([13, 14]);
+const OPENING_TORPEDO_SHIP_TYPES = new Set([4, 13, 14]);
 const MAIN_GUN_TYPES = new Set([1, 2, 3]);
 const SECONDARY_GUN_TYPES = new Set([4]);
 const TORPEDO_TYPES = new Set([5, 32]);
+const MIDGET_SUBMARINE_TYPES = new Set([22]);
 const SEAPLANE_TYPES = new Set([10, 11]);
+const SONAR_TYPES = new Set([14]);
+const DEPTH_CHARGE_TYPES = new Set([15, 40]);
+const ASW_AIRCRAFT_TYPES = new Set([7, 8, 11, 25, 26]);
+const AUTOGYRO_TYPES = new Set([25]);
+const ASW_DAMAGE_EQUIP_TYPES = new Set([...SONAR_TYPES, ...DEPTH_CHARGE_TYPES, ...ASW_AIRCRAFT_TYPES]);
 const AP_SHELL_TYPE = 19;
 const HIGH_ANGLE_GUN_TYPES = new Set([16]);
 const AA_GUN_TYPES = new Set([21]);
@@ -354,7 +414,10 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
 
   const support = supportPhase(save, sortie, enemy);
   const kouku = airPhase(friendly, enemy, formation[0], rng);
+  const openingTaisen = openingAswPhase(friendly, enemy, formation[0], rng);
+  const openingAtack = openingTorpedoPhase(friendly, enemy, formation[0], rng);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
+  const hougeki2 = hasSecondShellingRound(friendly, enemy) ? shellingPhase(friendly, enemy, formation[0], rng, "day") : null;
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
 
   const afterF = fixedHp(friendly);
@@ -370,9 +433,13 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
     before: { fNowHps: beforeF, eNowHps: beforeE },
     after: { fNowHps: afterF, eNowHps: afterE, fOnSlotByShipId: onSlotByShipId(friendly) },
     phases: {
+      airBaseAttack: null,
       kouku,
+      kouku2: null,
+      openingTaisen,
+      openingAtack,
       hougeki1,
-      hougeki2: null,
+      hougeki2,
       hougeki3: null,
       raigeki
     },
@@ -406,7 +473,10 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
   const beforeE = fixedHp(enemy);
 
   const kouku = airPhase(friendly, enemy, formation[0], rng);
+  const openingTaisen = openingAswPhase(friendly, enemy, formation[0], rng);
+  const openingAtack = openingTorpedoPhase(friendly, enemy, formation[0], rng);
   const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
+  const hougeki2 = hasSecondShellingRound(friendly, enemy) ? shellingPhase(friendly, enemy, formation[0], rng, "day") : null;
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
   const afterF = fixedHp(friendly);
   const afterE = fixedHp(enemy);
@@ -430,9 +500,13 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
     before: { fNowHps: beforeF, eNowHps: beforeE },
     after: { fNowHps: afterF, eNowHps: afterE, fOnSlotByShipId: onSlotByShipId(friendly) },
     phases: {
+      airBaseAttack: null,
       kouku,
+      kouku2: null,
+      openingTaisen,
+      openingAtack,
       hougeki1,
-      hougeki2: null,
+      hougeki2,
       hougeki3: null,
       raigeki
     },
@@ -468,9 +542,11 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const beforeECombined = fixedHp(enemyCombined);
 
   const support = supportPhase(save, sortie, enemy);
-  const kouku = airPhase(friendly, enemy, formation[0], rng);
-  const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day");
-  const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
+  const kouku = airPhase([...friendly, ...escort], enemy, formation[0], rng);
+  const openingTaisen = openingAswPhase(escort, enemy, formation[0], rng);
+  const openingAtack = openingTorpedoPhase(escort, enemy, formation[0], rng);
+  const shelling = combinedShellingPhases(save.player.combinedFleet, friendly, escort, enemy, formation[0], rng);
+  const raigeki = torpedoPhase(escort, enemy, formation[0], rng);
   const afterF = fixedHp(friendly);
   const afterEscort = fixedHp(escort);
   const afterE = fixedHp(enemy);
@@ -497,10 +573,14 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
       fCombinedOnSlotByShipId: onSlotByShipId(escort)
     },
     phases: {
+      airBaseAttack: null,
       kouku,
-      hougeki1,
-      hougeki2: null,
-      hougeki3: null,
+      kouku2: null,
+      openingTaisen,
+      openingAtack,
+      hougeki1: shelling.hougeki1,
+      hougeki2: shelling.hougeki2,
+      hougeki3: shelling.hougeki3,
       raigeki
     },
     units: {
@@ -522,11 +602,12 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
 }
 
 export function createNightBattle(record: BattleRecord): { payload: Record<string, unknown>; record: BattleRecord } {
-  const friendly = recordUnitsFrom(record, 0);
+  const mainFriendly = recordUnitsFrom(record, 0);
+  const friendly = record.mode === "combined" ? recordEscortUnitsFrom(record) : mainFriendly;
   const enemy = recordUnitsFrom(record, 1);
-  const fNowHps = fixedHp(friendly);
+  const fNowHps = fixedHp(record.mode === "combined" ? mainFriendly : friendly);
   const eNowHps = fixedHp(enemy);
-  const fMaxHps = fixedMaxHp(friendly);
+  const fMaxHps = fixedMaxHp(record.mode === "combined" ? mainFriendly : friendly);
   const eMaxHps = fixedMaxHp(enemy);
   const rng = new BattleRng(record.deckId * 8191 + record.before.fNowHps.reduce((sum, hp) => sum + hp, 0));
   const hougeki = shellingPhase(friendly, enemy, record.formation[0], rng, "night");
@@ -534,16 +615,17 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
     ...record,
     after: {
       ...record.after,
-      fNowHps: fixedHp(friendly),
-      eNowHps: fixedHp(enemy)
+      fNowHps: record.mode === "combined" ? fixedHp(mainFriendly) : fixedHp(friendly),
+      eNowHps: fixedHp(enemy),
+      ...(record.mode === "combined" ? { fCombinedNowHps: fixedHp(friendly) } : {})
     },
     phases: {
       ...record.phases,
       night: hougeki
     },
     result: {
-      ...battleResult(friendly, enemy, record.mode, record.sortie, practiceResultContext(record, enemy)),
-      mvpCombined: record.result.mvpCombined
+      ...battleResult(record.mode === "combined" ? mainFriendly : friendly, enemy, record.mode, record.sortie, practiceResultContext(record, enemy)),
+      mvpCombined: record.mode === "combined" ? escortMvp(friendly) : record.result.mvpCombined
     }
   };
   const payload: Record<string, unknown> = {
@@ -558,7 +640,7 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
     api_nowhps: [-1, ...fNowHps, ...eNowHps],
     api_maxhps: [-1, ...fMaxHps, ...eMaxHps],
     api_eSlot: fixedUnitValues(enemy, (unit) => fixedSlotIds(unit.slots), []),
-    api_fParam: fixedUnitValues(friendly, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
+    api_fParam: fixedUnitValues(record.mode === "combined" ? mainFriendly : friendly, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_eParam: fixedUnitValues(enemy, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_touch_plane: [-1, -1],
     api_flare_pos: [-1, -1],
@@ -658,22 +740,42 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_eParam: fixedUnitValues(enemy, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_search: [1, 1],
     api_stage_flag: stageFlag,
+    api_air_base_attack: record.phases.airBaseAttack ?? null,
     api_kouku: kouku,
+    api_kouku2: record.phases.kouku2 ?? null,
     api_support_flag: record.support?.arrived ? record.support.flag : 0,
     api_support_info: record.support?.arrived ? record.support.info : null,
+    api_opening_taisen: record.phases.openingTaisen ?? null,
+    api_opening_atack: record.phases.openingAtack ?? null,
     api_hougeki1: record.phases.hougeki1,
     api_hougeki2: record.phases.hougeki2,
     api_hougeki3: record.phases.hougeki3,
-    api_raigeki: record.phases.raigeki
+    api_raigeki: record.phases.raigeki,
+    api_friendly_info: null,
+    api_friendly_kouku: record.phases.friendlyKouku ?? null,
+    api_friendly_battle: record.phases.friendlyBattle ?? null
   };
 }
 
-function combinedBattlePayload(record: BattleRecord, friendly: BattleUnit[], escort: BattleUnit[], enemy: BattleUnit[], enemyCombined: BattleUnit[]) {
+function combinedBattlePayload(
+  record: BattleRecord,
+  friendly: BattleUnit[],
+  escort: BattleUnit[],
+  enemy: BattleUnit[],
+  enemyCombined: BattleUnit[]
+): BattlePayload {
   const payload = battlePayload(record, friendly, enemy);
+  const kouku = payload.api_kouku && payload.api_kouku.api_stage3
+    ? {
+        ...payload.api_kouku,
+        api_stage3_combined: payload.api_kouku.api_stage3_combined ?? emptyKoukuStage3Payload()
+      }
+    : payload.api_kouku;
   const fCombinedMaxHps = fixedMaxHp(escort);
   const eCombinedMaxHps = fixedMaxHp(enemyCombined);
   return {
     ...payload,
+    api_kouku: kouku,
     api_f_nowhps_combined: record.before.fCombinedNowHps ?? fixedHp(escort),
     api_f_maxhps_combined: fCombinedMaxHps,
     api_e_nowhps_combined: record.before.eCombinedNowHps ?? fixedHp(enemyCombined),
@@ -856,23 +958,34 @@ function antiAirCutIn(defenders: BattleUnit[], rng: BattleRng) {
   const candidates = defenders
     .filter(isOperable)
     .map((unit) => {
-      const highAngle = countEquipTypes(unit, HIGH_ANGLE_GUN_TYPES);
-      const aaGun = countEquipTypes(unit, AA_GUN_TYPES);
-      const radar = countEquipTypes(unit, RADAR_TYPES);
-      if (highAngle >= 2 && radar > 0) return { unit, kind: 5, bonus: 4, modifier: 1.5 };
-      if (highAngle > 0 && aaGun > 0 && radar > 0) return { unit, kind: 7, bonus: 3, modifier: 1.35 };
-      if (highAngle > 0 && radar > 0) return { unit, kind: 8, bonus: 2, modifier: 1.25 };
-      return null;
+      const candidate = selectGenericAaci(unit.position - 1, aaciEquipmentSummary(unit));
+      return candidate ? { unit, candidate } : null;
     })
     .filter((item): item is NonNullable<typeof item> => item != null);
   if (candidates.length === 0) return undefined;
   const selected = candidates[0];
   if (!rng.chance(0.65)) return undefined;
   return {
-    api_idx: selected.unit.position - 1,
-    api_kind: selected.kind,
-    api_use_items: selected.unit.slots.filter((slot) => slot > 0).slice(0, 3)
+    api_idx: selected.candidate.unitIndex,
+    api_kind: selected.candidate.kind,
+    api_use_items: selected.candidate.useItems
   };
+}
+
+function aaciEquipmentSummary(unit: BattleUnit): AaciEquipmentSummary {
+  const summary: AaciEquipmentSummary = {
+    highAngleGuns: [],
+    aaGuns: [],
+    radars: []
+  };
+  for (const slot of unit.equippedSlots) {
+    const type2 = safeNum(slot.slotMaster.api_type?.[2]);
+    const type3 = safeNum(slot.slotMaster.api_type?.[3]);
+    if (HIGH_ANGLE_GUN_TYPES.has(type3)) summary.highAngleGuns.push(slot.slotMaster.api_id);
+    if (AA_GUN_TYPES.has(type2)) summary.aaGuns.push(slot.slotMaster.api_id);
+    if (RADAR_TYPES.has(type2)) summary.radars.push(slot.slotMaster.api_id);
+  }
+  return summary;
 }
 
 function applyStage2Loss(
@@ -887,18 +1000,36 @@ function applyStage2Loss(
   if (attackSlots.length === 0 || livingDefenders.length === 0) return 0;
   const fleetAa = livingDefenders.reduce((sum, unit) => sum + unit.aa, 0);
   const aaMod = formationAaModifier(formation);
-  const cutInBonus = airFire ? 3 : 0;
+  const cutIn = antiAirCutInEffect(airFire);
   let lost = 0;
   for (const slot of attackSlots) {
     const defender = rng.pick(livingDefenders);
-    const effectiveAa = defender.aa * aaMod + fleetAa * 0.2;
-    const proportional = Math.floor(slot.count * rng.next() * 0.1 * aaMod * Math.min(1, effectiveAa / 50));
-    const fixed = Math.floor(effectiveAa / 50) + cutInBonus;
-    const count = Math.min(slot.count, proportional + fixed);
+    const count = antiAirStage2Shootdown({
+      slotCount: slot.count,
+      defenderAntiAir: defender.aa,
+      fleetAntiAir: fleetAa,
+      formationModifier: aaMod,
+      cutInFixedBonus: cutIn.fixedBonus,
+      cutInModifier: cutIn.modifier,
+      randomFactor: rng.next()
+    });
     slot.count -= count;
     lost += count;
   }
   return lost;
+}
+
+function antiAirCutInEffect(airFire: KoukuPayload["api_air_fire"] | undefined) {
+  switch (airFire?.api_kind) {
+    case 5:
+      return { fixedBonus: 4, modifier: 1.5 };
+    case 7:
+      return { fixedBonus: 3, modifier: 1.35 };
+    case 8:
+      return { fixedBonus: 2, modifier: 1.25 };
+    default:
+      return { fixedBonus: 0, modifier: 1 };
+  }
 }
 
 function openingAirstrike(friendly: BattleUnit[], enemy: BattleUnit[], friendlyTouchPlane: number, enemyTouchPlane: number, rng: BattleRng) {
@@ -981,9 +1112,16 @@ function countEquipTypes(unit: BattleUnit, typeIds: Set<number>) {
   return unit.equippedSlots.filter((slot) => typeIds.has(safeNum(slot.slotMaster.api_type?.[2]))).length;
 }
 
+function equipmentAsw(unit: BattleUnit, typeIds?: Set<number>) {
+  return unit.equippedSlots.reduce((sum, slot) => {
+    const type = safeNum(slot.slotMaster.api_type?.[2]);
+    if (typeIds && !typeIds.has(type)) return sum;
+    return sum + safeNum(slot.slotMaster.api_tais);
+  }, 0);
+}
+
 function formationAaModifier(formation: number) {
-  const modifiers: Record<number, number> = { 1: 1, 2: 1.2, 3: 1.6, 4: 1, 5: 1 };
-  return modifiers[formation] ?? 1;
+  return formationModifierFor(formation, "antiAir");
 }
 
 export function emptyKoukuStage3Payload(length = 6): KoukuStage3Payload {
@@ -1005,36 +1143,24 @@ function shellingProfile(attacker: BattleUnit, formation: number, phase: "day" |
     const torpedoes = countEquipTypes(attacker, TORPEDO_TYPES);
     const mainGuns = countEquipTypes(attacker, MAIN_GUN_TYPES);
     const secondaries = countEquipTypes(attacker, SECONDARY_GUN_TYPES);
-    if (torpedoes >= 2) {
-      return {
-        preCapPower: (attacker.firepower + attacker.torpedo) * damageStateModifier(attacker),
-        cap: 360,
-        atType: 0,
-        spType: 5,
-        hits: 1,
-        postCapModifier: 1.5,
-        slotIds
-      };
-    }
-    if (mainGuns >= 2 || (mainGuns >= 1 && secondaries >= 1)) {
-      return {
-        preCapPower: (attacker.firepower + attacker.torpedo) * damageStateModifier(attacker),
-        cap: 360,
-        atType: 0,
-        spType: 1,
-        hits: 2,
-        postCapModifier: 1.2,
-        slotIds
-      };
-    }
+    const attack = classifyNightAttack({
+      mainGuns,
+      secondaryGuns: secondaries,
+      torpedoes,
+      nightAircraft: 0
+    });
     return {
-      preCapPower: (attacker.firepower + attacker.torpedo) * damageStateModifier(attacker),
+      preCapPower: nightBattlePower({
+        firepower: attacker.firepower,
+        torpedo: attacker.torpedo,
+        damageModifier: damageStateModifier(attacker)
+      }),
       cap: 360,
       atType: 0,
-      spType: 0,
-      hits: 1,
-      postCapModifier: 1,
-      slotIds
+      spType: attack.spType,
+      hits: attack.hits,
+      postCapModifier: attack.modifier,
+      slotIds: nightAttackSlotIds(attacker, attack.spType, slotIds)
     };
   }
 
@@ -1068,11 +1194,132 @@ function specialAttackSlotIds(unit: BattleUnit) {
   return ids.length ? ids : [primarySlotId(unit)];
 }
 
+function nightAttackSlotIds(unit: BattleUnit, spType: number, fallback: number[]) {
+  if (spType === 5) {
+    const ids = equippedSlotMasterIds(unit, TORPEDO_TYPES, 2);
+    return ids.length > 0 ? ids : fallback;
+  }
+  if (spType === 4) {
+    const ids = [
+      ...equippedSlotMasterIds(unit, MAIN_GUN_TYPES, 1),
+      ...equippedSlotMasterIds(unit, TORPEDO_TYPES, 1)
+    ];
+    return ids.length > 0 ? ids : fallback;
+  }
+  return fallback;
+}
+
 function equippedSlotMasterIds(unit: BattleUnit, typeIds: Set<number>, limit: number) {
   return unit.equippedSlots
     .filter((slot) => typeIds.has(safeNum(slot.slotMaster.api_type?.[2])))
     .map((slot) => slot.slotMaster.api_id)
     .slice(0, limit);
+}
+
+function openingAswPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng): HougekiPayload | null {
+  const submarineTargets = enemy.filter((unit) => SUBMARINE_TYPES.has(unit.shipType));
+  if (submarineTargets.length === 0) return null;
+  const payload = emptyHougeki(false);
+  for (const attacker of attackOrder(friendly)) {
+    if (!canOpeningAsw(attacker)) continue;
+    appendAswAttack(payload, attacker, submarineTargets, formation, rng);
+  }
+  return payload.api_at_list.length > 0 ? payload : null;
+}
+
+function canOpeningAsw(unit: BattleUnit) {
+  if (!isOperable(unit) || damageState(unit) >= 3) return false;
+  return canOpeningAswByStats({
+    shipType: unit.shipType,
+    level: unit.level,
+    displayedAsw: unit.asw,
+    equipmentAsw: equipmentAsw(unit),
+    hasSonar: countEquipTypes(unit, SONAR_TYPES) > 0,
+    hasDepthCharge: countEquipTypes(unit, DEPTH_CHARGE_TYPES) > 0,
+    hasAutogyro: countEquipTypes(unit, AUTOGYRO_TYPES) > 0
+  });
+}
+
+function appendAswAttack(
+  payload: HougekiPayload,
+  attacker: BattleUnit,
+  targets: BattleUnit[],
+  formation: number,
+  rng: BattleRng
+) {
+  const target = randomAlive(targets, rng);
+  if (!target) return;
+  const critical = rng.chance(0.15);
+  const power = aswAttackPower(attacker) * formationModifier(formation, "shelling") * damageStateModifier(attacker);
+  const damage = rng.chance(0.93)
+    ? applyDamage(target, power, 170, attacker.ammoModifier, rng, attacker.side === 0 ? 1 : 0, critical, 1)
+    : 0;
+  if (damage > 0) attacker.damageDealt += damage;
+  payload.api_at_eflag.push(attacker.side);
+  payload.api_at_list.push(attacker.position - 1);
+  payload.api_at_type.push(0);
+  payload.api_df_list.push([target.position - 1]);
+  payload.api_si_list.push(aswAttackSlotIds(attacker));
+  payload.api_cl_list.push([critical ? 2 : damage > 0 ? 1 : 0]);
+  payload.api_damage.push([damage]);
+}
+
+function aswAttackPower(unit: BattleUnit) {
+  return resolveAswAttackPower({
+    baseAsw: unit.baseAsw,
+    equipmentAsw: equipmentAsw(unit, ASW_DAMAGE_EQUIP_TYPES),
+    sonarCount: countEquipTypes(unit, SONAR_TYPES),
+    depthChargeCount: countEquipTypes(unit, DEPTH_CHARGE_TYPES)
+  });
+}
+
+function aswAttackSlotIds(unit: BattleUnit) {
+  const ids = unit.equippedSlots
+    .filter((slot) => {
+      const type = safeNum(slot.slotMaster.api_type?.[2]);
+      return SONAR_TYPES.has(type) || DEPTH_CHARGE_TYPES.has(type);
+    })
+    .map((slot) => slot.slotMaster.api_id)
+    .slice(0, 3);
+  return ids.length > 0 ? ids : [primarySlotId(unit)];
+}
+
+function openingTorpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng) {
+  return torpedoPhase(friendly, enemy, formation, rng, canOpeningTorpedo);
+}
+
+function combinedShellingPhases(
+  combinedType: number,
+  main: BattleUnit[],
+  escort: BattleUnit[],
+  enemy: BattleUnit[],
+  formation: number,
+  rng: BattleRng
+) {
+  const hasSecondRound = hasSecondShellingRound([...main, ...escort], enemy);
+  if (combinedType === 2) {
+    return {
+      hougeki1: shellingPhase(main, enemy, formation, rng, "day"),
+      hougeki2: shellingPhase(escort, enemy, formation, rng, "day"),
+      hougeki3: hasSecondRound ? shellingPhase(main, enemy, formation, rng, "day") : null
+    };
+  }
+  if (combinedType === 3) {
+    return {
+      hougeki1: shellingPhase(escort, enemy, formation, rng, "day"),
+      hougeki2: shellingPhase(main, enemy, formation, rng, "day"),
+      hougeki3: hasSecondRound ? shellingPhase(escort, enemy, formation, rng, "day") : null
+    };
+  }
+  return {
+    hougeki1: shellingPhase(escort, enemy, formation, rng, "day"),
+    hougeki2: shellingPhase(main, enemy, formation, rng, "day"),
+    hougeki3: hasSecondRound ? shellingPhase(main, enemy, formation, rng, "day") : null
+  };
+}
+
+function hasSecondShellingRound(friendly: BattleUnit[], enemy: BattleUnit[]) {
+  return [...friendly, ...enemy].some((unit) => isOperable(unit) && BATTLESHIP_TYPES.has(unit.shipType));
 }
 
 function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng, phase: "day" | "night"): HougekiPayload {
@@ -1142,7 +1389,13 @@ function appendShellingAttack(
   if (payload.api_n_mother_list) payload.api_n_mother_list.push(0);
 }
 
-function torpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng): RaigekiPayload | null {
+function torpedoPhase(
+  friendly: BattleUnit[],
+  enemy: BattleUnit[],
+  formation: number,
+  rng: BattleRng,
+  canFire: (unit: BattleUnit) => boolean = canClosingTorpedo
+): RaigekiPayload | null {
   const payload: RaigekiPayload = {
     api_frai: Array(6).fill(-1),
     api_erai: Array(6).fill(-1),
@@ -1159,7 +1412,7 @@ function torpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: nu
   };
   let fired = false;
   for (const attacker of friendly) {
-    if (!isOperable(attacker) || attacker.torpedo <= 0 || damageState(attacker) >= 3) continue;
+    if (!canFire(attacker)) continue;
     const target = randomAlive(enemy, rng);
     if (!target) continue;
     const attackerIdx = attacker.position - 1;
@@ -1176,7 +1429,7 @@ function torpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: nu
     fired = true;
   }
   for (const attacker of enemy) {
-    if (!isOperable(attacker) || attacker.torpedo <= 0 || damageState(attacker) >= 3) continue;
+    if (!canFire(attacker)) continue;
     const target = randomAlive(friendly, rng);
     if (!target) continue;
     const attackerIdx = attacker.position - 1;
@@ -1193,6 +1446,16 @@ function torpedoPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: nu
     fired = true;
   }
   return fired ? payload : null;
+}
+
+function canClosingTorpedo(unit: BattleUnit) {
+  return isOperable(unit) && unit.torpedo > 0 && damageState(unit) < 3;
+}
+
+function canOpeningTorpedo(unit: BattleUnit) {
+  if (!canClosingTorpedo(unit)) return false;
+  if (OPENING_TORPEDO_SHIP_TYPES.has(unit.shipType)) return true;
+  return countEquipTypes(unit, MIDGET_SUBMARINE_TYPES) > 0;
 }
 
 function applyDamage(
@@ -1326,6 +1589,8 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
   const equipSum = (field: keyof (typeof masterData.api_mst_slotitem)[number]) =>
     slotMasters.reduce((sum, item) => sum + safeNum(item[field]), 0);
   const slots = slotMasters.map((item) => item.api_id);
+  const baseAsw = shipBaseAsw(master, ship.level);
+  const asw = baseAsw + equipSum("api_tais");
   const airSlots = equippedSlots
     .filter((item) => item.count > 0 && isAircraftSlotItem(item.slotMaster))
     .map((item) => ({
@@ -1361,6 +1626,8 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     firepower: statValue(master?.api_houg) + equipSum("api_houg"),
     torpedo: statValue(master?.api_raig) + equipSum("api_raig"),
     aa: statValue(master?.api_tyku) + equipSum("api_tyku"),
+    baseAsw,
+    asw,
     armor: statValue(master?.api_souk) + equipSum("api_souk"),
     luck: statValue(master?.api_luck) + equipSum("api_luck"),
     range: Math.max(safeNum(master?.api_leng, 1), ...slotMasters.map((item) => safeNum(item.api_leng, 0))),
@@ -1537,6 +1804,8 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     firepower: template.firepower,
     torpedo: template.torpedo,
     aa: template.aa,
+    baseAsw: 0,
+    asw: 0,
     armor: template.armor,
     luck: template.luck,
     range: template.range,
@@ -1579,6 +1848,8 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
   const slotMasters = equippedSlots.map((slot) => slot.slotMaster);
   const equipSum = (field: keyof (typeof masterData.api_mst_slotitem)[number]) =>
     slotMasters.reduce((sum, item) => sum + safeNum(item[field]), 0);
+  const baseAsw = shipBaseAsw(master, ship.level);
+  const asw = baseAsw + equipSum("api_tais");
   const airSlots = equippedSlots
     .filter((slot) => slot.count > 0 && isAircraftSlotItem(slot.slotMaster))
     .map((slot) => ({
@@ -1615,6 +1886,8 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
     firepower: leveledStat(master?.api_houg, ship.level, 0) + equipSum("api_houg"),
     torpedo: leveledStat(master?.api_raig, ship.level, 0) + equipSum("api_raig"),
     aa: leveledStat(master?.api_tyku, ship.level, 0) + equipSum("api_tyku"),
+    baseAsw,
+    asw,
     armor: leveledStat(master?.api_souk, ship.level, 1) + equipSum("api_souk"),
     luck: leveledStat(master?.api_luck, ship.level, 0) + equipSum("api_luck"),
     range: Math.max(safeNum(master?.api_leng, 1), ...slotMasters.map((slot) => safeNum(slot.api_leng, 0))),
@@ -1654,6 +1927,7 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
       const masterId = record.shipMasterIds?.[index] ?? id;
       const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
       const hp = hps[index] ?? statValue(master?.api_taik, 1);
+      const baseAsw = shipBaseAsw(master, 1);
       return {
         side,
         position: index + 1,
@@ -1667,6 +1941,8 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
         firepower: statValue(master?.api_houg),
         torpedo: statValue(master?.api_raig),
         aa: statValue(master?.api_tyku),
+        baseAsw,
+        asw: baseAsw,
         armor: statValue(master?.api_souk),
         luck: statValue(master?.api_luck),
         range: safeNum(master?.api_leng, 1),
@@ -1683,6 +1959,55 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
     .filter((unit): unit is BattleUnit => Boolean(unit));
 }
 
+function recordEscortUnitsFrom(record: BattleRecord): BattleUnit[] {
+  const hps = record.after.fCombinedNowHps ?? record.before.fCombinedNowHps ?? [];
+  const snapshots = record.units?.escort;
+  if (snapshots?.length) {
+    return snapshots
+      .filter((snapshot) => snapshot.position <= 6)
+      .map((snapshot) => unitFromSnapshot(snapshot, hps[snapshot.position - 1] ?? snapshot.maxHp))
+      .filter((unit): unit is BattleUnit => Boolean(unit));
+  }
+  const ids = record.escortShipIds ?? [];
+  return normalizeFixed(ids, 6, -1)
+    .map((id, index) => {
+      if (id <= 0) return null;
+      const masterId = record.escortShipMasterIds?.[index] ?? id;
+      const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
+      const hp = hps[index] ?? statValue(master?.api_taik, 1);
+      const baseAsw = shipBaseAsw(master, 1);
+      const unit: BattleUnit = {
+        side: 0,
+        position: index + 1,
+        apiIndex: index + 1,
+        shipId: id,
+        masterId,
+        level: 1,
+        hp,
+        hpFloor: 0,
+        maxHp: record.before.fCombinedNowHps?.[index] || hp,
+        firepower: statValue(master?.api_houg),
+        torpedo: statValue(master?.api_raig),
+        aa: statValue(master?.api_tyku),
+        baseAsw,
+        asw: baseAsw,
+        armor: statValue(master?.api_souk),
+        luck: statValue(master?.api_luck),
+        range: safeNum(master?.api_leng, 1),
+        ammoModifier: 1,
+        shipType: safeNum(master?.api_stype, 2),
+        slots: [1],
+        equippedSlots: [],
+        airSlots: [],
+        onSlot: [0, 0, 0, 0, 0],
+        originalOnSlot: [0, 0, 0, 0, 0],
+        damageDealt: 0
+      };
+      return unit;
+    })
+    .filter((unit): unit is BattleUnit => Boolean(unit));
+}
+
 function snapshotUnits(units: BattleUnit[]): BattleUnitSnapshot[] {
   return units.map((unit) => ({
     side: unit.side,
@@ -1695,6 +2020,8 @@ function snapshotUnits(units: BattleUnit[]): BattleUnitSnapshot[] {
     firepower: unit.firepower,
     torpedo: unit.torpedo,
     aa: unit.aa,
+    baseAsw: unit.baseAsw,
+    asw: unit.asw,
     armor: unit.armor,
     luck: unit.luck,
     range: unit.range,
@@ -1759,6 +2086,8 @@ function unitFromSnapshot(snapshot: BattleUnitSnapshot, hp: number): BattleUnit 
     firepower: snapshot.firepower,
     torpedo: snapshot.torpedo,
     aa: snapshot.aa,
+    baseAsw: snapshot.baseAsw,
+    asw: snapshot.asw,
     armor: snapshot.armor,
     luck: snapshot.luck,
     range: snapshot.range,
@@ -1842,10 +2171,7 @@ function aircraftLosses(friendly: BattleUnit[], enemy: BattleUnit[]) {
 }
 
 function formationModifier(formation: number, phase: "shelling" | "torpedo" | "night") {
-  if (phase === "night") return 1;
-  const shelling: Record<number, number> = { 1: 1, 2: 0.8, 3: 0.7, 4: 0.6, 5: 0.6 };
-  const torpedo: Record<number, number> = { 1: 1, 2: 0.8, 3: 0.7, 4: 0.6, 5: 0.6 };
-  return (phase === "shelling" ? shelling : torpedo)[formation] ?? 1;
+  return formationModifierFor(formation, phase);
 }
 
 function damageState(unit: BattleUnit) {
@@ -1857,10 +2183,7 @@ function damageState(unit: BattleUnit) {
 }
 
 function damageStateModifier(unit: BattleUnit) {
-  const state = damageState(unit);
-  if (state >= 3) return 0.4;
-  if (state === 2) return 0.7;
-  return 1;
+  return damageStateModifierFor(unit.hp, unit.maxHp);
 }
 
 function ammoModifier(ammo: number, maxAmmo: number) {
@@ -1926,6 +2249,17 @@ function leveledStat(value: unknown, level: number, fallback = 0) {
   const normalized = Math.max(1, Math.min(99, Math.trunc(level)));
   const progress = normalized >= 99 ? 1 : (normalized - 1) / 98;
   return Math.round(base + (max - base) * progress);
+}
+
+function shipBaseAsw(master: (typeof masterData.api_mst_ship)[number] | undefined, level: number) {
+  const explicit = statValue((master as { api_tais?: unknown } | undefined)?.api_tais, -1);
+  if (explicit >= 0) return explicit;
+  const shipType = safeNum(master?.api_stype, 0);
+  const normalizedLevel = Math.max(1, Math.min(99, Math.trunc(level)));
+  if (shipType === 1) return 54 + Math.floor(normalizedLevel / 2);
+  if ([2, 3, 4, 21, 22].includes(shipType)) return normalizedLevel;
+  if ([7, 10, 16, 17].includes(shipType)) return Math.floor(normalizedLevel / 2);
+  return 0;
 }
 
 function slotMasterById(id: number) {

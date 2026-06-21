@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  antiAirStage2Shootdown,
+  aswAttackPower,
   airState,
+  canOpeningAswByStats,
+  classifyNightAttack,
+  damageStateModifierFor,
   fighterPower,
+  formationModifierFor,
+  nightBattlePower,
   resolveBattleDamage,
   softCap
 } from "../src/kcsapi/battle-formulas.js";
@@ -31,5 +38,80 @@ describe("battle formula helpers", () => {
       targetHp: 999,
       targetSide: 1
     })).toBe(164);
+  });
+
+  it("exposes reusable formation, damage state, anti-air, and night power helpers", () => {
+    expect(formationModifierFor(1, "shelling")).toBe(1);
+    expect(formationModifierFor(2, "shelling")).toBe(0.8);
+    expect(formationModifierFor(3, "antiAir")).toBe(1.6);
+    expect(formationModifierFor(4, "night")).toBe(1);
+
+    expect(damageStateModifierFor(76, 100)).toBe(1);
+    expect(damageStateModifierFor(50, 100)).toBe(0.7);
+    expect(damageStateModifierFor(25, 100)).toBe(0.4);
+
+    expect(nightBattlePower({ firepower: 65, torpedo: 79 })).toBe(144);
+    expect(nightBattlePower({ firepower: 65, torpedo: 79, damageModifier: 0.7 })).toBeCloseTo(100.8, 5);
+
+    expect(antiAirStage2Shootdown({
+      slotCount: 18,
+      defenderAntiAir: 60,
+      fleetAntiAir: 120,
+      formationModifier: 1.6,
+      cutInFixedBonus: 3,
+      cutInModifier: 1.35,
+      randomFactor: 0.5
+    })).toBe(7);
+  });
+
+  it("calculates opening ASW eligibility and attack power", () => {
+    expect(canOpeningAswByStats({
+      shipType: 2,
+      level: 99,
+      displayedAsw: 100,
+      hasSonar: true,
+      hasDepthCharge: false,
+      hasAutogyro: false
+    })).toBe(true);
+    expect(canOpeningAswByStats({
+      shipType: 2,
+      level: 1,
+      displayedAsw: 20,
+      hasSonar: true,
+      hasDepthCharge: false,
+      hasAutogyro: false
+    })).toBe(false);
+    expect(canOpeningAswByStats({
+      shipType: 1,
+      level: 1,
+      displayedAsw: 60,
+      hasSonar: true,
+      hasDepthCharge: false,
+      hasAutogyro: false
+    })).toBe(true);
+    expect(aswAttackPower({ baseAsw: 70, equipmentAsw: 10, sonarCount: 1, depthChargeCount: 1 })).toBeCloseTo(51.4432, 4);
+  });
+
+  it("classifies generic night battle attacks by equipment mix", () => {
+    expect(classifyNightAttack({ mainGuns: 0, secondaryGuns: 0, torpedoes: 2, nightAircraft: 0 })).toEqual({
+      spType: 5,
+      hits: 2,
+      modifier: 1.5
+    });
+    expect(classifyNightAttack({ mainGuns: 1, secondaryGuns: 0, torpedoes: 1, nightAircraft: 0 })).toEqual({
+      spType: 4,
+      hits: 2,
+      modifier: 1.3
+    });
+    expect(classifyNightAttack({ mainGuns: 2, secondaryGuns: 0, torpedoes: 0, nightAircraft: 0 })).toEqual({
+      spType: 1,
+      hits: 2,
+      modifier: 1.2
+    });
+    expect(classifyNightAttack({ mainGuns: 1, secondaryGuns: 0, torpedoes: 0, nightAircraft: 0 })).toEqual({
+      spType: 0,
+      hits: 1,
+      modifier: 1
+    });
   });
 });
