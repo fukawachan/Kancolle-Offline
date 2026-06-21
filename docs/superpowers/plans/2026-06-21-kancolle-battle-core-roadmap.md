@@ -157,6 +157,35 @@ Land-target filtering continuation on 2026-06-21:
 - Opening and closing torpedo target pools now allow only `targetKind === "surface"`, excluding both submarines and installations.
 - Classification is ID-based; names and `stype` alone are intentionally not used because they produce false positives.
 
+Final roadmap continuation on 2026-06-21:
+
+- Recreated the isolated worktree on branch `codex/battle-core-engine`.
+- Completed Task 5 and committed `b0261f0d`:
+  - `SortieEncounter` and `SelectedSortieEncounter` now carry optional `enemyCombinedShipIds`.
+  - `createCombinedBattle()` populates enemy escort units from sortie data when present.
+  - Combined day and combined night payloads now preserve enemy escort IDs, HP, parameters, levels, and slots.
+  - Generator parsing and validation understand optional enemy escort IDs without requiring regenerated data.
+- Completed the safe part of Task 6 and committed `bff3adb0`:
+  - battle domain/payload/record/unit types moved into `src/kcsapi/battle/types.ts`
+  - `src/kcsapi/battle.ts` re-exports compatibility types
+  - payload and phase helper extraction was intentionally deferred because the helper dependencies are still tightly coupled inside `battle.ts`
+- Completed Task 7 and committed `0a2409f8`:
+  - added named acceptance coverage for 1-1 normal battle, carrier sortie battle, practice enemy carrier, combined aerial battle, night torpedo cut-in, and AACI full shootdown
+- Stabilized existing aviation payload coverage and committed `d579f729` by fixing a random sortie seed before asserting stage 3 airstrike damage.
+
+Latest full verification after the final roadmap continuation:
+
+```bash
+npm test
+# 28 files, 259 tests passed
+
+npm run typecheck
+# tsc --noEmit passed
+
+git diff --check
+# no output
+```
+
 ## Known Limits Of The Current Implementation
 
 Current code is a better first-stage simulation, not a full official-server clone. Known gaps:
@@ -167,11 +196,11 @@ Current code is a better first-stage simulation, not a full official-server clon
 - Day spotting special attacks only cover a simplified double/AP shape.
 - Night battle covers generic double attack, main gun + torpedo mixed cut-in, and two-torpedo cut-in; more cut-in variants and activation rates are missing.
 - Opening ASW has generic stat/equipment eligibility and base attack power, but target selection, hit rate, ship-specific exceptions, and full synergy details remain incomplete.
-- Enemy combined fleets are not populated from sortie data.
+- Enemy combined fleet payloads are populated when sortie data provides `enemyCombinedShipIds`, but the current generated normal-map data does not contain real enemy combined rows and full enemy combined target-pool/phase rules remain incomplete.
 - Land-based air squadron real damage is not implemented.
 - Friendly fleet real logic is not implemented.
 - Nelson/Nagato/Yamato Touch, event bonuses, installation special effects, and land-based target exceptions are out of phase-one scope.
-- The engine types exist, but much of the implementation still lives in the large `src/kcsapi/battle.ts` file.
+- The engine types now live in `src/kcsapi/battle/types.ts`, but much of the runtime implementation still lives in the large `src/kcsapi/battle.ts` file.
 
 ---
 
@@ -841,6 +870,8 @@ git commit -m "feat: classify generic night battle attacks"
 
 ### Task 5: Add Enemy Combined Fleet Data And Payload Support
 
+Status: completed in the final 2026-06-21 continuation. Focused verification passed with `npm test -- tests/battle.test.ts tests/api.test.ts`; committed as `b0261f0d`.
+
 **Files:**
 
 - Modify: `scripts/generate-sortie-data.mjs`
@@ -849,7 +880,7 @@ git commit -m "feat: classify generic night battle attacks"
 - Modify: `tests/battle.test.ts`
 - Modify: `tests/api.test.ts`
 
-- [ ] **Step 1: Inspect generated sortie data shape**
+- [x] **Step 1: Inspect generated sortie data shape**
 
 Run:
 
@@ -859,7 +890,7 @@ npx tsx -e "import { sortieNodes } from './src/master/sortie-data.ts'; console.l
 
 Expected: node objects with encounters and enemy ship IDs.
 
-- [ ] **Step 2: Add a unit test for enemy combined placeholders**
+- [x] **Step 2: Add a unit test for enemy combined placeholders**
 
 Add a test that manually mutates a selected encounter or constructs a `BattleRecord` with enemy combined snapshots. The test should assert:
 
@@ -870,7 +901,7 @@ expect(payload.api_eParam_combined).toHaveLength(6);
 expect(payload.api_eSlot_combined).toHaveLength(6);
 ```
 
-- [ ] **Step 3: Extend sortie data types**
+- [x] **Step 3: Extend sortie data types**
 
 Add optional enemy escort fields:
 
@@ -880,7 +911,7 @@ enemyCombinedShipIds?: number[];
 
 Keep existing data valid by defaulting to `[]`.
 
-- [ ] **Step 4: Populate `enemyCombined` in `createCombinedBattle()`**
+- [x] **Step 4: Populate `enemyCombined` in `createCombinedBattle()`**
 
 Replace:
 
@@ -890,7 +921,7 @@ const enemyCombined: BattleUnit[] = [];
 
 with logic that reads `sortie?.enemyCombinedShipIds ?? []` and calls `enemyUnits(...)`.
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 ```bash
 npm test -- tests/battle.test.ts tests/api.test.ts
@@ -898,7 +929,7 @@ npm test -- tests/battle.test.ts tests/api.test.ts
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add scripts/generate-sortie-data.mjs src/master/sortie-data.ts src/kcsapi/battle.ts tests/battle.test.ts tests/api.test.ts
@@ -906,6 +937,8 @@ git commit -m "feat: support enemy combined fleet payloads"
 ```
 
 ### Task 6: Split Battle Engine Modules After Behavior Is Covered
+
+Status: partially completed in the final 2026-06-21 continuation. Types were extracted to `src/kcsapi/battle/types.ts` and committed as `bff3adb0`; payload/phase extraction was deferred because dependencies were still too tangled for a safe mechanical move.
 
 **Files:**
 
@@ -915,7 +948,7 @@ git commit -m "feat: support enemy combined fleet payloads"
 - Modify: `src/kcsapi/battle.ts`
 - Modify: tests only if imports change
 
-- [ ] **Step 1: Run full baseline**
+- [x] **Step 1: Run full baseline**
 
 ```bash
 npm test
@@ -924,7 +957,7 @@ npm run typecheck
 
 Expected: both pass before refactoring.
 
-- [ ] **Step 2: Move only types first**
+- [x] **Step 2: Move only types first**
 
 Move exported types from `src/kcsapi/battle.ts` into `src/kcsapi/battle/types.ts`:
 
@@ -945,7 +978,7 @@ export type {
 } from "./battle/types.js";
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 ```bash
 npm test -- tests/battle.test.ts
@@ -958,7 +991,9 @@ Expected: pass.
 
 Move `battlePayload`, `combinedBattlePayload`, and related fixed-array helpers only if type dependencies stay small. If imports become tangled, stop and commit the type extraction first.
 
-- [ ] **Step 5: Commit**
+Final continuation note: imports were tangled through fixed-array helpers and record snapshot recovery, so this step was intentionally deferred after committing the type extraction.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/kcsapi/battle.ts src/kcsapi/battle/types.ts src/kcsapi/battle/payload.ts
@@ -967,12 +1002,14 @@ git commit -m "refactor: split battle engine types and payload adapters"
 
 ### Task 7: Final Acceptance Scenarios
 
+Status: completed in the final 2026-06-21 continuation. Added the named acceptance scenarios and committed as `0a2409f8`; also committed `d579f729` to make an existing aviation payload test deterministic.
+
 **Files:**
 
 - Modify: `tests/battle.test.ts`
 - Modify: `tests/api.test.ts`
 
-- [ ] **Step 1: Add named acceptance tests**
+- [x] **Step 1: Add named acceptance tests**
 
 Add one test per user acceptance scenario:
 
@@ -989,7 +1026,7 @@ Use deterministic seeds:
 store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
 ```
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 ```bash
 npm test
@@ -1003,7 +1040,7 @@ Expected:
 - typecheck exits 0
 - diff check has no output
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/battle.test.ts tests/api.test.ts
