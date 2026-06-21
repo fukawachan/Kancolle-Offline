@@ -1404,6 +1404,7 @@ describe("local kcsapi endpoints", () => {
     await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: akagi.id });
     await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
     await post("api_req_map/next");
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
 
     const battle = await post("api_req_sortie/battle", { api_formation: 1 });
     const battleData = battle.json().api_data;
