@@ -35,6 +35,8 @@ describe("sortie battle simulation", () => {
       armor: ENEMY_UNIT_TEMPLATES[id].armor,
       aa: ENEMY_UNIT_TEMPLATES[id].aa,
       luck: ENEMY_UNIT_TEMPLATES[id].luck,
+      accuracy: ENEMY_UNIT_TEMPLATES[id].accuracy,
+      evasion: ENEMY_UNIT_TEMPLATES[id].evasion,
       range: ENEMY_UNIT_TEMPLATES[id].range,
       slots: [...ENEMY_UNIT_TEMPLATES[id].slots],
       onSlot: [...ENEMY_UNIT_TEMPLATES[id].onSlot]
@@ -43,7 +45,11 @@ describe("sortie battle simulation", () => {
     try {
       callback();
     } finally {
-      for (const original of originals) Object.assign(ENEMY_UNIT_TEMPLATES[original.id], original);
+      for (const original of originals) {
+        Object.assign(ENEMY_UNIT_TEMPLATES[original.id], original);
+        if (original.accuracy == null) delete ENEMY_UNIT_TEMPLATES[original.id].accuracy;
+        if (original.evasion == null) delete ENEMY_UNIT_TEMPLATES[original.id].evasion;
+      }
     }
   }
 
@@ -119,6 +125,37 @@ describe("sortie battle simulation", () => {
       api_friendly_kouku: null,
       api_friendly_battle: null
     });
+  });
+
+  it("limits airbattle endpoints to aerial phases", () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1, endpoint: "sortieAir" });
+
+    expect(battle.record.endpoint).toBe("sortieAir");
+    expect(battle.record.phases.kouku).toBeTruthy();
+    expect(battle.record.phases.openingTaisen).toBeNull();
+    expect(battle.record.phases.openingAtack).toBeNull();
+    expect(battle.record.phases.hougeki1.api_at_list).toEqual([]);
+    expect(battle.record.phases.raigeki).toBeNull();
+  });
+
+  it("emits an air-base placeholder for land-based airbattle endpoints", () => {
+    const battle = createSortieBattle(store.getSave(), { formation: 1, endpoint: "sortieLdAir" });
+
+    expect(battle.record.endpoint).toBe("sortieLdAir");
+    expect(battle.payload.api_air_base_attack).toMatchObject({
+      api_stage_flag: [0, 0, 0],
+      api_stage1: null,
+      api_stage2: null
+    });
+    expect(battle.record.phases.hougeki1.api_at_list).toEqual([]);
+    expect(battle.record.phases.raigeki).toBeNull();
   });
 
   it("compacts legacy deck holes before computing friendly battle HP slots", () => {
@@ -577,6 +614,83 @@ describe("sortie battle simulation", () => {
     }
   });
 
+  it("applies engagement modifiers to daytime shelling damage", () => {
+    const nagato = store.createShip(80);
+    store.changeDeckShip(1, 0, nagato.id);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+    const enemies = [1501, 1502, 1503].map((id) => ENEMY_UNIT_TEMPLATES[id]);
+    const originals = enemies.map((enemy) => ({ hp: enemy.hp, armor: enemy.armor }));
+    for (const enemy of enemies) {
+      enemy.hp = 999;
+      enemy.armor = 0;
+    }
+    try {
+      const favorable = createSortieBattle(store.getSave(), { formation: 1, engagement: 3 });
+      const disadvantage = createSortieBattle(store.getSave(), { formation: 1, engagement: 4 });
+      const favorableAttackIndex = favorable.payload.api_hougeki1.api_at_eflag.indexOf(0);
+      const disadvantageAttackIndex = disadvantage.payload.api_hougeki1.api_at_eflag.indexOf(0);
+
+      expect(favorable.payload.api_formation[2]).toBe(3);
+      expect(disadvantage.payload.api_formation[2]).toBe(4);
+      expect(favorable.payload.api_hougeki1.api_damage[favorableAttackIndex][0])
+        .toBeGreaterThan(disadvantage.payload.api_hougeki1.api_damage[disadvantageAttackIndex][0]);
+    } finally {
+      enemies.forEach((enemy, index) => {
+        enemy.hp = originals[index].hp;
+        enemy.armor = originals[index].armor;
+      });
+    }
+  });
+
+  it("uses target evasion when resolving daytime shelling hits", () => {
+    const nagato = store.createShip(80);
+    store.changeDeckShip(1, 0, nagato.id);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+    const original = { ...ENEMY_UNIT_TEMPLATES[1501] };
+    Object.assign(ENEMY_UNIT_TEMPLATES[1501], {
+      hp: 999,
+      armor: 0,
+      evasion: 999
+    });
+    try {
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      const friendlyAttackIndex = battle.payload.api_hougeki1.api_at_eflag.indexOf(0);
+
+      expect(battle.record.units?.enemy[0]).toMatchObject({ evasion: 999 });
+      expect(battle.payload.api_hougeki1.api_cl_list[friendlyAttackIndex][0]).toBe(0);
+      expect(battle.payload.api_hougeki1.api_damage[friendlyAttackIndex][0]).toBe(0);
+    } finally {
+      Object.assign(ENEMY_UNIT_TEMPLATES[1501], original);
+      if (original.evasion == null) delete ENEMY_UNIT_TEMPLATES[1501].evasion;
+    }
+  });
+
+  it("prioritizes submarine targets for ASW-capable daytime shelling", () => {
+    let patchedNode: ReturnType<typeof sortieNodes>[number] | undefined;
+    let originalShipIds: number[][] = [];
+    try {
+      const sonar = store.createSlotItem(46);
+      store.equipSlotItem(1, 0, sonar.id);
+      store.db.prepare("UPDATE sortie_sessions SET seed = 1 WHERE id = 1").run();
+      patchedNode = sortieNodes().find((item) => item.mapId === 11 && item.node === 1)!;
+      originalShipIds = patchedNode.encounters.map((encounter) => [...encounter.shipIds]);
+      for (const encounter of patchedNode.encounters) {
+        (encounter as any).shipIds = [1530, 1501];
+      }
+
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      const friendlyAttackIndex = battle.payload.api_hougeki1.api_at_eflag.indexOf(0);
+
+      expect(battle.payload.api_ship_ke.slice(0, 2)).toEqual([1530, 1501]);
+      expect(battle.payload.api_hougeki1.api_df_list[friendlyAttackIndex]).toEqual([0]);
+      expect(battle.payload.api_hougeki1.api_si_list[friendlyAttackIndex]).toEqual([46]);
+    } finally {
+      patchedNode?.encounters.forEach((encounter, index) => {
+        (encounter as any).shipIds = originalShipIds[index];
+      });
+    }
+  });
+
   it("resolves opening torpedo attacks before daytime shelling", () => {
     const kitakami = store.createShip(119);
     const midgetSub = store.createSlotItem(41);
@@ -867,6 +981,7 @@ describe("sortie battle simulation", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const record = {
       ...battle.record,
+      deckId: 2,
       after: {
         ...battle.record.after,
         fNowHps: [...battle.record.before.fNowHps],
@@ -894,10 +1009,18 @@ describe("sortie battle simulation", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const record = {
       ...battle.record,
+      deckId: 2,
       after: {
         ...battle.record.after,
         fNowHps: [...battle.record.before.fNowHps],
         eNowHps: [20, 20, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          luck: index === 0 ? 500 : unit.luck
+        }))
       }
     };
     const night = createNightBattlePayload(record);
@@ -921,6 +1044,7 @@ describe("sortie battle simulation", () => {
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const record = {
       ...battle.record,
+      deckId: 2,
       after: {
         ...battle.record.after,
         fNowHps: [999, 0, 0, 0, 0, 0],
@@ -928,7 +1052,12 @@ describe("sortie battle simulation", () => {
       },
       units: {
         ...battle.record.units!,
-        friendly: battle.record.units!.friendly.map((unit) => ({ ...unit, maxHp: 999, armor: 999 })),
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          luck: index === 0 ? 500 : unit.luck
+        })),
         enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
       }
     };
@@ -939,6 +1068,86 @@ describe("sortie battle simulation", () => {
     expect(cutInIndex).toBeGreaterThanOrEqual(0);
     expect(hougeki.api_si_list[cutInIndex]).toEqual(expect.arrayContaining([7, 13]));
     expect(hougeki.api_damage[cutInIndex]).toHaveLength(2);
+  });
+
+  it("falls back to a normal night attack when cut-in activation fails", () => {
+    const torpedoA = store.createSlotItem(13);
+    const torpedoB = store.createSlotItem(14);
+    store.equipSlotItem(1, 0, torpedoA.id);
+    store.equipSlotItem(1, 1, torpedoB.id);
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          luck: index === 0 ? 0 : unit.luck
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      },
+      after: {
+        ...battle.record.after,
+        fNowHps: [...battle.record.before.fNowHps],
+        eNowHps: [999, 999, 0, 0, 0, 0]
+      }
+    };
+
+    const night = createNightBattlePayload(record);
+    const hougeki = night.api_hougeki as any;
+    const firstFriendlyAttack = hougeki.api_at_eflag.findIndex((side: number) => side === 0);
+
+    expect(hougeki.api_sp_list[firstFriendlyAttack]).toBe(0);
+    expect(hougeki.api_damage[firstFriendlyAttack]).toHaveLength(1);
+  });
+
+  it("uses night battle equipment when rolling cut-in activation", () => {
+    const kitakami = store.createShip(119);
+    const torpedoA = store.createSlotItem(13);
+    const torpedoB = store.createSlotItem(14);
+    const searchlight = store.createSlotItem(74);
+    store.equipSlotItem(kitakami.id, 0, torpedoA.id);
+    store.equipSlotItem(kitakami.id, 1, torpedoB.id);
+    store.equipSlotItem(kitakami.id, 2, searchlight.id);
+    store.changeDeckShip(1, 0, kitakami.id);
+    store.changeDeckShip(1, 1, -1);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      deckId: 21,
+      after: {
+        ...battle.record.after,
+        fNowHps: [40, 0, 0, 0, 0, 0],
+        eNowHps: [40, 0, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          luck: index === 0 ? 40 : unit.luck,
+          maxHp: 40
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 40, armor: 999 }))
+      }
+    };
+    const withoutSearchlight = createNightBattlePayload({
+      ...record,
+      units: {
+        ...record.units,
+        friendly: record.units.friendly.map((unit, index) => index === 0
+          ? {
+              ...unit,
+              equippedSlots: unit.equippedSlots.filter((slot) => slot.slotMasterId !== 74),
+              slots: unit.slots.filter((slotId) => slotId !== 74)
+            }
+          : unit)
+      }
+    });
+    const withSearchlight = createNightBattlePayload(record);
+
+    expect((withoutSearchlight.api_hougeki as any).api_sp_list).not.toContain(5);
+    expect((withSearchlight.api_hougeki as any).api_sp_list).toContain(5);
   });
 
   it("lets the combined fleet escort participate in opening torpedo combat", () => {
@@ -1022,6 +1231,7 @@ describe("sortie battle simulation", () => {
     const battle = createCombinedBattle(store.getSave(), { formation: 1 });
     const record = {
       ...battle.record,
+      deckId: 2,
       after: {
         ...battle.record.after,
         fNowHps: battle.record.before.fNowHps,
@@ -1030,6 +1240,10 @@ describe("sortie battle simulation", () => {
       },
       units: {
         ...battle.record.units!,
+        escort: battle.record.units!.escort?.map((unit, index) => ({
+          ...unit,
+          luck: index === 0 ? 500 : unit.luck
+        })),
         enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
       }
     };
@@ -1142,6 +1356,14 @@ describe("sortie battle simulation", () => {
       const battle = createSortieBattle(store.getSave(), { formation: 1 });
       const night = createNightBattlePayload({
         ...battle.record,
+        deckId: 2,
+        units: {
+          ...battle.record.units!,
+          friendly: battle.record.units!.friendly.map((unit, index) => ({
+            ...unit,
+            luck: index === 0 ? 500 : unit.luck
+          }))
+        },
         after: {
           ...battle.record.after,
           fNowHps: [...battle.record.before.fNowHps],

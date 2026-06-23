@@ -1634,6 +1634,15 @@ describe("local kcsapi endpoints", () => {
     const airBattle = (await post("api_req_sortie/airbattle", { api_formation: 1 })).json().api_data;
     expectBattlePhasePlaceholders(airBattle);
     expectFixedFleetArrays(airBattle);
+    expect(airBattle.api_hougeki1.api_at_list).toEqual([]);
+    expect(airBattle.api_opening_atack).toBeNull();
+    expect(airBattle.api_raigeki).toBeNull();
+
+    const landAirBattle = (await post("api_req_sortie/ld_airbattle", { api_formation: 1 })).json().api_data;
+    expectBattlePhasePlaceholders(landAirBattle);
+    expect(landAirBattle.api_air_base_attack).toMatchObject({ api_stage_flag: [0, 0, 0] });
+    expect(landAirBattle.api_hougeki1.api_at_list).toEqual([]);
+    expect(landAirBattle.api_raigeki).toBeNull();
 
     const escort = store.createShip(119);
     await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort.id });
@@ -1645,6 +1654,23 @@ describe("local kcsapi endpoints", () => {
     expectFixedFleetArrays(combinedBattle);
     expect(combinedBattle.api_f_nowhps_combined).toHaveLength(6);
     expect(combinedBattle.api_fParam_combined).toHaveLength(6);
+  });
+
+  it("records distinct endpoint modes for combined battle variants", async () => {
+    const escort = store.createShip(119);
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort.id });
+    await post("api_req_hensei/combined", { api_combined_type: 1 });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    await post("api_req_combined_battle/battle_water", { api_formation: 1 });
+    expect(store.lastCombinedBattle()).toMatchObject({ endpoint: "combinedBattleWater" });
+
+    await post("api_req_combined_battle/each_battle", { api_formation: 1 });
+    expect(store.lastCombinedBattle()).toMatchObject({ endpoint: "combinedEachBattle" });
+
+    await post("api_req_combined_battle/ec_battle", { api_formation: 1 });
+    expect(store.lastCombinedBattle()).toMatchObject({ endpoint: "combinedEcBattle" });
   });
 
   it("returns enemy combined fleet payload fields when sortie data has an escort fleet", async () => {
@@ -1692,6 +1718,47 @@ describe("local kcsapi endpoints", () => {
     }
   });
 
+  it("lets enemy combined escort units participate in ec_battle damage resolution", async () => {
+    let patchedNode: ReturnType<typeof sortieNodes>[number] | undefined;
+    let originalEscortIds: number[][] = [];
+    const originalEnemy = {
+      ...ENEMY_UNIT_TEMPLATES[1502],
+      slots: [...ENEMY_UNIT_TEMPLATES[1502].slots],
+      onSlot: [...ENEMY_UNIT_TEMPLATES[1502].onSlot]
+    };
+
+    try {
+      const escort = store.createShip(119);
+      await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort.id });
+      await post("api_req_hensei/combined", { api_combined_type: 1 });
+      await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+      await post("api_req_map/next");
+      const session = store.getSave().sortieSession!;
+      patchedNode = sortieNodes().find((item) => item.mapId === 11 && item.node === session.node)!;
+      originalEscortIds = patchedNode.encounters.map((encounter) => [...((encounter as any).enemyCombinedShipIds ?? [])]);
+      for (const encounter of patchedNode.encounters) {
+        (encounter as any).enemyCombinedShipIds = [1502];
+      }
+      Object.assign(ENEMY_UNIT_TEMPLATES[1502], { hp: 999, armor: 0 });
+
+      await post("api_req_combined_battle/ec_battle", { api_formation: 1 });
+      const record = store.lastCombinedBattle() as any;
+
+      expect(record.endpoint).toBe("combinedEcBattle");
+      expect(record.before.eCombinedNowHps[0]).toBe(999);
+      expect(record.after.eCombinedNowHps[0]).toBeLessThan(999);
+    } finally {
+      patchedNode?.encounters.forEach((encounter, index) => {
+        if (originalEscortIds[index].length > 0) {
+          (encounter as any).enemyCombinedShipIds = originalEscortIds[index];
+        } else {
+          delete (encounter as any).enemyCombinedShipIds;
+        }
+      });
+      Object.assign(ENEMY_UNIT_TEMPLATES[1502], originalEnemy);
+    }
+  });
+
   it("applies sortie battle results once and exposes night battle fields", async () => {
     const beforeSortie = store.getSave();
     const beforeFleet = beforeSortie.decks[0].shipIds
@@ -1701,7 +1768,7 @@ describe("local kcsapi endpoints", () => {
     const afterStart = store.getSave();
     store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
     await post("api_req_map/next");
-    store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(1300);
+    store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(36566);
 
     const battle = await post("api_req_sortie/battle", { api_formation: 1 });
     const night = await post("api_req_battle_midnight/battle");

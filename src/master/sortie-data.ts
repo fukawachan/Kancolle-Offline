@@ -14,6 +14,8 @@ export type EnemyUnitTemplate = {
   aa: number;
   armor: number;
   luck: number;
+  accuracy?: number;
+  evasion?: number;
   range: number;
   slots: readonly number[];
   onSlot: readonly number[];

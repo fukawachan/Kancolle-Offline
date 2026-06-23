@@ -5,10 +5,14 @@ import {
   airState,
   canOpeningAswByStats,
   classifyNightAttack,
+  accuracyChance,
+  criticalChance,
   damageStateModifierFor,
+  engagementModifierFor,
   fighterPower,
   formationModifierFor,
   nightBattlePower,
+  nightCutInActivationChance,
   resolveBattleDamage,
   softCap
 } from "../src/kcsapi/battle-formulas.js";
@@ -46,6 +50,11 @@ describe("battle formula helpers", () => {
     expect(formationModifierFor(3, "antiAir")).toBe(1.6);
     expect(formationModifierFor(4, "night")).toBe(1);
 
+    expect(engagementModifierFor(1)).toBe(1);
+    expect(engagementModifierFor(2)).toBe(0.8);
+    expect(engagementModifierFor(3)).toBe(1.2);
+    expect(engagementModifierFor(4)).toBe(0.6);
+
     expect(damageStateModifierFor(76, 100)).toBe(1);
     expect(damageStateModifierFor(50, 100)).toBe(0.7);
     expect(damageStateModifierFor(25, 100)).toBe(0.4);
@@ -62,6 +71,36 @@ describe("battle formula helpers", () => {
       cutInModifier: 1.35,
       randomFactor: 0.5
     })).toBe(7);
+  });
+
+  it("calculates bounded hit and critical chances from combat stats", () => {
+    expect(accuracyChance({
+      attackerLevel: 80,
+      attackerLuck: 20,
+      attackerAccuracy: 12,
+      targetEvasion: 55,
+      formationModifier: 1,
+      engagementModifier: 1,
+      attackAccuracyModifier: 1
+    })).toBeCloseTo(0.738, 3);
+
+    expect(accuracyChance({
+      attackerLevel: 1,
+      attackerLuck: 1,
+      attackerAccuracy: -20,
+      targetEvasion: 180,
+      formationModifier: 0.6,
+      engagementModifier: 0.6,
+      attackAccuracyModifier: 0.6
+    })).toBe(0.1);
+
+    expect(criticalChance({
+      attackerLuck: 30,
+      attackerAccuracy: 8,
+      targetEvasion: 40,
+      proficiencyCriticalBonus: 0.04,
+      cutInModifier: 1.25
+    })).toBeCloseTo(0.2025, 4);
   });
 
   it("calculates opening ASW eligibility and attack power", () => {
@@ -113,5 +152,22 @@ describe("battle formula helpers", () => {
       hits: 1,
       modifier: 1
     });
+  });
+
+  it("calculates night cut-in activation chances from luck and battle state", () => {
+    expect(nightCutInActivationChance({
+      luck: 0,
+      flagship: true,
+      damageState: 0,
+      cutInKind: 5
+    })).toBe(0);
+    expect(nightCutInActivationChance({
+      luck: 40,
+      flagship: true,
+      damageState: 2,
+      cutInKind: 5,
+      searchlight: true,
+      starShell: true
+    })).toBeCloseTo(0.78, 2);
   });
 });

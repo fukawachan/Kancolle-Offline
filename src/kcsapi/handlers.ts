@@ -34,8 +34,10 @@ import {
   createPracticeBattle,
   createSortieBattle,
   emptyKoukuStage3Payload,
+  type BattleEndpointKind,
   type BattleRecord
 } from "./battle.js";
+import { battleEndpointMode } from "./battle/data/endpoint-modes.js";
 import { validateSlotEquip } from "./equipment-rules.js";
 import { apiError, apiOk, parseApiPayload } from "./envelope.js";
 import { practiceRivalById, type PracticeRival } from "./practice.js";
@@ -485,13 +487,13 @@ register("api_req_map/next", (input, context) => {
     return apiError(error instanceof Error ? error.message : "Invalid sortie route selection", 400, {}, 400);
   }
 });
-register("api_req_sortie/battle", (input, context) => apiOk(recordedBattlePayload(input, context)));
+register("api_req_sortie/battle", (input, context) => apiOk(recordedBattlePayload(input, context, endpointKind("api_req_sortie/battle"))));
 register("api_req_battle_midnight/battle", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
 register("api_req_battle_midnight/sp_midnight", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
-register("api_req_sortie/night_to_day", (input, context) => apiOk(recordedBattlePayload(input, context)));
-register("api_req_sortie/airbattle", (input, context) => apiOk(airBattlePayload(input, context)));
-register("api_req_sortie/ld_airbattle", (input, context) => apiOk(airBattlePayload(input, context)));
-register("api_req_sortie/ld_shooting", (input, context) => apiOk(recordedBattlePayload(input, context)));
+register("api_req_sortie/night_to_day", (input, context) => apiOk(recordedBattlePayload(input, context, endpointKind("api_req_sortie/night_to_day"))));
+register("api_req_sortie/airbattle", (input, context) => apiOk(airBattlePayload(input, context, endpointKind("api_req_sortie/airbattle"))));
+register("api_req_sortie/ld_airbattle", (input, context) => apiOk(airBattlePayload(input, context, endpointKind("api_req_sortie/ld_airbattle"))));
+register("api_req_sortie/ld_shooting", (input, context) => apiOk(recordedBattlePayload(input, context, endpointKind("api_req_sortie/ld_shooting"))));
 register("api_req_sortie/battleresult", (_input, context) => {
   const applied = context.stateStore.applySortieBattleResult();
   if (applied.record) return apiOk(battleResultPayload(applied.record as unknown as BattleRecord));
@@ -560,18 +562,18 @@ register("api_req_practice/battle_result", (_input, context) => {
   return apiOk(battleResultPayload((generated.record ?? battle.record) as unknown as BattleRecord));
 });
 
-register("api_req_combined_battle/battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
-register("api_req_combined_battle/battle_water", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
-register("api_req_combined_battle/each_battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
-register("api_req_combined_battle/each_battle_water", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
-register("api_req_combined_battle/airbattle", (input, context) => apiOk(combinedAirBattlePayload(input, context)));
-register("api_req_combined_battle/ld_airbattle", (input, context) => apiOk(combinedAirBattlePayload(input, context)));
-register("api_req_combined_battle/ld_shooting", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/battle"))));
+register("api_req_combined_battle/battle_water", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/battle_water"))));
+register("api_req_combined_battle/each_battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/each_battle"))));
+register("api_req_combined_battle/each_battle_water", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/each_battle_water"))));
+register("api_req_combined_battle/airbattle", (input, context) => apiOk(combinedAirBattlePayload(input, context, endpointKind("api_req_combined_battle/airbattle"))));
+register("api_req_combined_battle/ld_airbattle", (input, context) => apiOk(combinedAirBattlePayload(input, context, endpointKind("api_req_combined_battle/ld_airbattle"))));
+register("api_req_combined_battle/ld_shooting", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/ld_shooting"))));
 register("api_req_combined_battle/midnight_battle", (_input, context) => apiOk(recordedCombinedNightBattlePayload(context)));
 register("api_req_combined_battle/sp_midnight", (_input, context) => apiOk(recordedCombinedNightBattlePayload(context)));
-register("api_req_combined_battle/ec_battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/ec_battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/ec_battle"))));
 register("api_req_combined_battle/ec_midnight_battle", (_input, context) => apiOk(recordedCombinedNightBattlePayload(context)));
-register("api_req_combined_battle/ec_night_to_day", (input, context) => apiOk(recordedCombinedBattlePayload(input, context)));
+register("api_req_combined_battle/ec_night_to_day", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/ec_night_to_day"))));
 register("api_req_combined_battle/battleresult", (_input, context) => {
   const applied = context.stateStore.applyCombinedBattleResult();
   if (applied.record) return apiOk(battleResultPayload(applied.record as unknown as BattleRecord));
@@ -956,8 +958,8 @@ function routingNodeData(areaId: number, mapNo: number, cellNo: number) {
   return point ? map?.nodes?.[point] : undefined;
 }
 
-function recordedBattlePayload(input: HandlerInput, context: HandlerContext) {
-  const battle = createSortieBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+function recordedBattlePayload(input: HandlerInput, context: HandlerContext, endpoint: BattleEndpointKind = "sortieDay") {
+  const battle = createSortieBattle(context.stateStore.getSave(), { formation: battleFormation(input), endpoint });
   if (battle.record.support?.arrived) {
     context.stateStore.recordSupportParticipation(battle.record.support.deckId);
   }
@@ -1009,8 +1011,8 @@ function practiceBatchOptions(context: HandlerContext) {
   };
 }
 
-function recordedCombinedBattlePayload(input: HandlerInput, context: HandlerContext) {
-  const battle = createCombinedBattle(context.stateStore.getSave(), { formation: battleFormation(input) });
+function recordedCombinedBattlePayload(input: HandlerInput, context: HandlerContext, endpoint: BattleEndpointKind = "combinedDay") {
+  const battle = createCombinedBattle(context.stateStore.getSave(), { formation: battleFormation(input), endpoint });
   if (battle.record.support?.arrived) {
     context.stateStore.recordSupportParticipation(battle.record.support.deckId);
   }
@@ -1030,12 +1032,12 @@ function recordedCombinedNightBattlePayload(context: HandlerContext) {
   return night.payload;
 }
 
-function airBattlePayload(input: HandlerInput, context: HandlerContext) {
-  return recordedBattlePayload(input, context);
+function airBattlePayload(input: HandlerInput, context: HandlerContext, endpoint: BattleEndpointKind = "sortieAir") {
+  return recordedBattlePayload(input, context, endpoint);
 }
 
-function combinedAirBattlePayload(input: HandlerInput, context: HandlerContext) {
-  const payload = recordedCombinedBattlePayload(input, context);
+function combinedAirBattlePayload(input: HandlerInput, context: HandlerContext, endpoint: BattleEndpointKind = "combinedAir") {
+  const payload = recordedCombinedBattlePayload(input, context, endpoint);
   return {
     ...payload,
     api_kouku: payload.api_kouku
@@ -1045,6 +1047,10 @@ function combinedAirBattlePayload(input: HandlerInput, context: HandlerContext) 
         }
       : null
   };
+}
+
+function endpointKind(path: string): BattleEndpointKind {
+  return battleEndpointMode(path)?.endpoint ?? "sortieDay";
 }
 
 function practiceListPayload(rivals: PracticeRival[], states: Record<string, number> = {}) {

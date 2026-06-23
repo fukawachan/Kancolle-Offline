@@ -6,21 +6,35 @@ import type { PracticeRival } from "../practice.js";
 
 export type BattleInput = {
   formation?: number;
+  engagement?: number;
   deckId?: number;
   practiceEnemyId?: number;
   practiceRivals?: PracticeRival[];
+  endpoint?: BattleEndpointKind;
 };
 
 export type BattleMode = "sortie" | "practice" | "combined";
 export type BattleEndpointKind =
   | "sortieDay"
   | "sortieAir"
+  | "sortieLdAir"
+  | "sortieLdShooting"
+  | "sortieNightToDay"
   | "sortieNight"
   | "practiceDay"
   | "practiceNight"
   | "combinedDay"
+  | "combinedBattleWater"
+  | "combinedEachBattle"
+  | "combinedEachBattleWater"
   | "combinedAir"
-  | "combinedNight";
+  | "combinedLdAir"
+  | "combinedLdShooting"
+  | "combinedNight"
+  | "combinedSpNight"
+  | "combinedEcBattle"
+  | "combinedEcNight"
+  | "combinedEcNightToDay";
 
 export type BattleFleetKind = "main" | "escort" | "enemyMain" | "enemyEscort";
 
@@ -100,6 +114,8 @@ export type BattleUnit = {
   asw: number;
   armor: number;
   luck: number;
+  accuracy: number;
+  evasion: number;
   range: number;
   ammoModifier: number;
   shipType: number;
@@ -138,6 +154,8 @@ export type BattleUnitSnapshot = {
   asw: number;
   armor: number;
   luck: number;
+  accuracy?: number;
+  evasion?: number;
   range: number;
   ammoModifier: number;
   shipType: number;
@@ -223,6 +241,7 @@ export type BattlePayload = Record<string, any> & {
 };
 
 export type BattleRecord = {
+  endpoint: BattleEndpointKind;
   mode: BattleMode;
   deckId: number;
   escortDeckId?: number;

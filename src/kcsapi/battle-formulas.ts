@@ -38,6 +38,15 @@ export type NightAttackKind = {
   modifier: number;
 };
 
+export type NightCutInActivationInput = {
+  luck: number;
+  flagship: boolean;
+  damageState: number;
+  cutInKind: number;
+  searchlight?: boolean;
+  starShell?: boolean;
+};
+
 export type OpeningAswEligibilityInput = {
   shipType: number;
   level: number;
@@ -65,6 +74,24 @@ export type BattleDamageInput = {
   postCapModifier: number;
   targetHp: number;
   targetSide: 0 | 1;
+};
+
+export type AccuracyChanceInput = {
+  attackerLevel: number;
+  attackerLuck: number;
+  attackerAccuracy: number;
+  targetEvasion: number;
+  formationModifier?: number;
+  engagementModifier?: number;
+  attackAccuracyModifier?: number;
+};
+
+export type CriticalChanceInput = {
+  attackerLuck: number;
+  attackerAccuracy: number;
+  targetEvasion: number;
+  proficiencyCriticalBonus?: number;
+  cutInModifier?: number;
 };
 
 export class BattleRng {
@@ -136,6 +163,16 @@ export function formationModifierFor(formation: number, phase: BattleFormulaPhas
   return table[Math.trunc(formation)] ?? 1;
 }
 
+export function engagementModifierFor(engagement: number) {
+  const table: Record<number, number> = {
+    1: 1,
+    2: 0.8,
+    3: 1.2,
+    4: 0.6
+  };
+  return table[Math.trunc(engagement)] ?? 1;
+}
+
 export function damageStateModifierFor(currentHp: number, maxHp: number) {
   const hp = Math.max(0, Number(currentHp) || 0);
   const max = Math.max(1, Number(maxHp) || 1);
@@ -162,6 +199,19 @@ export function classifyNightAttack(input: {
     return { spType: 1, hits: 2, modifier: 1.2 };
   }
   return { spType: 0, hits: 1, modifier: 1 };
+}
+
+export function nightCutInActivationChance(input: NightCutInActivationInput) {
+  if (input.cutInKind <= 0) return 1;
+  const luck = Math.max(0, Number(input.luck) || 0);
+  if (luck <= 0) return 0;
+  const damageState = Math.trunc(Number(input.damageState) || 0);
+  const base = Math.sqrt(luck) * 0.06;
+  const flagship = input.flagship ? 0.12 : 0;
+  const damage = damageState >= 3 ? 0.2 : damageState >= 2 ? 0.14 : 0;
+  const searchlight = input.searchlight ? 0.07 : 0;
+  const starShell = input.starShell ? 0.07 : 0;
+  return clampProbability(base + flagship + damage + searchlight + starShell, 0, 0.95);
 }
 
 export function antiAirStage2Shootdown(input: AntiAirStage2Input) {
@@ -196,6 +246,30 @@ export function aswAttackPower(input: AswAttackPowerInput) {
   return (13 + base + equipment) * synergy;
 }
 
+export function accuracyChance(input: AccuracyChanceInput) {
+  const level = Math.sqrt(Math.max(1, Math.trunc(Number(input.attackerLevel) || 1)));
+  const luck = Math.max(0, Number(input.attackerLuck) || 0);
+  const accuracy = Number(input.attackerAccuracy) || 0;
+  const evasion = Math.max(0, Number(input.targetEvasion) || 0);
+  const rawPercent = 75 + level + accuracy + luck * 0.2 - evasion * 0.47535;
+  const modified =
+    rawPercent *
+    Math.max(0, Number(input.formationModifier ?? 1) || 0) *
+    Math.max(0, Number(input.engagementModifier ?? 1) || 0) *
+    Math.max(0, Number(input.attackAccuracyModifier ?? 1) || 0);
+  return clampProbability(modified / 100, 0.1, 0.97);
+}
+
+export function criticalChance(input: CriticalChanceInput) {
+  const luck = Math.max(0, Number(input.attackerLuck) || 0);
+  const accuracy = Number(input.attackerAccuracy) || 0;
+  const evasion = Math.max(0, Number(input.targetEvasion) || 0);
+  const proficiency = Math.max(0, Number(input.proficiencyCriticalBonus ?? 0) || 0);
+  const cutIn = Math.max(0, Number(input.cutInModifier ?? 1) || 0);
+  const base = 0.085 + luck * 0.0015 + accuracy * 0.0015 - evasion * 0.0005 + proficiency;
+  return clampProbability(base * cutIn, 0.02, 0.4);
+}
+
 export function resolveBattleDamage(input: BattleDamageInput) {
   const capped = softCap(input.preCapPower, input.cap);
   const critical = input.critical ? 1.5 : 1;
@@ -210,6 +284,10 @@ export function resolveBattleDamage(input: BattleDamageInput) {
   if (targetHp <= 1) return 0;
   const scratch = Math.floor(targetHp * 0.06);
   return Math.max(1, Math.min(targetHp - 1, scratch));
+}
+
+function clampProbability(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 }
 
 function proficiencyAirPowerBonus(proficiency: number) {
