@@ -258,7 +258,7 @@ export function toBuildDock(dock: BuildDock) {
     api_item2: Number(dock.recipe.api_item2 || 0),
     api_item3: Number(dock.recipe.api_item3 || 0),
     api_item4: Number(dock.recipe.api_item4 || 0),
-    api_item5: 1
+    api_item5: Number(dock.recipe.api_item5 || 0)
   };
 }
 

@@ -62,11 +62,19 @@ import {
   toUseItems
 } from "./serializers.js";
 import { normalizeSupplyKind } from "./supply.js";
+import {
+  rollConstruction,
+  rollDevelopment,
+  type ArsenalContext,
+  type ConstructionRecipe,
+  type DevelopmentRecipe
+} from "./arsenal.js";
 
 export type HandlerContext = {
   stateStore: StateStore;
   unknownLogPath: string;
   resourceManifest: ResourceManifest;
+  arsenalRandom: () => number;
 };
 
 export type HandlerInput = {
@@ -357,19 +365,30 @@ register("api_req_nyukyo/speedchange", (input, context) => {
 register("api_req_nyukyo/open_new_dock", () => apiOk({ api_opened: 1 }));
 
 register("api_req_kousyou/createitem", (input, context) => {
-  const recipe = recipeDelta(input.body);
-  context.stateStore.consumeMaterials({ ...recipe, devmat: 1 });
-  const item = context.stateStore.createSlotItem(num(input.body.api_item1, 10) >= 20 ? 2 : 1);
-  context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "equipment" });
+  const recipe = developmentRecipe(input.body);
+  const attempts = num(input.body.api_multiple_flag, 0) === 1 ? 3 : 1;
+  const arsenalContext = currentArsenalContext(context.stateStore.getSave());
+  const resultMasterIds = Array.from({ length: attempts }, () =>
+    rollDevelopment(recipe, arsenalContext, context.arsenalRandom())
+  );
+  const developed = context.stateStore.developEquipment(recipe, resultMasterIds);
+  if (!developed.ok) return apiError(developed.error, 400);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "equipment" });
+  }
   const save = context.stateStore.getSave();
-  const slotItem = toSlotItem(item);
+  const getItems = developed.items.map((item) =>
+    item ? toSlotItem(item) : { api_id: -1, api_slotitem_id: -1 }
+  );
+  const firstItem = getItems.find((item) => item.api_id > 0) ?? null;
+  const success = firstItem ? 1 : 0;
   return apiOk({
-    api_create_flag: 1,
-    api_shizai_flag: 1,
-    api_slot_item: slotItem,
-    api_get_items: [slotItem],
+    api_create_flag: success,
+    api_shizai_flag: success,
+    api_slot_item: firstItem,
+    api_get_items: getItems,
     api_unset_items: toUnsetSlotItems(save),
-    api_material: toMaterialValues(save.materials)
+    api_material: toMaterialValues(developed.materials)
   });
 });
 register("api_req_kousyou/destroyitem2", (input, context) => {
@@ -381,16 +400,39 @@ register("api_req_kousyou/destroyitem2", (input, context) => {
   });
 });
 register("api_req_kousyou/createship", (input, context) => {
-  context.stateStore.consumeMaterials(recipeDelta(input.body));
-  const dock = context.stateStore.startBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1), input.body, num(input.body.api_item1, 30) > 99 ? 54 : 9)!;
+  const recipe = constructionRecipe(input.body);
+  const resultMasterId = rollConstruction(
+    recipe,
+    currentArsenalContext(context.stateStore.getSave()),
+    context.arsenalRandom()
+  );
+  const started = context.stateStore.startBuild({
+    dockId: num(input.body.api_kdock_id ?? input.body.api_id, 1),
+    recipe,
+    resultMasterId,
+    highspeed: num(input.body.api_highspeed, 0) === 1
+  });
+  if (!started.ok) return apiError(started.error, 400);
   context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "ship" });
-  return apiOk({ api_result: 1, api_kdock: toBuildDock(dock), api_material: toMaterialValues(context.stateStore.getSave().materials) });
+  return apiOk({
+    api_result: 1,
+    api_kdock: toBuildDock(started.dock),
+    api_material: toMaterialValues(context.stateStore.getSave().materials)
+  });
 });
-register("api_req_kousyou/createship_speedchange", (input, context) => apiOk({ api_kdock: toBuildDock(context.stateStore.speedBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1))!) }));
+register("api_req_kousyou/createship_speedchange", (input, context) => {
+  const result = context.stateStore.speedBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1));
+  return result.ok ? apiOk({ api_kdock: toBuildDock(result.dock) }) : apiError(result.error, 400);
+});
 register("api_req_kousyou/getship", (input, context) => {
+  const claimed = context.stateStore.claimBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1));
+  if (!claimed.ok) return apiError(claimed.error, 400);
   const save = context.stateStore.getSave();
-  const ship = context.stateStore.claimBuild(num(input.body.api_kdock_id ?? input.body.api_id, 1));
-  return apiOk({ api_ship: toShip(ship, save.slotItems), api_kdock: save.buildDocks.map(toBuildDock), api_slotitem: [] });
+  return apiOk({
+    api_ship: toShip(claimed.ship, save.slotItems),
+    api_kdock: claimed.docks.map(toBuildDock),
+    api_slotitem: claimed.slotItems.map(toSlotItem)
+  });
 });
 register("api_req_kousyou/destroyship", (input, context) => apiOk({ api_material: toMaterialValues(context.stateStore.destroyShip(csvNums(input.body.api_ship_id, [1]))) }));
 register("api_req_kousyou/open_new_dock", () => apiOk({ api_opened: 1 }));
@@ -882,6 +924,28 @@ function recipeDelta(body: Record<string, unknown>) {
     steel: num(body.api_item3, 0),
     bauxite: num(body.api_item4, 0)
   };
+}
+
+function constructionRecipe(body: Record<string, unknown>): ConstructionRecipe {
+  return {
+    ...recipeDelta(body),
+    devmat: num(body.api_item5, 1),
+    large: num(body.api_large_flag, 0) === 1
+  };
+}
+
+function developmentRecipe(body: Record<string, unknown>): DevelopmentRecipe {
+  return recipeDelta(body);
+}
+
+function currentArsenalContext(save: SaveState): ArsenalContext {
+  const firstDeck = save.decks.find((deck) => deck.id === 1) ?? save.decks[0];
+  const preferredIndex = Math.max(0, save.player.flagshipPosition - 1);
+  const secretaryId = firstDeck?.shipIds[preferredIndex] > 0
+    ? firstDeck.shipIds[preferredIndex]
+    : firstDeck?.shipIds.find((shipId) => shipId > 0);
+  const secretaryMasterId = save.ships.find((ship) => ship.id === secretaryId)?.masterId ?? 9;
+  return { secretaryMasterId, playerLevel: save.player.level };
 }
 
 function mapNode(

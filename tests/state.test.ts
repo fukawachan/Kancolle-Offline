@@ -58,6 +58,146 @@ describe("SQLite state store", () => {
     expect(nagato.hp).toBe(nagato.maxHp);
   });
 
+  it("runs construction through validated dock states and the ship master build time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-26T00:00:00.000Z"));
+    store.registerAccount(15);
+
+    const started = store.startBuild({
+      dockId: 1,
+      recipe: { fuel: 30, ammo: 30, steel: 30, bauxite: 30, devmat: 1, large: false },
+      resultMasterId: 9,
+      highspeed: false
+    });
+
+    expect(started).toMatchObject({
+      ok: true,
+      dock: {
+        id: 1,
+        state: 2,
+        resultMasterId: 9,
+        completeTime: Date.parse("2026-06-26T00:20:00.000Z")
+      }
+    });
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 970,
+      ammo: 970,
+      steel: 970,
+      bauxite: 970,
+      devmat: 49
+    });
+
+    const occupied = store.startBuild({
+      dockId: 1,
+      recipe: { fuel: 30, ammo: 30, steel: 30, bauxite: 30, devmat: 1, large: false },
+      resultMasterId: 10,
+      highspeed: false
+    });
+    expect(occupied).toEqual({ ok: false, error: "Build dock is not empty" });
+    expect(store.claimBuild(1)).toEqual({ ok: false, error: "Build is not complete" });
+
+    vi.advanceTimersByTime(20 * 60_000);
+    expect(store.getSave().buildDocks[0].state).toBe(3);
+  });
+
+  it("claims a completed construction with the ship's initial equipment", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-26T00:00:00.000Z"));
+    store.registerAccount(15);
+    store.startBuild({
+      dockId: 1,
+      recipe: { fuel: 30, ammo: 30, steel: 30, bauxite: 30, devmat: 1, large: false },
+      resultMasterId: 9,
+      highspeed: false
+    });
+    vi.advanceTimersByTime(20 * 60_000);
+
+    const claimed = store.claimBuild(1);
+
+    expect(claimed.ok).toBe(true);
+    if (!claimed.ok) return;
+    expect(claimed.ship.masterId).toBe(9);
+    expect(claimed.slotItems.map((item) => item.masterId)).toEqual([297, 13]);
+    expect(claimed.ship.slotIds.slice(0, 2)).toEqual(claimed.slotItems.map((item) => item.id));
+    expect(claimed.docks[0]).toMatchObject({ id: 1, state: 0, resultMasterId: 0 });
+  });
+
+  it("validates construction resources and charges the correct high-speed material count", () => {
+    store.registerAccount(15);
+    const before = store.getSave();
+
+    const insufficient = store.startBuild({
+      dockId: 1,
+      recipe: { fuel: 1500, ammo: 1500, steel: 2000, bauxite: 1000, devmat: 20, large: true },
+      resultMasterId: 131,
+      highspeed: true
+    });
+    expect(insufficient).toEqual({ ok: false, error: "Insufficient construction materials" });
+    expect(store.getSave().materials).toEqual(before.materials);
+
+    store.db.prepare(
+      "UPDATE materials SET fuel = 10000, ammo = 10000, steel = 10000, bauxite = 10000, build_kit = 20, devmat = 100 WHERE player_id = 1"
+    ).run();
+    const started = store.startBuild({
+      dockId: 1,
+      recipe: { fuel: 1500, ammo: 1500, steel: 2000, bauxite: 1000, devmat: 20, large: true },
+      resultMasterId: 131,
+      highspeed: true
+    });
+
+    expect(started).toMatchObject({ ok: true, dock: { state: 3 } });
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 8500,
+      ammo: 8500,
+      steel: 8000,
+      bauxite: 9000,
+      buildKit: 10,
+      devmat: 80
+    });
+  });
+
+  it("charges ten high-speed construction materials when accelerating an active large build", () => {
+    store.registerAccount(15);
+    store.db.prepare(
+      "UPDATE materials SET fuel = 10000, ammo = 10000, steel = 10000, bauxite = 10000, build_kit = 20, devmat = 100 WHERE player_id = 1"
+    ).run();
+    store.startBuild({
+      dockId: 1,
+      recipe: { fuel: 1500, ammo: 1500, steel: 2000, bauxite: 1000, devmat: 20, large: true },
+      resultMasterId: 131,
+      highspeed: false
+    });
+
+    const accelerated = store.speedBuild(1);
+    expect(accelerated).toMatchObject({ ok: true, dock: { state: 3 } });
+    expect(store.getSave().materials.buildKit).toBe(10);
+
+    const repeated = store.speedBuild(1);
+    expect(repeated).toEqual({ ok: false, error: "Build dock is not constructing" });
+    expect(store.getSave().materials.buildKit).toBe(10);
+  });
+
+  it("applies development attempts atomically and only consumes development materials on success", () => {
+    store.registerAccount(15);
+    const before = store.getSave();
+
+    const developed = store.developEquipment(
+      { fuel: 10, ammo: 10, steel: 10, bauxite: 10 },
+      [1, null, 2]
+    );
+
+    expect(developed.ok).toBe(true);
+    if (!developed.ok) return;
+    expect(developed.items.map((item) => item?.masterId ?? null)).toEqual([1, null, 2]);
+    expect(developed.materials).toMatchObject({
+      fuel: before.materials.fuel - 30,
+      ammo: before.materials.ammo - 30,
+      steel: before.materials.steel - 30,
+      bauxite: before.materials.bauxite - 30,
+      devmat: before.materials.devmat - 2
+    });
+  });
+
   it("repairs legacy ship max HP values that were seeded from placeholders", () => {
     store.registerAccount(15);
     const nagato = store.createShip(80);

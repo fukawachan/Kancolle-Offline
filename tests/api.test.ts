@@ -11,15 +11,18 @@ describe("local kcsapi endpoints", () => {
   let tempDir: string;
   let store: StateStore;
   let app: Awaited<ReturnType<typeof buildApp>>;
+  let arsenalRolls: number[];
 
   beforeEach(async () => {
+    arsenalRolls = [];
     tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-api-"));
     store = createStateStore({ databasePath: path.join(tempDir, "save.sqlite") });
     store.registerAccount(15);
     app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
-      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+      unknownLogPath: path.join(tempDir, "unknown.jsonl"),
+      arsenalRandom: () => arsenalRolls.shift() ?? 0
     });
   });
 
@@ -463,6 +466,86 @@ describe("local kcsapi endpoints", () => {
       { api_type3: 1, api_slot_list: [1, 2, 3, 5] },
       { api_type3: 14, api_slot_list: [4] }
     ]);
+  });
+
+  it("returns three ordered success/failure entries for concentrated development", async () => {
+    arsenalRolls = [0, 0.999999, 0];
+
+    const craft = (await post("api_req_kousyou/createitem", {
+      api_item1: 10,
+      api_item2: 10,
+      api_item3: 10,
+      api_item4: 10,
+      api_multiple_flag: 1
+    })).json().api_data;
+
+    expect(craft.api_create_flag).toBe(1);
+    expect(craft.api_get_items).toHaveLength(3);
+    expect(craft.api_get_items[0]).toMatchObject({ api_slotitem_id: expect.any(Number) });
+    expect(craft.api_get_items[1]).toEqual({ api_id: -1, api_slotitem_id: -1 });
+    expect(craft.api_get_items[2]).toMatchObject({ api_slotitem_id: expect.any(Number) });
+    expect(craft.api_material).toEqual([970, 970, 970, 970, 10, 10, 48, 5]);
+  });
+
+  it("returns a client-compatible concentrated development failure without consuming development materials", async () => {
+    arsenalRolls = [0.999999, 0.999999, 0.999999];
+
+    const craft = (await post("api_req_kousyou/createitem", {
+      api_item1: 10,
+      api_item2: 10,
+      api_item3: 10,
+      api_item4: 10,
+      api_multiple_flag: 1
+    })).json().api_data;
+
+    expect(craft.api_create_flag).toBe(0);
+    expect(craft.api_slot_item).toBeNull();
+    expect(craft.api_get_items).toEqual([
+      { api_id: -1, api_slotitem_id: -1 },
+      { api_id: -1, api_slotitem_id: -1 },
+      { api_id: -1, api_slotitem_id: -1 }
+    ]);
+    expect(craft.api_material).toEqual([970, 970, 970, 970, 10, 10, 50, 5]);
+  });
+
+  it("builds immediately with api_highspeed and returns the ship's initial equipment on claim", async () => {
+    arsenalRolls = [0];
+    const build = await post("api_req_kousyou/createship", {
+      api_kdock_id: 1,
+      api_large_flag: 0,
+      api_item1: 30,
+      api_item2: 30,
+      api_item3: 30,
+      api_item4: 30,
+      api_item5: 1,
+      api_highspeed: 1
+    });
+
+    expect(build.statusCode).toBe(200);
+    expect(build.json().api_data.api_kdock).toMatchObject({
+      api_id: 1,
+      api_state: 3,
+      api_item5: 1
+    });
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 970,
+      ammo: 970,
+      steel: 970,
+      bauxite: 970,
+      buildKit: 9,
+      devmat: 49
+    });
+
+    const claim = await post("api_req_kousyou/getship", { api_kdock_id: 1 });
+    const data = claim.json().api_data;
+    expect(data.api_ship.api_ship_id).toBeGreaterThan(0);
+    expect(data.api_slotitem.length).toBeGreaterThan(0);
+    expect(data.api_kdock[0]).toMatchObject({
+      api_id: 1,
+      api_state: 0,
+      api_created_ship_id: 0,
+      api_item5: 0
+    });
   });
 
   it("settles natural material recovery consistently through port and material endpoints", async () => {
@@ -2161,7 +2244,8 @@ describe("local kcsapi endpoints", () => {
         api_item_id: 1,
         api_quest_id: 101
       });
-      expect(response.statusCode, pathname).toBe(200);
+      expect(response.statusCode, pathname).not.toBe(404);
+      expect(response.statusCode, pathname).not.toBe(500);
       expect(response.json().api_result, pathname).not.toBe(404);
     }
   });

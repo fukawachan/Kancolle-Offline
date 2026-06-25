@@ -25,6 +25,7 @@ export type BuildAppOptions = {
   stateStore: StateStore;
   unknownLogPath: string;
   responseFormat?: ResponseFormat;
+  arsenalRandom?: () => number;
 };
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
@@ -120,7 +121,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     const payload = await handleKcsApi(input, {
       stateStore: options.stateStore,
       unknownLogPath: options.unknownLogPath,
-      resourceManifest
+      resourceManifest,
+      arsenalRandom: options.arsenalRandom ?? Math.random
     });
     return sendApi(reply, payload);
   });

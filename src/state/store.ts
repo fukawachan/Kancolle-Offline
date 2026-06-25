@@ -42,6 +42,12 @@ import {
 } from "../kcsapi/practice.js";
 import { repairCost, repairTimeMs } from "../kcsapi/repair.js";
 import {
+  shipBuildTimeMinutes,
+  shipInitialEquipment,
+  type ConstructionRecipe,
+  type DevelopmentRecipe
+} from "../kcsapi/arsenal.js";
+import {
   advanceQuestProgress,
   currentQuestPeriodKey,
   evaluateQuest,
@@ -89,6 +95,14 @@ type Row = Record<string, unknown>;
 
 type RepairStartResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
 type RepairCompleteResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
+type BuildStartResult = { ok: true; dock: BuildDock } | { ok: false; error: string };
+type BuildSpeedResult = { ok: true; dock: BuildDock } | { ok: false; error: string };
+type BuildClaimResult =
+  | { ok: true; ship: Ship; slotItems: SlotItem[]; docks: BuildDock[] }
+  | { ok: false; error: string };
+type DevelopmentResult =
+  | { ok: true; items: (SlotItem | null)[]; materials: Materials }
+  | { ok: false; error: string };
 type QuestClearResult =
   | { ok: true; save: SaveState; materialRewards: readonly [number, number, number, number]; bonuses: QuestBonus[] }
   | { ok: false; error: string };
@@ -519,26 +533,127 @@ export function createStateStore(options: StateStoreOptions) {
 
       return { ok: true, dock: getSave(db).repairDocks.find((item) => item.id === dock.id)! };
     },
-    startBuild: (dockId: number, recipe: JsonObject, resultMasterId = 9) => {
-      const completeTime = Date.now() + 20 * 60_000;
-      db.prepare("UPDATE build_docks SET recipe_json = ?, result_master_id = ?, complete_time = ?, state = 2 WHERE id = ?").run(
-        JSON.stringify(recipe),
-        resultMasterId,
-        completeTime,
-        dockId
-      );
-      return getSave(db).buildDocks.find((dock) => dock.id === dockId);
+    startBuild: (input: {
+      dockId: number;
+      recipe: ConstructionRecipe;
+      resultMasterId: number;
+      highspeed: boolean;
+    }): BuildStartResult => {
+      const save = getSave(db);
+      const dock = save.buildDocks.find((item) => item.id === input.dockId);
+      if (!dock) return { ok: false, error: "Unknown build dock" };
+      if (dock.state !== 0 || dock.resultMasterId > 0) return { ok: false, error: "Build dock is not empty" };
+      if (!validConstructionRecipe(input.recipe)) return { ok: false, error: "Invalid construction recipe" };
+      if (!masterData.api_mst_ship.some((ship) => ship.api_id === input.resultMasterId)) {
+        return { ok: false, error: "Unknown construction result" };
+      }
+      if (save.ships.length >= 300) return { ok: false, error: "Ship capacity reached" };
+
+      const highspeedCost = input.highspeed ? (input.recipe.large ? 10 : 1) : 0;
+      const materialCost: MaterialDelta = {
+        fuel: input.recipe.fuel,
+        ammo: input.recipe.ammo,
+        steel: input.recipe.steel,
+        bauxite: input.recipe.bauxite,
+        devmat: input.recipe.devmat,
+        buildKit: highspeedCost
+      };
+      if (!hasMaterials(save.materials, materialCost)) {
+        return { ok: false, error: "Insufficient construction materials" };
+      }
+
+      const now = Date.now();
+      const completeTime = input.highspeed
+        ? now
+        : now + shipBuildTimeMinutes(input.resultMasterId) * 60_000;
+      const recipe = constructionRecipeJson(input.recipe);
+      const tx = db.transaction(() => {
+        consumeMaterials(db, materialCost);
+        db.prepare(
+          "UPDATE build_docks SET recipe_json = ?, result_master_id = ?, complete_time = ?, state = ? WHERE id = ?"
+        ).run(JSON.stringify(recipe), input.resultMasterId, completeTime, input.highspeed ? 3 : 2, input.dockId);
+      });
+      tx();
+      return {
+        ok: true,
+        dock: getSave(db).buildDocks.find((item) => item.id === input.dockId)!
+      };
     },
-    speedBuild: (dockId: number) => {
-      db.prepare("UPDATE build_docks SET complete_time = ?, state = 3 WHERE id = ?").run(Date.now(), dockId);
-      consumeMaterials(db, { buildKit: 1 });
-      return getSave(db).buildDocks.find((dock) => dock.id === dockId);
+    speedBuild: (dockId: number): BuildSpeedResult => {
+      const save = getSave(db);
+      const dock = save.buildDocks.find((item) => item.id === dockId);
+      if (!dock) return { ok: false, error: "Unknown build dock" };
+      if (dock.state !== 2 || dock.resultMasterId <= 0) return { ok: false, error: "Build dock is not constructing" };
+      const buildKit = Number(dock.recipe.api_large_flag ?? 0) === 1 ? 10 : 1;
+      if (!hasMaterials(save.materials, { buildKit })) {
+        return { ok: false, error: "Insufficient high-speed construction materials" };
+      }
+      const tx = db.transaction(() => {
+        db.prepare("UPDATE build_docks SET complete_time = ?, state = 3 WHERE id = ?").run(Date.now(), dockId);
+        consumeMaterials(db, { buildKit });
+      });
+      tx();
+      return { ok: true, dock: getSave(db).buildDocks.find((item) => item.id === dockId)! };
     },
-    claimBuild: (dockId: number) => {
-      const dock = getSave(db).buildDocks.find((item) => item.id === dockId);
-      const ship = createShip(db, dock?.resultMasterId || 9);
-      db.prepare("UPDATE build_docks SET recipe_json = '{}', result_master_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dockId);
-      return ship;
+    claimBuild: (dockId: number): BuildClaimResult => {
+      settleCompletedBuilds(db);
+      const save = getSave(db);
+      const dock = save.buildDocks.find((item) => item.id === dockId);
+      if (!dock) return { ok: false, error: "Unknown build dock" };
+      if (dock.state !== 3 || dock.resultMasterId <= 0) return { ok: false, error: "Build is not complete" };
+      if (save.ships.length >= 300) return { ok: false, error: "Ship capacity reached" };
+      const initialEquipment = shipInitialEquipment(dock.resultMasterId).filter((masterId) => masterId > 0);
+      if (save.slotItems.length + initialEquipment.length > 500) {
+        return { ok: false, error: "Equipment capacity reached" };
+      }
+
+      let ship!: Ship;
+      let slotItems!: SlotItem[];
+      const tx = db.transaction(() => {
+        const created = createConstructedShip(db, dock.resultMasterId);
+        ship = created.ship;
+        slotItems = created.slotItems;
+        db.prepare(
+          "UPDATE build_docks SET recipe_json = '{}', result_master_id = 0, complete_time = 0, state = 0 WHERE id = ?"
+        ).run(dockId);
+      });
+      tx();
+      return { ok: true, ship, slotItems, docks: getSave(db).buildDocks };
+    },
+    developEquipment: (
+      recipe: DevelopmentRecipe,
+      resultMasterIds: (number | null)[]
+    ): DevelopmentResult => {
+      if (!validDevelopmentRecipe(recipe) || ![1, 3].includes(resultMasterIds.length)) {
+        return { ok: false, error: "Invalid development request" };
+      }
+      const successfulIds = resultMasterIds.filter((masterId): masterId is number => masterId != null);
+      if (successfulIds.some((masterId) => !masterData.api_mst_slotitem.some((item) => item.api_id === masterId))) {
+        return { ok: false, error: "Unknown development result" };
+      }
+      const save = getSave(db);
+      if (save.slotItems.length + successfulIds.length > 500) {
+        return { ok: false, error: "Equipment capacity reached" };
+      }
+      const attempts = resultMasterIds.length;
+      const materialCost: MaterialDelta = {
+        fuel: recipe.fuel * attempts,
+        ammo: recipe.ammo * attempts,
+        steel: recipe.steel * attempts,
+        bauxite: recipe.bauxite * attempts,
+        devmat: successfulIds.length
+      };
+      if (!hasMaterials(save.materials, materialCost)) {
+        return { ok: false, error: "Insufficient development materials" };
+      }
+
+      let items!: (SlotItem | null)[];
+      const tx = db.transaction(() => {
+        consumeMaterials(db, materialCost);
+        items = resultMasterIds.map((masterId) => masterId == null ? null : createSlotItem(db, masterId));
+      });
+      tx();
+      return { ok: true, items, materials: getSave(db).materials };
     },
     getMissionMemberState: () => missionMemberState(db),
     startExpedition: (deckId: number, missionId: number, serialCid = "") =>
@@ -2234,6 +2349,7 @@ function getSave(db: Database.Database): SaveState {
     throw new Error("Local Kancolle account has not been registered. Select a world first.");
   }
   settleCompletedRepairs(db);
+  settleCompletedBuilds(db);
   syncExpeditionDeckStates(db);
   settleMaterialRecovery(db);
   ensureQuestStates(db);
@@ -2460,6 +2576,23 @@ function createShip(db: Database.Database, masterId: number): Ship {
   return mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
 }
 
+function createConstructedShip(db: Database.Database, masterId: number) {
+  const ship = createShip(db, masterId);
+  const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
+  const loadout = shipInitialEquipment(masterId)
+    .slice(0, Math.max(0, Number(master?.api_slot_num ?? 0)))
+    .filter((slotItemMasterId) => slotItemMasterId > 0);
+  const slotItems = loadout.map((slotItemMasterId) => createSlotItem(db, slotItemMasterId));
+  const slotIds = normalizeFixed(slotItems.map((item) => item.id), 5, -1);
+  const onSlot = onSlotForShip(master, slotItems, slotIds, EMPTY_ONSLOT, true);
+  db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?")
+    .run(JSON.stringify(slotIds), JSON.stringify(onSlot), ship.id);
+  return {
+    ship: mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(ship.id) as Row),
+    slotItems
+  };
+}
+
 function onSlotForShip(
   master: (typeof masterData.api_mst_ship)[number] | undefined,
   slotItems: SlotItem[],
@@ -2569,6 +2702,47 @@ function hasMaterials(materials: Materials, delta: MaterialDelta) {
     .every(([key, value]) => materials[key] >= Math.max(0, value || 0));
 }
 
+function validConstructionRecipe(recipe: ConstructionRecipe) {
+  const values = [recipe.fuel, recipe.ammo, recipe.steel, recipe.bauxite, recipe.devmat];
+  if (!values.every((value) => Number.isFinite(value) && Math.trunc(value) === value && value > 0)) return false;
+  if (recipe.large) {
+    return recipe.fuel >= 1500
+      && recipe.ammo >= 1500
+      && recipe.steel >= 2000
+      && recipe.bauxite >= 1000
+      && recipe.fuel <= 7000
+      && recipe.ammo <= 7000
+      && recipe.steel <= 7000
+      && recipe.bauxite <= 7000
+      && [1, 20, 100].includes(recipe.devmat);
+  }
+  return recipe.fuel >= 30
+    && recipe.ammo >= 30
+    && recipe.steel >= 30
+    && recipe.bauxite >= 30
+    && recipe.fuel <= 999
+    && recipe.ammo <= 999
+    && recipe.steel <= 999
+    && recipe.bauxite <= 999
+    && recipe.devmat === 1;
+}
+
+function validDevelopmentRecipe(recipe: DevelopmentRecipe) {
+  return [recipe.fuel, recipe.ammo, recipe.steel, recipe.bauxite]
+    .every((value) => Number.isFinite(value) && Math.trunc(value) === value && value >= 10 && value <= 300);
+}
+
+function constructionRecipeJson(recipe: ConstructionRecipe): JsonObject {
+  return {
+    api_item1: recipe.fuel,
+    api_item2: recipe.ammo,
+    api_item3: recipe.steel,
+    api_item4: recipe.bauxite,
+    api_item5: recipe.devmat,
+    api_large_flag: recipe.large ? 1 : 0
+  };
+}
+
 function settleCompletedRepairs(db: Database.Database, now = Date.now()) {
   const completedDocks = db.prepare(
     "SELECT * FROM repair_docks WHERE state = 1 AND ship_id > 0 AND complete_time > 0 AND complete_time <= ?"
@@ -2579,6 +2753,12 @@ function settleCompletedRepairs(db: Database.Database, now = Date.now()) {
     for (const row of completedDocks) finishRepairDock(db, mapRepairDock(row));
   });
   tx();
+}
+
+function settleCompletedBuilds(db: Database.Database, now = Date.now()) {
+  db.prepare(
+    "UPDATE build_docks SET state = 3 WHERE state = 2 AND result_master_id > 0 AND complete_time > 0 AND complete_time <= ?"
+  ).run(now);
 }
 
 function syncExpeditionDeckStates(db: Database.Database) {
