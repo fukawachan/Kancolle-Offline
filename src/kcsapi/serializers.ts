@@ -108,7 +108,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
 
   const kyoukaRaw = Array.isArray((ship.stats as Record<string, unknown>).api_kyouka)
     ? (ship.stats as Record<string, unknown>).api_kyouka as number[]
-    : [0, 0, 0, 0, 0];
+    : [0, 0, 0, 0, 0, 0, 0];
   const kyouka = (i: number) => safeNum(kyoukaRaw[i]);
 
   const kahiBase = ship.level + equipSum("api_houk");
@@ -126,7 +126,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_leng: master?.api_leng ?? 1,
     api_slot: slot,
     api_onslot: toOnSlot(ship, master, slot, slotItems),
-    api_kyouka: [kyouka(0), kyouka(1), kyouka(2), kyouka(3), kyouka(4)],
+    api_kyouka: [kyouka(0), kyouka(1), kyouka(2), kyouka(3), kyouka(4), kyouka(5), kyouka(6)],
     api_backs: master?.api_backs ?? 1,
     api_fuel: ship.fuel,
     api_bull: ship.ammo,
@@ -142,14 +142,14 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     ),
     api_srate: 0,
     api_cond: ship.condition,
-    api_karyoku: [arrVal(master?.api_houg, 0) + equipSum("api_houg") + kyouka(0), arrVal(master?.api_houg, 1) + equipSum("api_houg") + kyouka(0)],
-    api_raisou: [arrVal(master?.api_raig, 0) + equipSum("api_raig") + kyouka(1), arrVal(master?.api_raig, 1) + equipSum("api_raig") + kyouka(1)],
-    api_taiku: [arrVal(master?.api_tyku, 0) + equipSum("api_tyku") + kyouka(2), arrVal(master?.api_tyku, 1) + equipSum("api_tyku") + kyouka(2)],
-    api_soukou: [arrVal(master?.api_souk, 0) + equipSum("api_souk") + kyouka(3), arrVal(master?.api_souk, 1) + equipSum("api_souk") + kyouka(3)],
+    api_karyoku: [arrVal(master?.api_houg, 0) + equipSum("api_houg") + kyouka(0), arrVal(master?.api_houg, 1) + equipSum("api_houg")],
+    api_raisou: [arrVal(master?.api_raig, 0) + equipSum("api_raig") + kyouka(1), arrVal(master?.api_raig, 1) + equipSum("api_raig")],
+    api_taiku: [arrVal(master?.api_tyku, 0) + equipSum("api_tyku") + kyouka(2), arrVal(master?.api_tyku, 1) + equipSum("api_tyku")],
+    api_soukou: [arrVal(master?.api_souk, 0) + equipSum("api_souk") + kyouka(3), arrVal(master?.api_souk, 1) + equipSum("api_souk")],
     api_kaihi: [kahiBase, ship.level + 49 + equipSum("api_houk")],
-    api_taisen: [taisenBase, taisenBase],
+    api_taisen: [taisenBase + kyouka(6), taisenBase + kyouka(6)],
     api_sakuteki: [sakutekiBase, sakutekiBase],
-    api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4), arrVal(master?.api_luck, 1) + equipSum("api_luck") + kyouka(4)],
+    api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4), arrVal(master?.api_luck, 1) + equipSum("api_luck")],
     api_locked: ship.locked,
     api_locked_equip: 0,
     api_sally_area: 0,

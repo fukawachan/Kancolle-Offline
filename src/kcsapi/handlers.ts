@@ -274,17 +274,24 @@ register("api_req_kaisou/slot_deprive", (input, context) => {
 });
 register("api_req_kaisou/lock", (input, context) => apiOk({ api_locked: context.stateStore.lockSlotItem(num(input.body.api_slotitem_id ?? input.body.api_item_id, 1)) }));
 register("api_req_kaisou/powerup", (input, context) => {
-  const ship = context.stateStore.modernizeShip(num(input.body.api_id, 1), csvNums(input.body.api_id_items, []));
+  const destroyConsumedEquipment = num(input.body.api_slot_dest_flag, 0) === 1;
+  const result = context.stateStore.modernizeShip(
+    num(input.body.api_id, 1),
+    csvNums(input.body.api_id_items, []),
+    { destroyConsumedEquipment }
+  );
   const save = context.stateStore.getSave();
   return apiOk({
-    api_powerup_flag: ship ? 1 : 0,
-    api_ship: ship ? toShip(ship, save.slotItems) : null,
-    api_deck: save.decks.map(toDeck)
+    api_powerup_flag: result ? 1 : 0,
+    api_ship: result ? toShip(result.ship, save.slotItems) : null,
+    api_deck: save.decks.map(toDeck),
+    ...(result?.keptSlotItems ? { api_unset_list: toUnsetSlotItems(save) } : {})
   });
 });
 register("api_req_kaisou/remodeling", (input, context) => {
+  const afterShipId = input.body.api_aftershipid == null ? undefined : num(input.body.api_aftershipid, 0);
+  const ship = context.stateStore.remodelShip(num(input.body.api_id, 1), afterShipId);
   const save = context.stateStore.getSave();
-  const ship = context.stateStore.remodelShip(num(input.body.api_id, 1), num(input.body.api_aftershipid, 54));
   return apiOk({ api_after_ship: ship ? toShip(ship, save.slotItems) : null });
 });
 register("api_req_kaisou/preset_slot_register", () => apiOk({ api_preset_no: 1 }));

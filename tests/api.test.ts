@@ -97,7 +97,13 @@ describe("local kcsapi endpoints", () => {
     });
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 9)).toMatchObject({
       api_name: "吹雪",
-      api_yomi: "Fubuki"
+      api_yomi: "Fubuki",
+      api_afterfuel: 100,
+      api_afterbull: 100
+    });
+    expect(start2Data.api_mst_shipupgrade.length).toBeGreaterThan(0);
+    expect(start2Data.api_mst_shipupgrade.find((upgrade: any) => upgrade.api_original_ship_id === 9)).toMatchObject({
+      api_upgrade_type: 1
     });
     expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 10)).toMatchObject({
       api_name: "白雪",
@@ -970,6 +976,160 @@ describe("local kcsapi endpoints", () => {
         ])
       }
     });
+  });
+
+  it("applies modernization stat bonuses and consumes the selected ships", async () => {
+    const target = store.createShip(9);
+    const consumedFubuki = store.createShip(9);
+    const consumedAyanami = store.createShip(13);
+
+    const response = await post("api_req_kaisou/powerup", {
+      api_id: target.id,
+      api_id_items: `${consumedFubuki.id},${consumedAyanami.id}`,
+      api_slot_dest_flag: 0,
+      api_limited_feed_type: 0
+    });
+
+    const payload = response.json();
+    expect(payload).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_powerup_flag: 1,
+        api_ship: {
+          api_id: target.id,
+          api_ship_id: 9
+        }
+      }
+    });
+    expect(payload.api_data.api_ship.api_kyouka).toEqual([2, 2, 0, 0, 0, 0, 0]);
+    expect(payload.api_data.api_ship.api_karyoku).toEqual([12, 29]);
+    expect(payload.api_data.api_ship.api_raisou).toEqual([29, 79]);
+    expect(store.getSave().ships.map((ship) => ship.id)).not.toEqual(
+      expect.arrayContaining([consumedFubuki.id, consumedAyanami.id])
+    );
+  });
+
+  it("destroys consumed ships' equipment only when modernization requests slot disposal", async () => {
+    const yamato = store.createShip(131);
+    const keepFodder = store.createShip(9);
+    const keepGun = store.createSlotItem(2);
+    store.equipSlotItem(keepFodder.id, 0, keepGun.id);
+
+    const keepResponse = await post("api_req_kaisou/powerup", {
+      api_id: yamato.id,
+      api_id_items: keepFodder.id,
+      api_slot_dest_flag: 0,
+      api_limited_feed_type: 0
+    });
+
+    expect(keepResponse.json().api_data.api_unset_list).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          api_type3: 1,
+          api_slot_list: expect.arrayContaining([keepGun.id])
+        })
+      ])
+    );
+    expect(store.getSave().slotItems.find((item) => item.id === keepGun.id)).toBeTruthy();
+
+    const disposeFodder = store.createShip(10);
+    const disposeGun = store.createSlotItem(2);
+    store.equipSlotItem(disposeFodder.id, 0, disposeGun.id);
+
+    await post("api_req_kaisou/powerup", {
+      api_id: yamato.id,
+      api_id_items: disposeFodder.id,
+      api_slot_dest_flag: 1,
+      api_limited_feed_type: 0
+    });
+
+    expect(store.getSave().slotItems.find((item) => item.id === disposeGun.id)).toBeUndefined();
+  });
+
+  it("remodels from the current ship master, keeps level, resets normal modernization, and equips the new form", async () => {
+    const oldGun = store.createSlotItem(2);
+    store.equipSlotItem(1, 0, oldGun.id);
+    store.db.prepare("UPDATE ships SET level = 20, exp = 19000, hp = 3, fuel = 1, ammo = 2, stats_json = ? WHERE id = 1")
+      .run(JSON.stringify({ api_kyouka: [5, 5, 5, 5, 2, 1, 1] }));
+    const before = store.getSave();
+
+    const response = await post("api_req_kaisou/remodeling", { api_id: 1 });
+
+    const payload = response.json();
+    expect(payload).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_after_ship: {
+          api_id: 1,
+          api_ship_id: 201,
+          api_lv: 20,
+          api_nowhp: 31,
+          api_maxhp: 31,
+          api_fuel: 15,
+          api_bull: 20,
+          api_kyouka: [0, 0, 0, 0, 2, 1, 1]
+        }
+      }
+    });
+
+    const after = store.getSave();
+    expect(after.materials.ammo).toBe(before.materials.ammo - 100);
+    expect(after.materials.steel).toBe(before.materials.steel - 100);
+    expect(after.ships.find((ship) => ship.id === 1)?.exp).toBe(19000);
+    expect(after.ships.find((ship) => ship.id === 1)?.slotIds.slice(0, 3)).toEqual(
+      expect.arrayContaining([expect.any(Number), expect.any(Number), -1])
+    );
+    const remodeled = after.ships.find((ship) => ship.id === 1)!;
+    const equippedMasters = remodeled.slotIds
+      .filter((id) => id > 0)
+      .map((id) => after.slotItems.find((item) => item.id === id)?.masterId);
+    expect(equippedMasters).toEqual([297, 13]);
+    expect(remodeled.slotIds).not.toContain(oldGun.id);
+    expect(after.slotItems.find((item) => item.id === oldGun.id)).toBeTruthy();
+  });
+
+  it("rejects remodeling requests that specify an unrelated target master", async () => {
+    store.db.prepare("UPDATE ships SET level = 20 WHERE id = 1").run();
+
+    const response = await post("api_req_kaisou/remodeling", {
+      api_id: 1,
+      api_aftershipid: 54
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_after_ship: null }
+    });
+    expect(store.getSave().ships.find((ship) => ship.id === 1)?.masterId).toBe(9);
+  });
+
+  it("requires and consumes special ship-upgrade items for remodels", async () => {
+    const bismarckKai = store.createShip(172);
+    store.db.prepare("UPDATE ships SET level = 50 WHERE id = ?").run(bismarckKai.id);
+    store.db.prepare("UPDATE materials SET ammo = 10000, steel = 10000 WHERE player_id = 1").run();
+
+    const blocked = await post("api_req_kaisou/remodeling", { api_id: bismarckKai.id });
+
+    expect(blocked.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_after_ship: null }
+    });
+    expect(store.getSave().ships.find((ship) => ship.id === bismarckKai.id)?.masterId).toBe(172);
+
+    store.db.prepare("INSERT INTO use_items (id, count) VALUES (58, 1)").run();
+
+    const remodeled = await post("api_req_kaisou/remodeling", { api_id: bismarckKai.id });
+
+    expect(remodeled.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_after_ship: {
+          api_id: bismarckKai.id,
+          api_ship_id: 173
+        }
+      }
+    });
+    expect(store.getSave().useItems.find((item) => item.id === 58)?.count).toBe(0);
   });
 
   it("preserves HP values at the client damage-state thresholds", async () => {

@@ -222,6 +222,8 @@ function applyStart2ShipOverrides(ships, start2Data) {
       api_ctype: num(start2Ship.api_ctype, item.api_ctype),
       api_afterlv: num(start2Ship.api_afterlv, item.api_afterlv),
       api_aftershipid: num(start2Ship.api_aftershipid, item.api_aftershipid),
+      api_afterfuel: num(start2Ship.api_afterfuel, item.api_afterfuel),
+      api_afterbull: num(start2Ship.api_afterbull, item.api_afterbull),
       api_soku: num(start2Ship.api_soku, item.api_soku),
       api_slot_num: num(start2Ship.api_slot_num, item.api_slot_num),
       api_maxeq: Array.isArray(start2Ship.api_maxeq) ? [...start2Ship.api_maxeq] : item.api_maxeq
@@ -328,6 +330,9 @@ async function main() {
   const equipExslotShip = start2Data.api_mst_equip_exslot_ship || {};
   const equipLimitExslot = start2Data.api_mst_equip_limit_exslot || {};
   const equipShip = start2Data.api_mst_equip_ship || {};
+  const shipUpgrades = (start2Data.api_mst_shipupgrade || [])
+    .map((upgrade) => ({ ...upgrade }))
+    .sort((a, b) => num(a.api_id) - num(b.api_id));
   const furniture = (start2Data.api_mst_furniture || [])
     .map(mapFurniture)
     .sort((a, b) => a.api_id - b.api_id);
@@ -383,6 +388,15 @@ async function main() {
   ts.push(`export const EQUIP_EXSLOT_SHIP = ${JSON.stringify(equipExslotShip)};`);
   ts.push(`export const EQUIP_LIMIT_EXSLOT = ${JSON.stringify(equipLimitExslot)};`);
   ts.push(`export const EQUIP_SHIP = ${JSON.stringify(equipShip)};`);
+  ts.push("");
+
+  ts.push("// ---- Ship Upgrade Master ----");
+  ts.push("");
+  ts.push("export const SHIP_UPGRADES = [");
+  for (const upgrade of shipUpgrades) {
+    ts.push(`  ${JSON.stringify(upgrade)},`);
+  }
+  ts.push("];");
   ts.push("");
 
   ts.push("// ---- Furniture Master ----");

@@ -153,6 +153,8 @@ function generatedShipMaster(api_id: number): ShipMaster {
     api_getmes: "",
     api_fuel_max: 0,
     api_bull_max: 0,
+    api_afterfuel: 0,
+    api_afterbull: 0,
     api_voicef: 0
   };
 }

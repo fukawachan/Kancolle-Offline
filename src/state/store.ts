@@ -103,6 +103,8 @@ type BuildClaimResult =
 type DevelopmentResult =
   | { ok: true; items: (SlotItem | null)[]; materials: Materials }
   | { ok: false; error: string };
+type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
+type ModernizeOptions = { destroyConsumedEquipment?: boolean };
 type QuestClearResult =
   | { ok: true; save: SaveState; materialRewards: readonly [number, number, number, number]; bonuses: QuestBonus[] }
   | { ok: false; error: string };
@@ -155,6 +157,14 @@ const QUEST_CONSUMPTION_USEITEMS = new Map<string, number>([
   ["新型兵装資材", 94],
   ["航空特別増加食", 102]
 ]);
+const SHIP_UPGRADE_USEITEM_FIELDS = [
+  ["api_drawing_count", 58],
+  ["api_catapult_count", 65],
+  ["api_aviation_mat_count", 77],
+  ["api_arms_mat_count", 75],
+  ["api_report_count", 78],
+  ["api_tech_count", 94]
+] as const;
 const QUEST_BONUS_TYPE = {
   material: 1,
   ship: 0xb,
@@ -382,31 +392,98 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE slot_items SET locked = ? WHERE id = ?").run(next, itemId);
       return next;
     },
-    modernizeShip: (shipId: number, consumedShipIds: number[]) => {
+    modernizeShip: (shipId: number, consumedShipIds: number[], options: ModernizeOptions = {}): ModernizeResult | null => {
       const awayShips = activeExpeditionShipIds(db);
       if (awayShips.has(shipId) || consumedShipIds.some((id) => awayShips.has(id))) return null;
-      const ship = getSave(db).ships.find((item) => item.id === shipId);
+      const save = getSave(db);
+      const ship = save.ships.find((item) => item.id === shipId);
       if (!ship) return null;
-      const stats = { ...ship.stats, modernized: true };
+      const uniqueConsumedShipIds = [...new Set(consumedShipIds.filter((id) => id > 0 && id !== shipId))];
+      const consumedShips = uniqueConsumedShipIds
+        .map((id) => save.ships.find((item) => item.id === id))
+        .filter((item): item is Ship => item != null);
+      if (consumedShips.length !== uniqueConsumedShipIds.length || consumedShips.length === 0) return null;
+      const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
+      const kyouka = normalizeKyouka(ship.stats);
+      const gains = modernizationGains(ship, master, consumedShips);
+      const nextKyouka = kyouka.map((value, index) => value + gains[index]);
+      const stats = { ...ship.stats, api_kyouka: nextKyouka, modernized: true };
+      const consumedSlotItemIds = consumedShips.flatMap((item) =>
+        [...normalizeFixed(item.slotIds, 5, -1), item.exSlotId].filter((id) => id > 0)
+      );
+      const destroyConsumedEquipment = options.destroyConsumedEquipment === true;
       const tx = db.transaction(() => {
         db.prepare("UPDATE ships SET stats_json = ? WHERE id = ?").run(JSON.stringify(stats), shipId);
-        for (const consumed of consumedShipIds) {
-          if (consumed !== shipId) db.prepare("DELETE FROM ships WHERE id = ?").run(consumed);
+        if (destroyConsumedEquipment) {
+          for (const slotItemId of consumedSlotItemIds) {
+            db.prepare("DELETE FROM slot_items WHERE id = ?").run(slotItemId);
+          }
+        }
+        for (const consumed of uniqueConsumedShipIds) {
+          db.prepare("DELETE FROM ships WHERE id = ?").run(consumed);
         }
       });
       tx();
-      if (consumedShipIds.some((id) => id !== shipId)) {
-        recordQuestEvent(db, { kind: "simple", subcategory: "modernization" });
-      }
-      return getSave(db).ships.find((item) => item.id === shipId);
+      recordQuestEvent(db, { kind: "simple", subcategory: "modernization" });
+      const modernized = getSave(db).ships.find((item) => item.id === shipId);
+      return modernized ? { ship: modernized, keptSlotItems: !destroyConsumedEquipment } : null;
     },
-    remodelShip: (shipId: number, masterId: number) => {
+    remodelShip: (shipId: number, requestedMasterId?: number) => {
       if (activeExpeditionShipIds(db).has(shipId)) return null;
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
-      const master = masterData.api_mst_ship.find((item) => item.api_id === masterId);
-      const onSlot = ship ? onSlotForShip(master, save.slotItems, ship.slotIds, ship.onSlot, true) : EMPTY_ONSLOT;
-      db.prepare("UPDATE ships SET master_id = ?, level = level + 1, onslot_json = ? WHERE id = ?").run(masterId, JSON.stringify(onSlot), shipId);
+      if (!ship) return null;
+      const currentMaster = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
+      const nextMasterId = remodelTargetId(currentMaster, requestedMasterId);
+      if (nextMasterId <= 0) return null;
+      const master = masterData.api_mst_ship.find((item) => item.api_id === nextMasterId);
+      if (!master) return null;
+      if (Math.trunc(safeNum(currentMaster?.api_afterlv)) > ship.level) return null;
+
+      const materialCost: MaterialDelta = {
+        ammo: Math.max(0, Math.trunc(safeNum(currentMaster?.api_afterbull))),
+        steel: Math.max(0, Math.trunc(safeNum(currentMaster?.api_afterfuel)))
+      };
+      if (!hasMaterials(save.materials, materialCost)) return null;
+      const useItemCost = shipUpgradeUseItemCost(ship.masterId, nextMasterId);
+      if (!hasUseItems(save.useItems, useItemCost)) return null;
+
+      const loadout = shipInitialEquipment(nextMasterId).slice(0, Math.max(0, Math.trunc(safeNum(master.api_slot_num))));
+      if (save.slotItems.length + loadout.filter((slotItemMasterId) => slotItemMasterId > 0).length > 500) return null;
+
+      const kyouka = normalizeKyouka(ship.stats);
+      const nextKyouka = [0, 0, 0, 0, kyouka[4], kyouka[5], kyouka[6]];
+      const maxHp = shipInitialMaxHp(master) + nextKyouka[5];
+      const maxFuel = master.api_fuel_max ?? ship.maxFuel;
+      const maxAmmo = master.api_bull_max ?? ship.maxAmmo;
+      const nextStats = { ...ship.stats, api_kyouka: nextKyouka, modernized: false };
+
+      const tx = db.transaction(() => {
+        const nextSlotIds = loadout.map((slotItemMasterId) =>
+          slotItemMasterId > 0 ? createSlotItem(db, slotItemMasterId).id : -1
+        );
+        const normalizedSlotIds = normalizeFixed(nextSlotIds, 5, -1);
+        const slotItems = (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem);
+        const onSlot = onSlotForShip(master, slotItems, normalizedSlotIds, EMPTY_ONSLOT, true);
+        db.prepare(
+          "UPDATE ships SET master_id = ?, hp = ?, max_hp = ?, fuel = ?, max_fuel = ?, ammo = ?, max_ammo = ?, slot_ids_json = ?, onslot_json = ?, stats_json = ? WHERE id = ?"
+        ).run(
+          nextMasterId,
+          maxHp,
+          maxHp,
+          maxFuel,
+          maxFuel,
+          maxAmmo,
+          maxAmmo,
+          JSON.stringify(normalizedSlotIds),
+          JSON.stringify(onSlot),
+          JSON.stringify(nextStats),
+          shipId
+        );
+        consumeMaterials(db, materialCost);
+        consumeShipUpgradeUseItems(db, useItemCost);
+      });
+      tx();
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     createSlotItem: (masterId: number) => createSlotItem(db, masterId),
@@ -2591,6 +2668,108 @@ function createConstructedShip(db: Database.Database, masterId: number) {
     ship: mapShip(db.prepare("SELECT * FROM ships WHERE id = ?").get(ship.id) as Row),
     slotItems
   };
+}
+
+function normalizeKyouka(stats: JsonObject): number[] {
+  const raw = Array.isArray(stats.api_kyouka) ? stats.api_kyouka : [];
+  return normalizeFixed(raw.map((value) => Math.max(0, Math.trunc(safeNum(value)))), 7, 0);
+}
+
+function modernizationGains(
+  ship: Ship,
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  consumedShips: Ship[]
+) {
+  const totals = [0, 0, 0, 0, 0, 0, 0];
+  for (const consumed of consumedShips) {
+    const consumedMaster = masterData.api_mst_ship.find((item) => item.api_id === consumed.masterId);
+    const powup = Array.isArray(consumedMaster?.api_powup) ? consumedMaster.api_powup : [];
+    for (let index = 0; index < 4; index += 1) {
+      totals[index] += Math.max(0, Math.trunc(safeNum(powup[index])));
+    }
+  }
+
+  const currentKyouka = normalizeKyouka(ship.stats);
+  return totals.map((total, index) => {
+    if (index >= 4 || total <= 0) return 0;
+    const displayGain = Math.floor(total * 1.2 + 0.3);
+    return Math.min(displayGain, modernizationCapacity(master, index, currentKyouka[index]));
+  });
+}
+
+function modernizationCapacity(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  index: number,
+  currentKyouka: number
+) {
+  const fields = ["api_houg", "api_raig", "api_tyku", "api_souk"] as const;
+  const field = fields[index];
+  const min = masterStat(master, field, 0);
+  const max = masterStat(master, field, 1);
+  return Math.max(0, max - min - currentKyouka);
+}
+
+function masterStat(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  field: "api_houg" | "api_raig" | "api_tyku" | "api_souk",
+  index: number
+) {
+  const raw = master?.[field];
+  return Array.isArray(raw) ? Math.trunc(safeNum(raw[index])) : 0;
+}
+
+function remodelTargetId(
+  currentMaster: (typeof masterData.api_mst_ship)[number] | undefined,
+  requestedMasterId?: number
+) {
+  if (!currentMaster) return 0;
+  const normalTargetId = Math.trunc(safeNum(currentMaster.api_aftershipid));
+  const requested = Math.trunc(safeNum(requestedMasterId));
+  if (requested <= 0) return normalTargetId;
+  if (requested === normalTargetId) return requested;
+  const upgradeMasters = masterData.api_mst_shipupgrade as Record<string, unknown>[];
+  const specialTarget = upgradeMasters.some((upgrade) =>
+    Math.trunc(safeNum(upgrade.api_current_ship_id)) === currentMaster.api_id
+    && Math.trunc(safeNum(upgrade.api_id)) === requested
+  );
+  return specialTarget ? requested : 0;
+}
+
+function shipUpgradeUseItemCost(currentMasterId: number, nextMasterId: number) {
+  const upgrade = shipUpgradeMaster(currentMasterId, nextMasterId);
+  const cost = new Map<number, number>();
+  if (!upgrade) return cost;
+  for (const [field, useItemId] of SHIP_UPGRADE_USEITEM_FIELDS) {
+    const count = Math.max(0, Math.trunc(safeNum(upgrade[field])));
+    if (count > 0) cost.set(useItemId, count);
+  }
+  return cost;
+}
+
+function shipUpgradeMaster(currentMasterId: number, nextMasterId: number) {
+  const upgrades = masterData.api_mst_shipupgrade as Record<string, unknown>[];
+  return upgrades.find((upgrade) =>
+    Math.trunc(safeNum(upgrade.api_current_ship_id)) === currentMasterId
+    && Math.trunc(safeNum(upgrade.api_id)) === nextMasterId
+  ) ?? upgrades.find((upgrade) =>
+    Math.trunc(safeNum(upgrade.api_current_ship_id)) === 0
+    && Math.trunc(safeNum(upgrade.api_id)) === currentMasterId
+  );
+}
+
+function hasUseItems(useItems: UseItemInventory[], cost: Map<number, number>) {
+  if (cost.size === 0) return true;
+  const counts = new Map(useItems.map((item) => [item.id, item.count]));
+  for (const [itemId, count] of cost) {
+    if ((counts.get(itemId) ?? 0) < count) return false;
+  }
+  return true;
+}
+
+function consumeShipUpgradeUseItems(db: Database.Database, cost: Map<number, number>) {
+  for (const [itemId, count] of cost) {
+    consumeUseItem(db, itemId, count);
+  }
 }
 
 function onSlotForShip(

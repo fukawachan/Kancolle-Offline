@@ -7,6 +7,7 @@ import {
   FURNITURE,
   SHIPS,
   SHIP_TYPES,
+  SHIP_UPGRADES,
   SLOT_ITEMS
 } from "./generated-data.js";
 import {
@@ -102,7 +103,7 @@ export const masterData = {
     api_parallel_quest_max: { api_string_value: "9999", api_int_value: 9999 },
     api_dpflag_quest: { api_string_value: "1", api_int_value: 1 }
   },
-  api_mst_shipupgrade: [],
+  api_mst_shipupgrade: SHIP_UPGRADES,
   api_mst_bgm_season: [],
   api_mst_equip_exslot: EQUIP_EXSLOT,
   api_mst_equip_exslot_ship: EQUIP_EXSLOT_SHIP,
