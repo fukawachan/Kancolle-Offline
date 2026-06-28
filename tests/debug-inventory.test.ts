@@ -47,9 +47,16 @@ describe("debug inventory controls", () => {
     expect(response.body).toContain('id="ship-type-filter"');
     expect(response.body).toContain('id="equip-type-filter"');
     expect(response.body).toContain('id="tab-items"');
+    expect(response.body).toContain('id="tab-materials"');
+    expect(response.body).toContain('id="material-fuel"');
+    expect(response.body).toContain('id="material-ammo"');
+    expect(response.body).toContain('id="material-steel"');
+    expect(response.body).toContain('id="material-bauxite"');
     expect(response.body).toContain("Items");
+    expect(response.body).toContain("Materials");
     expect(response.body).toContain("setShipLevel");
     expect(response.body).toContain("/debug/api/useitems/set");
+    expect(response.body).toContain("/debug/api/materials/set");
   });
 
   it("filters ship masters by ship type", async () => {
@@ -173,6 +180,56 @@ describe("debug inventory controls", () => {
     );
     expect(useitem.json().api_data).toContainEqual({ api_id: 78, api_count: 4 });
     expect(requireInfo.json().api_data.api_useitem).toContainEqual({ api_id: 78, api_count: 4 });
+  });
+
+  it("sets basic material counts through debug API and publishes them through kcsapi", async () => {
+    const set = await app.inject({
+      method: "POST",
+      url: "/debug/api/materials/set",
+      payload: { fuel: 12345, ammo: 23456, steel: 34567, bauxite: 45678 }
+    });
+    const inventory = await app.inject({ method: "GET", url: "/debug/api/player/materials" });
+    const material = await postKcs("api_get_member/material");
+
+    expect(set.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        materials: { fuel: 12345, ammo: 23456, steel: 34567, bauxite: 45678 },
+        message: "Updated basic materials"
+      }
+    });
+    expect(inventory.json().api_data).toEqual({ fuel: 12345, ammo: 23456, steel: 34567, bauxite: 45678 });
+    expect(material.json().api_data.slice(0, 4)).toMatchObject([
+      { api_id: 1, api_value: 12345 },
+      { api_id: 2, api_value: 23456 },
+      { api_id: 3, api_value: 34567 },
+      { api_id: 4, api_value: 45678 }
+    ]);
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 12345,
+      ammo: 23456,
+      steel: 34567,
+      bauxite: 45678,
+      buildKit: 10,
+      repairKit: 10,
+      devmat: 50,
+      screw: 5
+    });
+  });
+
+  it("rejects invalid basic material counts", async () => {
+    const before = store.getSave().materials;
+    const set = await app.inject({
+      method: "POST",
+      url: "/debug/api/materials/set",
+      payload: { fuel: 1, ammo: -1, steel: 3.5, bauxite: "lots" }
+    });
+
+    expect(set.json()).toMatchObject({
+      api_result: 400,
+      api_result_msg: expect.stringContaining("non-negative integer")
+    });
+    expect(store.getSave().materials).toMatchObject(before);
   });
 
   it("can add a remodel blueprint through debug API and consume it during remodeling", async () => {

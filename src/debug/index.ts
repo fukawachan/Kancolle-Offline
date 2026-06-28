@@ -7,12 +7,14 @@ import {
   handleListPlayerShips,
   handleListPlayerSlotItems,
   handleListPlayerUseItems,
+  handleListPlayerMaterials,
   handleListUseItemMasters,
   handleAddShip,
   handleRemoveShip,
   handleSetShipLevel,
   handleAddSlotItem,
   handleRemoveSlotItem,
+  handleSetBasicMaterials,
   handleSetUseItemCount,
   handleConfigureExpeditions,
   handleExpeditionStatus,
@@ -93,6 +95,19 @@ export function registerDebugRoutes(
     }
   });
 
+  // ---- Player materials ----
+  app.get("/debug/api/player/materials", async (_request, reply) => {
+    try {
+      if (!stateStore.hasAccount()) {
+        return sendApi(reply, apiOk({ fuel: 0, ammo: 0, steel: 0, bauxite: 0 }));
+      }
+      const result = handleListPlayerMaterials(stateStore);
+      return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
   // ---- Add ship ----
   app.post("/debug/api/ships/add", async (request, reply) => {
     try {
@@ -154,6 +169,20 @@ export function registerDebugRoutes(
       }
       const body = (request.body ?? {}) as Record<string, unknown>;
       const result = handleSetUseItemCount(body, stateStore);
+      return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  // ---- Set basic materials ----
+  app.post("/debug/api/materials/set", async (request, reply) => {
+    try {
+      if (!stateStore.hasAccount()) {
+        return sendApi(reply, apiError("No account registered. Register via the launcher first.", 400));
+      }
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = handleSetBasicMaterials(body, stateStore);
       return sendApi(reply, result);
     } catch (err) {
       return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));

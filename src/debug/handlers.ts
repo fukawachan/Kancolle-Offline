@@ -29,6 +29,13 @@ export type UseItemSummary = {
   count: number;
 };
 
+export type BasicMaterialSummary = {
+  fuel: number;
+  ammo: number;
+  steel: number;
+  bauxite: number;
+};
+
 export type MasterListQuery = {
   search?: string;
   limit?: number | string;
@@ -267,6 +274,28 @@ export function handleListPlayerUseItems(stateStore: StateStore) {
   return apiOk({ commonItems, items });
 }
 
+export function handleListPlayerMaterials(stateStore: StateStore) {
+  return apiOk(basicMaterialSummary(stateStore.getSave().materials));
+}
+
+export function handleSetBasicMaterials(
+  params: { fuel?: unknown; ammo?: unknown; steel?: unknown; bauxite?: unknown },
+  stateStore: StateStore
+) {
+  const result = stateStore.setBasicMaterials({
+    fuel: Number(params.fuel),
+    ammo: Number(params.ammo),
+    steel: Number(params.steel),
+    bauxite: Number(params.bauxite),
+  });
+  if (!result.ok) return apiError(result.error, 400);
+
+  return apiOk({
+    materials: basicMaterialSummary(result.materials),
+    message: "Updated basic materials",
+  });
+}
+
 export function handleSetUseItemCount(
   params: { itemId?: unknown; count?: unknown },
   stateStore: StateStore
@@ -379,4 +408,13 @@ function useItemCount(save: ReturnType<StateStore["getSave"]>, itemId: number) {
   if (itemId === 3) return save.materials.devmat;
   if (itemId === 4) return save.materials.screw;
   return save.useItems.find((item) => item.id === itemId)?.count ?? 0;
+}
+
+function basicMaterialSummary(materials: ReturnType<StateStore["getSave"]>["materials"]): BasicMaterialSummary {
+  return {
+    fuel: materials.fuel,
+    ammo: materials.ammo,
+    steel: materials.steel,
+    bauxite: materials.bauxite,
+  };
 }

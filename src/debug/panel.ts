@@ -165,9 +165,20 @@ export function renderDebugPanel(): string {
         padding: 6px 12px; border: 1px solid #30363d; border-radius: 6px;
         background: #21262d; color: #c9d1d9; cursor: pointer;
       }
+      .material-grid {
+        display: grid; grid-template-columns: repeat(4, minmax(130px, 1fr)) auto;
+        gap: 10px; padding: 16px; align-items: end;
+      }
+      .material-field { display: flex; flex-direction: column; gap: 6px; }
+      .material-field label { font-size: 12px; color: #8b949e; }
+      .material-field input {
+        width: 100%; padding: 7px 10px; border: 1px solid #30363d;
+        border-radius: 6px; background: #0d1117; color: #c9d1d9; font: inherit;
+      }
 
       @media (max-width: 900px) {
         .content-area { grid-template-columns: 1fr; }
+        .material-grid { grid-template-columns: 1fr 1fr; }
       }
     </style>
   </head>
@@ -182,6 +193,7 @@ export function renderDebugPanel(): string {
       <button id="tab-ships" class="active" onclick="switchTab('ships')">Ships (${SHIPS.length})</button>
       <button id="tab-equipment" onclick="switchTab('equipment')">Equipment (${SLOT_ITEMS.length})</button>
       <button id="tab-items" onclick="switchTab('items')">Items</button>
+      <button id="tab-materials" onclick="switchTab('materials')">Materials</button>
       <button id="tab-expeditions" onclick="switchTab('expeditions')">Expeditions (63)</button>
     </nav>
 
@@ -251,6 +263,32 @@ export function renderDebugPanel(): string {
       </div>
     </div>
 
+    <!-- Materials Tab -->
+    <div id="panel-materials" class="tab-panel">
+      <div class="section">
+        <div class="section-header">Basic Materials</div>
+        <div class="material-grid">
+          <div class="material-field">
+            <label for="material-fuel">Fuel</label>
+            <input id="material-fuel" type="number" min="0" max="1000000" step="1">
+          </div>
+          <div class="material-field">
+            <label for="material-ammo">Ammo</label>
+            <input id="material-ammo" type="number" min="0" max="1000000" step="1">
+          </div>
+          <div class="material-field">
+            <label for="material-steel">Steel</label>
+            <input id="material-steel" type="number" min="0" max="1000000" step="1">
+          </div>
+          <div class="material-field">
+            <label for="material-bauxite">Bauxite</label>
+            <input id="material-bauxite" type="number" min="0" max="1000000" step="1">
+          </div>
+          <button class="btn-set" onclick="setBasicMaterials()">Set</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Expeditions Tab -->
     <div id="panel-expeditions" class="tab-panel">
       <div class="section">
@@ -294,6 +332,7 @@ export function renderDebugPanel(): string {
       searchEquipment();
       refreshUseItems();
       searchUseItems();
+      refreshMaterials();
       refreshExpeditions();
 
       // ---- Tab switching ----
@@ -306,6 +345,7 @@ export function renderDebugPanel(): string {
         if (tab === "ships") refreshOwnedShips();
         if (tab === "equipment") refreshOwnedEquipment();
         if (tab === "items") { refreshUseItems(); searchUseItems(); }
+        if (tab === "materials") refreshMaterials();
         if (tab === "expeditions") refreshExpeditions();
       }
 
@@ -713,6 +753,63 @@ export function renderDebugPanel(): string {
         } catch (err) {
           showStatus("Error setting item count: " + err.message, "error");
         }
+      }
+
+      // ---- Materials ----
+      async function refreshMaterials() {
+        try {
+          const resp = await fetch("/debug/api/player/materials", { cache: "no-store" });
+          const json = parseApi(await resp.text());
+          const materials = json.api_data || {};
+          document.getElementById("material-fuel").value = String(materials.fuel ?? 0);
+          document.getElementById("material-ammo").value = String(materials.ammo ?? 0);
+          document.getElementById("material-steel").value = String(materials.steel ?? 0);
+          document.getElementById("material-bauxite").value = String(materials.bauxite ?? 0);
+        } catch (err) {
+          showStatus("Failed to load materials: " + err.message, "error");
+        }
+      }
+
+      async function setBasicMaterials() {
+        const payload = {
+          fuel: readMaterialInput("material-fuel", "Fuel"),
+          ammo: readMaterialInput("material-ammo", "Ammo"),
+          steel: readMaterialInput("material-steel", "Steel"),
+          bauxite: readMaterialInput("material-bauxite", "Bauxite")
+        };
+        if (Object.values(payload).some(value => value == null)) return;
+
+        try {
+          const resp = await fetch("/debug/api/materials/set", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify(payload)
+          });
+          const json = parseApi(await resp.text());
+          if (json.api_result !== 1) {
+            showStatus(json.api_result_msg || "Failed to set materials", "error");
+            return;
+          }
+          const materials = json.api_data.materials || {};
+          document.getElementById("material-fuel").value = String(materials.fuel ?? payload.fuel);
+          document.getElementById("material-ammo").value = String(materials.ammo ?? payload.ammo);
+          document.getElementById("material-steel").value = String(materials.steel ?? payload.steel);
+          document.getElementById("material-bauxite").value = String(materials.bauxite ?? payload.bauxite);
+          showStatus(json.api_data.message, "success");
+        } catch (err) {
+          showStatus("Error setting materials: " + err.message, "error");
+        }
+      }
+
+      function readMaterialInput(id, label) {
+        const input = document.getElementById(id);
+        const value = Number(input && input.value);
+        if (!Number.isInteger(value) || value < 0) {
+          showStatus(label + " must be a non-negative integer.", "error");
+          return null;
+        }
+        return value;
       }
 
       // ---- Expeditions ----

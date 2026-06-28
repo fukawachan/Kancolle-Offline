@@ -123,6 +123,8 @@ type SlotImprovementResult =
   | { ok: false; error: string };
 type ShipLevelSetResult = { ok: true; ship: Ship } | { ok: false; error: string };
 type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
+type BasicMaterialCounts = Pick<Materials, "fuel" | "ammo" | "steel" | "bauxite">;
+type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; error: string };
 type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
 type ModernizeOptions = { destroyConsumedEquipment?: boolean };
 type QuestClearResult =
@@ -341,6 +343,8 @@ export function createStateStore(options: StateStoreOptions) {
       setShipLevel(db, shipId, level),
     setUseItemCount: (itemId: number, count: number): UseItemSetResult =>
       setUseItemCount(db, itemId, count),
+    setBasicMaterials: (materials: BasicMaterialCounts): BasicMaterialSetResult =>
+      setBasicMaterials(db, materials),
     supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }) => {
       const save = getSave(db);
       const awayShips = activeExpeditionShipIds(db);
@@ -2799,6 +2803,26 @@ function setUseItemCount(db: Database.Database, itemId: number, count: number): 
 function setMaterialUseItemCount(db: Database.Database, material: keyof Materials, count: number) {
   const column = materialColumn(material);
   db.prepare(`UPDATE materials SET ${column} = ? WHERE player_id = 1`).run(count);
+}
+
+function setBasicMaterials(db: Database.Database, materials: BasicMaterialCounts): BasicMaterialSetResult {
+  const values = [materials.fuel, materials.ammo, materials.steel, materials.bauxite];
+  if (values.some((value) => !Number.isInteger(Number(value)) || Number(value) < 0)) {
+    return { ok: false, error: "Material counts must be non-negative integers" };
+  }
+
+  db.prepare(`
+    UPDATE materials
+    SET fuel = ?, ammo = ?, steel = ?, bauxite = ?, last_recovery_at = ?
+    WHERE player_id = 1
+  `).run(
+    clampBasicMaterial(Number(materials.fuel)),
+    clampBasicMaterial(Number(materials.ammo)),
+    clampBasicMaterial(Number(materials.steel)),
+    clampBasicMaterial(Number(materials.bauxite)),
+    Date.now()
+  );
+  return { ok: true, materials: getSave(db).materials };
 }
 
 function materialColumn(material: keyof Materials) {
