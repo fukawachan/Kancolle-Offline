@@ -513,6 +513,27 @@ describe("SQLite state store", () => {
     expect(store.getSave().materials.bauxite).toBe(beforeBauxite - 20);
   });
 
+  it("compacts ordinary slots and moves aircraft counts when unequipping", () => {
+    store.registerAccount(15);
+    const akagi = store.createShip(277);
+    const firstFighter = store.createSlotItem(20);
+    const secondFighter = store.createSlotItem(20);
+    const thirdFighter = store.createSlotItem(20);
+
+    store.equipSlotItem(akagi.id, 0, firstFighter.id);
+    store.equipSlotItem(akagi.id, 2, secondFighter.id);
+    store.equipSlotItem(akagi.id, 3, thirdFighter.id);
+
+    const equipped = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
+    expect(equipped.slotIds).toEqual([firstFighter.id, -1, secondFighter.id, thirdFighter.id, -1]);
+    expect(equipped.onSlot).toEqual([20, 0, 32, 10, 0]);
+
+    const unequipped = store.equipSlotItem(akagi.id, 0, -1)!;
+
+    expect(unequipped.slotIds).toEqual([secondFighter.id, thirdFighter.id, -1, -1, -1]);
+    expect(unequipped.onSlot).toEqual([20, 10, 0, 0, 0]);
+  });
+
   it("migrates version 4 saves by initializing current aircraft counts", () => {
     store.registerAccount(15);
     const akagi = store.createShip(277);

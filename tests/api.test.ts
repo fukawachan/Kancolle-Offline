@@ -1288,6 +1288,20 @@ describe("local kcsapi endpoints", () => {
     expect(persistedAkagi.api_onslot).toEqual([20, 0, 32, 0, 0]);
   });
 
+  it("compacts ordinary slots when unequipping a front slot through slotset", async () => {
+    const akagi = store.createShip(277);
+    const fighters = [20, 20, 20, 20].map((masterId) => store.createSlotItem(masterId));
+
+    for (const [index, fighter] of fighters.entries()) {
+      await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: index, api_item_id: fighter.id });
+    }
+
+    const response = await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: -1 });
+    const updatedShip = response.json().api_data;
+
+    expect(updatedShip.api_slot).toEqual([fighters[1].id, fighters[2].id, fighters[3].id, -1, -1]);
+  });
+
   it("computes ship stats from master base + equipment bonuses, not hardcoded placeholders", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const shipMasterById = new Map<number, any>(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));

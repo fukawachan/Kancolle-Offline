@@ -369,10 +369,17 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
       if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
-      const slotIds = normalizeFixed(ship.slotIds, 5, -1);
-      slotIds[Math.max(0, slotIndex)] = itemId;
       const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
-      const onSlot = onSlotForShip(master, save.slotItems, slotIds, ship.onSlot, true);
+      let slotIds = normalizeFixed(ship.slotIds, 5, -1);
+      let currentOnSlot = normalizeFixed(ship.onSlot, 5, 0);
+      if (itemId <= 0) {
+        const compacted = compactAfterUnequip(slotIds, currentOnSlot, slotIndex);
+        slotIds = compacted.slotIds;
+        currentOnSlot = compacted.onSlot;
+      } else {
+        slotIds[Math.max(0, slotIndex)] = itemId;
+      }
+      const onSlot = onSlotForShip(master, save.slotItems, slotIds, currentOnSlot, itemId > 0);
       db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(slotIds), JSON.stringify(onSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
@@ -3061,6 +3068,19 @@ function restoreShipAfterRepair(db: Database.Database, shipId: number) {
 
 function clearRepairDock(db: Database.Database, dockId: number) {
   db.prepare("UPDATE repair_docks SET ship_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dockId);
+}
+
+function compactAfterUnequip(slotIds: number[], onSlot: number[], slotIndex: number) {
+  const targetIndex = Math.max(0, Math.trunc(slotIndex));
+  const fixedSlotIds = normalizeFixed(slotIds, 5, -1);
+  const fixedOnSlot = normalizeFixed(onSlot, 5, 0);
+  const remaining = fixedSlotIds
+    .map((slotId, index) => ({ slotId, count: fixedOnSlot[index], index }))
+    .filter((entry) => entry.index !== targetIndex && entry.slotId > 0);
+  return {
+    slotIds: normalizeFixed(remaining.map((entry) => entry.slotId), 5, -1),
+    onSlot: normalizeFixed(remaining.map((entry) => entry.count), 5, 0)
+  };
 }
 
 function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {
