@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createContext, runInContext } from "node:vm";
@@ -234,6 +234,35 @@ describe("local Fastify server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("application/json");
     expect(response.json()).toMatchObject({ title: expect.any(String), port: expect.any(String) });
+  });
+
+  it("serves missing cached static files from the extra cache directory", async () => {
+    const extraCacheDir = path.join(tempDir, "cache-extra");
+    const revampDir = path.join(extraCacheDir, "kcs2/img/revamp");
+    await mkdir(revampDir, { recursive: true });
+    await writeFile(
+      path.join(revampDir, "revamp_main.json"),
+      JSON.stringify({ frames: { revamp_main_0: { frame: { x: 0, y: 0, w: 1, h: 1 } } }, meta: { image: "revamp_main.png" } })
+    );
+    await expect(readFile(path.resolve("cache/kcs2/img/revamp/revamp_main.json"))).rejects.toThrow();
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      extraCacheDir,
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/kcs2/img/revamp/revamp_main.json?version=6.0.0.0"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.json()).toMatchObject({
+      frames: { revamp_main_0: { frame: { x: 0, y: 0, w: 1, h: 1 } } },
+      meta: { image: "revamp_main.png" }
+    });
   });
 
   it("serves record airbase maintenance sprites from the Sally atlas fallback", async () => {

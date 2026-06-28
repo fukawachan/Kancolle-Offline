@@ -22,6 +22,7 @@ const TRANSPARENT_PNG = Buffer.from(
 
 export type BuildAppOptions = {
   cacheDir: string;
+  extraCacheDir?: string;
   stateStore: StateStore;
   unknownLogPath: string;
   responseFormat?: ResponseFormat;
@@ -139,6 +140,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   app.setNotFoundHandler(async (request, reply) => {
+    const extraCacheFallback = await readExtraCacheResource(options.extraCacheDir, request.url);
+    if (extraCacheFallback) {
+      return reply
+        .type(extraCacheFallback.contentType)
+        .header("cache-control", "public, max-age=3600")
+        .send(extraCacheFallback.body);
+    }
+
     const mappedFallback = await readMappedResource(decodeURIComponent(new URL(request.url, "http://local").pathname), resourceManifest);
     if (mappedFallback) {
       const contentType = contentTypeFor(mappedFallback.filePath);
@@ -219,6 +228,24 @@ async function assertCacheDir(cacheDir: string) {
 
 export function defaultCacheDir() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../cache");
+}
+
+async function readExtraCacheResource(extraCacheDir: string | undefined, url: string) {
+  if (!extraCacheDir) return null;
+  const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
+  const resolvedExtraCacheDir = path.resolve(extraCacheDir);
+  const filePath = path.resolve(resolvedExtraCacheDir, `.${pathname}`);
+  if (!filePath.startsWith(`${resolvedExtraCacheDir}${path.sep}`)) return null;
+
+  try {
+    return {
+      filePath,
+      contentType: contentTypeFor(filePath) || "application/octet-stream",
+      body: await readFile(filePath)
+    };
+  } catch {
+    return null;
+  }
 }
 
 function localVendorPath(packagePath: string) {
