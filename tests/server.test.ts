@@ -236,6 +236,33 @@ describe("local Fastify server", () => {
     expect(response.json()).toMatchObject({ title: expect.any(String), port: expect.any(String) });
   });
 
+  it("serves record airbase maintenance sprites from the Sally atlas fallback", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const atlas = await app.inject({
+      method: "GET",
+      url: "/kcs2/img/record/record_airbase_maint.json?version=6.0.0.0"
+    });
+    const png = await app.inject({
+      method: "GET",
+      url: "/kcs2/img/record/record_airbase_maint.png?version=6.0.0.0"
+    });
+
+    expect(atlas.statusCode).toBe(200);
+    expect(atlas.headers["content-type"]).toContain("application/json");
+    const atlasData = atlas.json();
+    expect(atlasData.meta.image).toBe("record_airbase_maint.png");
+    expect(Object.keys(atlasData.frames)).toContain("record_airbase_maint_0");
+    expect(Object.keys(atlasData.frames)).not.toContain("sally_airbase_maint_0");
+    expect(png.statusCode).toBe(200);
+    expect(png.headers["content-type"]).toContain("image/png");
+    expect(png.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+  });
+
   it("falls back to cached PNG title images when the client asks for legacy JPG names", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

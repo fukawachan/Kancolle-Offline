@@ -148,6 +148,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .send(await readFile(mappedFallback.filePath));
     }
 
+    const recordAirbaseFallback = await readRecordAirbaseMaintFallback(options.cacheDir, request.url);
+    if (recordAirbaseFallback) {
+      return reply
+        .type(recordAirbaseFallback.contentType)
+        .header("cache-control", "public, max-age=3600")
+        .send(recordAirbaseFallback.body);
+    }
+
     const pngFallback = await readPngFallback(options.cacheDir, request.url);
     if (pngFallback) {
       return reply
@@ -229,6 +237,46 @@ async function readVoiceFallback(cacheDir: string, url: string) {
     if (!files.length) return null;
     const fallbackPath = path.join(voiceDir, files[0]);
     return await readFile(fallbackPath);
+  } catch {
+    return null;
+  }
+}
+
+async function readRecordAirbaseMaintFallback(cacheDir: string, url: string) {
+  const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
+  if (!/^\/kcs2\/img\/record\/record_airbase_maint\.(json|png)$/i.test(pathname)) return null;
+
+  const resolvedCacheDir = path.resolve(cacheDir);
+  const extension = path.extname(pathname).toLowerCase();
+  const fallbackPath = path.resolve(resolvedCacheDir, `./kcs2/img/sally/sally_airbase_maint${extension}`);
+  if (!fallbackPath.startsWith(`${resolvedCacheDir}${path.sep}`)) return null;
+
+  try {
+    if (extension === ".png") {
+      return { contentType: "image/png", body: await readFile(fallbackPath) };
+    }
+
+    const atlas = JSON.parse(await readFile(fallbackPath, "utf8")) as {
+      frames?: Record<string, unknown>;
+      meta?: Record<string, unknown>;
+    };
+    const frames = Object.fromEntries(
+      Object.entries(atlas.frames ?? {}).map(([key, value]) => [
+        key.replace(/^sally_airbase_maint_/, "record_airbase_maint_"),
+        value
+      ])
+    );
+    return {
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({
+        ...atlas,
+        frames,
+        meta: {
+          ...(atlas.meta ?? {}),
+          image: "record_airbase_maint.png"
+        }
+      })
+    };
   } catch {
     return null;
   }

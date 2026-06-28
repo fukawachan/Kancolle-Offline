@@ -70,6 +70,10 @@ describe("local kcsapi endpoints", () => {
     expect(data.api_maxhps).toHaveLength(13);
   }
 
+  function isVictoryRank(rank: string) {
+    return ["S", "A", "B"].includes(rank);
+  }
+
   it("returns structurally complete start2 master data and option settings", async () => {
     const start2 = await post("api_start2/getData");
     const options = await post("api_start2/get_option_setting");
@@ -307,6 +311,10 @@ describe("local kcsapi endpoints", () => {
         expect.objectContaining({ api_maparea_id: 1, api_mapinfo_no: 1, api_no: 1, api_color_no: 4 })
       ])
     );
+    expect(start2Data.api_mst_const.api_boko_max_ships).toMatchObject({
+      api_string_value: "300",
+      api_int_value: 300
+    });
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
       api_voice_flag: 1,
@@ -323,6 +331,70 @@ describe("local kcsapi endpoints", () => {
         api_voice_flag: 1,
         api_vol_voice: 80
       }
+    });
+  });
+
+  it("returns a client-complete record profile and local ranking placeholder", async () => {
+    const record = await post("api_get_member/record");
+    const ranking = await post("api_req_ranking/mxltvkpyuklh", { api_pageno: 1 });
+    const emptyRanking = await post("api_req_ranking/mxltvkpyuklh", { api_pageno: 2 });
+
+    expect(record.statusCode).toBe(200);
+    const recordData = record.json().api_data;
+    expect(recordData).toMatchObject({
+      api_member_id: 1,
+      api_nickname: "Local Admiral",
+      api_nickname_id: "Local Admiral",
+      api_cmt: "Local offline save",
+      api_cmt_id: "Local offline save",
+      api_level: 1,
+      api_rank: expect.any(Number),
+      api_experience: [0, 100],
+      api_war: { api_win: 0, api_lose: 0, api_rate: expect.any(String) },
+      api_mission: { api_count: 0, api_success: 0, api_rate: expect.any(String) },
+      api_practice: { api_win: 0, api_lose: 0, api_rate: expect.any(String) },
+      api_deck: 4,
+      api_kdoc: 4,
+      api_ndoc: 4,
+      api_ship: [4, 300],
+      api_slotitem: [4, 497],
+      api_material_max: 1000000,
+      api_air_base_expanded_info: [
+        { api_area_id: 5, api_maintenance_level: 1 },
+        { api_area_id: 6, api_maintenance_level: 1 },
+        { api_area_id: 7, api_maintenance_level: 1 }
+      ]
+    });
+    expect(Number.isNaN(Number.parseFloat(recordData.api_war.api_rate))).toBe(false);
+    expect(Number.isNaN(Number.parseFloat(recordData.api_mission.api_rate))).toBe(false);
+    expect(Number.isNaN(Number.parseFloat(recordData.api_practice.api_rate))).toBe(false);
+    expect(recordData.api_furniture).toEqual(expect.any(Number));
+
+    expect(ranking.statusCode).toBe(200);
+    expect(ranking.json().api_data).toMatchObject({
+      api_count: 1,
+      api_page_count: 1,
+      api_disp_page: 1,
+      api_list: [
+        {
+          api_mxltvkpyuklh: 1,
+          api_mtjmdcwtvhdr: "Local Admiral",
+          api_itbrdpdbkynm: "Local offline save",
+          api_pbgkfylkbjuy: expect.any(Number),
+          api_pcumlrymlujh: expect.any(Number),
+          api_itslcqtmrxtf: expect.any(Number),
+          api_wuhnhojjxmke: expect.any(Number),
+          api_xlqcmisdyfiu: expect.any(Number),
+          api_mcouotbbbzpx: expect.any(Number)
+        }
+      ]
+    });
+    expect(emptyRanking.statusCode).toBe(200);
+    expect(emptyRanking.json().api_data).toMatchObject({
+      api_count: 1,
+      api_page_count: 1,
+      api_disp_page: 2,
+      api_list: []
     });
   });
 
@@ -1530,9 +1602,17 @@ describe("local kcsapi endpoints", () => {
 
     store.forceCompleteExpedition(2);
     const missionResult = await post("api_req_mission/result", { api_deck_id: 2 });
+    const repeatMissionResult = await post("api_req_mission/result", { api_deck_id: 2 });
+    const missionRecord = (await post("api_get_member/record")).json().api_data;
     expect(missionResult.json().api_data).toMatchObject({
       api_clear_result: expect.any(Number),
       api_get_material: expect.any(Array)
+    });
+    expect(repeatMissionResult.json().api_data.api_clear_result).toBe(missionResult.json().api_data.api_clear_result);
+    expect(missionRecord.api_mission).toMatchObject({
+      api_count: 1,
+      api_success: missionResult.json().api_data.api_clear_result > 0 ? 1 : 0,
+      api_rate: expect.any(String)
     });
   });
 
@@ -2139,6 +2219,12 @@ describe("local kcsapi endpoints", () => {
     expect((afterRepeat.sortieSession?.state as any).lastBattle.resultClaimed).toBe(true);
     expect(result.json().api_data.api_get_ship.api_ship_id).not.toBe(1);
     expect(afterRepeat.ships.some((ship) => ship.masterId === result.json().api_data.api_get_ship.api_ship_id)).toBe(true);
+    const record = (await post("api_get_member/record")).json().api_data;
+    expect(record.api_war).toMatchObject({
+      api_win: isVictoryRank(result.json().api_data.api_win_rank) ? 1 : 0,
+      api_lose: isVictoryRank(result.json().api_data.api_win_rank) ? 0 : 1,
+      api_rate: expect.any(String)
+    });
   });
 
   it("does not create a dropped ship when the sortie drop table rolls no drop", async () => {
@@ -2329,6 +2415,12 @@ describe("local kcsapi endpoints", () => {
     expect(afterPracticeList.json().api_data.api_list.find((item: any) => item.api_enemy_id === enemyId).api_state).toBe(expectedPracticeState);
     expect(afterFirst.ships[0].exp).toBeGreaterThan(0);
     expect(afterFirst.player.exp).toBeGreaterThan(0);
+    const record = (await post("api_get_member/record")).json().api_data;
+    expect(record.api_practice).toMatchObject({
+      api_win: isVictoryRank(result.json().api_data.api_win_rank) ? 1 : 0,
+      api_lose: isVictoryRank(result.json().api_data.api_win_rank) ? 0 : 1,
+      api_rate: expect.any(String)
+    });
   });
 
   it("supports a playable combined fleet sortie loop with main and escort settlement fields", async () => {
@@ -2411,6 +2503,7 @@ describe("local kcsapi endpoints", () => {
       "api_get_member/ship_deck",
       "api_get_member/payitem",
       "api_get_member/record",
+      "api_req_ranking/mxltvkpyuklh",
       "api_get_member/picture_book",
       "api_get_member/practice",
       "api_get_member/sortie_conditions",

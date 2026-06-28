@@ -424,6 +424,7 @@ function saveWithLos(): SaveState {
     expeditionProgress: [],
     expeditionRuns: [],
     expeditionSettings: { fixedSeed: null, clockOffsetMs: 0, unlockAll: 0 },
+    recordStats: { battleWin: 0, battleLose: 0, practiceWin: 0, practiceLose: 0, missionCount: 0, missionSuccess: 0 },
     useItems: []
   };
 }

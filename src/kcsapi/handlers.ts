@@ -69,6 +69,7 @@ import {
   type ConstructionRecipe,
   type DevelopmentRecipe
 } from "./arsenal.js";
+import { playerTotalExpForLevel } from "./experience.js";
 
 export type HandlerContext = {
   stateStore: StateStore;
@@ -87,6 +88,11 @@ export type HandlerInput = {
 type KcsHandler = (input: HandlerInput, context: HandlerContext) => unknown | Promise<unknown>;
 
 const handlers = new Map<string, KcsHandler>();
+const MAX_SHIP_COUNT = 300;
+const MAX_SLOT_ITEM_COUNT = 500;
+const RECORD_SLOT_ITEM_DISPLAY_BONUS = 3;
+const MAX_FURNITURE_COUNT = 200;
+const MATERIAL_CAP = 1_000_000;
 
 register("api_start2/getData", (_input, context) => apiOk(masterDataWithResources(context.resourceManifest)));
 register("api_start2/get_option_setting", (_input, context) => {
@@ -150,7 +156,8 @@ register("api_get_member/mission", (_input, context) =>
 register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
 register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
 register("api_get_member/payitem", () => apiOk([]));
-register("api_get_member/record", (_input, context) => apiOk({ api_member_id: 1, api_nickname: context.stateStore.getSave().player.nickname, api_level: 1 }));
+register("api_get_member/record", (_input, context) => apiOk(recordPayload(context.stateStore.getSave())));
+register("api_req_ranking/mxltvkpyuklh", (input, context) => apiOk(rankingPayload(input, context.stateStore.getSave())));
 register("api_get_member/picture_book", (input, context) => apiOk({ api_list: pictureBookList(input, context.resourceManifest) }));
 register("api_get_member/practice", (_input, context) => {
   const batch = context.stateStore.practiceBatch(practiceBatchOptions(context));
@@ -588,7 +595,6 @@ for (const path of [
   "api_req_practice/midnight_battle",
   "api_req_practice/battle_result",
   "api_req_practice/change_matching_kind",
-  "api_req_ranking/mxltvkpyuklh",
   "api_dmm_payment/paycheck"
 ]) {
   register(path, () => apiOk({ api_disabled: 1, api_message: "Local placeholder" }));
@@ -1141,6 +1147,82 @@ function practiceListPayload(rivals: PracticeRival[], states: Record<string, num
       api_medals: rival.medals
     }))
   };
+}
+
+function recordPayload(save: SaveState) {
+  const stats = save.recordStats;
+  const nextLevelExp = playerTotalExpForLevel(save.player.level + 1);
+  const expToNextLevel = Math.max(0, nextLevelExp - save.player.exp);
+  return {
+    api_member_id: save.player.id,
+    api_nickname: save.player.nickname,
+    api_nickname_id: save.player.nickname,
+    api_cmt: save.player.comment,
+    api_cmt_id: save.player.comment,
+    api_level: save.player.level,
+    api_rank: 1,
+    api_experience: [save.player.exp, expToNextLevel],
+    api_war: {
+      api_win: stats.battleWin,
+      api_lose: stats.battleLose,
+      api_rate: ratioString(stats.battleWin, stats.battleWin + stats.battleLose)
+    },
+    api_mission: {
+      api_count: stats.missionCount,
+      api_success: stats.missionSuccess,
+      api_rate: percentString(stats.missionSuccess, stats.missionCount)
+    },
+    api_practice: {
+      api_win: stats.practiceWin,
+      api_lose: stats.practiceLose,
+      api_rate: percentString(stats.practiceWin, stats.practiceWin + stats.practiceLose)
+    },
+    api_deck: save.decks.length,
+    api_kdoc: save.buildDocks.length,
+    api_ndoc: save.repairDocks.length,
+    api_ship: [save.ships.length, MAX_SHIP_COUNT],
+    api_slotitem: [save.slotItems.length, MAX_SLOT_ITEM_COUNT - RECORD_SLOT_ITEM_DISPLAY_BONUS],
+    api_furniture: save.furniture.coins,
+    api_furniture_max: MAX_FURNITURE_COUNT,
+    api_material_max: MATERIAL_CAP,
+    api_air_base_expanded_info: [5, 6, 7].map((areaId) => ({
+      api_area_id: areaId,
+      api_maintenance_level: 1
+    }))
+  };
+}
+
+function rankingPayload(input: HandlerInput, save: SaveState) {
+  const page = Math.max(1, Math.trunc(num(input.body.api_pageno ?? input.query.api_pageno, 1)));
+  const score = save.recordStats.battleWin + save.recordStats.practiceWin + save.recordStats.missionSuccess;
+  return {
+    api_count: 1,
+    api_page_count: 1,
+    api_disp_page: page,
+    api_list: page === 1
+      ? [{
+          api_mxltvkpyuklh: 1,
+          api_mtjmdcwtvhdr: save.player.nickname,
+          api_itbrdpdbkynm: save.player.comment,
+          api_pbgkfylkbjuy: save.player.worldId,
+          api_pcumlrymlujh: 1,
+          api_itslcqtmrxtf: 0,
+          api_wuhnhojjxmke: score,
+          api_xlqcmisdyfiu: save.player.level,
+          api_mcouotbbbzpx: score
+        }]
+      : []
+  };
+}
+
+function ratioString(numerator: number, denominator: number) {
+  if (denominator <= 0) return "0";
+  return (numerator / denominator).toFixed(2);
+}
+
+function percentString(numerator: number, denominator: number) {
+  if (denominator <= 0) return "0";
+  return ((numerator / denominator) * 100).toFixed(2);
 }
 
 function practiceEnemyInfoPayload(enemyId: number, rivals: PracticeRival[]) {

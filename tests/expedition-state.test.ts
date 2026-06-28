@@ -23,11 +23,11 @@ describe("persisted expedition lifecycle", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("migrates to schema v10 and seeds only the first expedition unlocked", () => {
+  it("migrates to schema v11 and seeds only the first expedition unlocked", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const state = store.getMissionMemberState();
 
-    expect(version.version).toBe(10);
+    expect(version.version).toBe(11);
     expect(state.api_list_items.find((item) => item.api_mission_id === 1)?.api_state).toBe(1);
     expect(state.api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(0);
   });
@@ -45,7 +45,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(10);
+    expect(version.version).toBe(11);
     expect(save.furniture.owned).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
     expect(save.furniture.set).toEqual({
       api_floor: 1,
@@ -75,6 +75,27 @@ describe("persisted expedition lifecycle", () => {
     expect(store.getMissionMemberState().api_list_items[0]).toEqual({
       api_mission_id: 1,
       api_state: 1,
+    });
+  });
+
+  it("backfills record expedition stats from v10 completed expedition progress", () => {
+    store.db.prepare("UPDATE expedition_progress SET completed_count = ? WHERE mission_id = 1").run(2);
+    store.db.prepare("DROP TABLE record_stats").run();
+    store.db.prepare("UPDATE schema_meta SET version = 10").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
+    const save = store.getSave();
+
+    expect(version.version).toBe(11);
+    expect(save.recordStats).toMatchObject({
+      battleWin: 0,
+      battleLose: 0,
+      practiceWin: 0,
+      practiceLose: 0,
+      missionCount: 2,
+      missionSuccess: 2,
     });
   });
 
@@ -114,6 +135,10 @@ describe("persisted expedition lifecycle", () => {
     expect(duplicate).toEqual(first);
     expect(afterFirst).toBeGreaterThan(before);
     expect(afterDuplicate).toBe(afterFirst);
+    expect(store.getSave().recordStats).toMatchObject({
+      missionCount: 1,
+      missionSuccess: 1,
+    });
     expect(store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(1);
   });
 
@@ -210,9 +235,15 @@ describe("persisted expedition lifecycle", () => {
     expect(recalled.ok).toBe(true);
     store.forceCompleteExpedition(2);
     const claimed = store.claimExpedition(2);
+    const duplicate = store.claimExpedition(2);
 
     expect(claimed.ok).toBe(true);
     if (claimed.ok) expect(claimed.result.recalled).toBe(true);
+    expect(duplicate).toEqual(claimed);
     expect(store.getSave().materials.ammo).toBe(beforeAmmo);
+    expect(store.getSave().recordStats).toMatchObject({
+      missionCount: 1,
+      missionSuccess: 0,
+    });
   });
 });

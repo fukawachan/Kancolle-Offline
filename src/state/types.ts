@@ -102,6 +102,15 @@ export type ExpeditionSettings = {
   unlockAll: number;
 };
 
+export type RecordStats = {
+  battleWin: number;
+  battleLose: number;
+  practiceWin: number;
+  practiceLose: number;
+  missionCount: number;
+  missionSuccess: number;
+};
+
 export type UseItemInventory = {
   id: number;
   count: number;
@@ -180,6 +189,7 @@ export type SaveState = {
   expeditionProgress: ExpeditionProgress[];
   expeditionRuns: ExpeditionRun[];
   expeditionSettings: ExpeditionSettings;
+  recordStats: RecordStats;
   useItems: UseItemInventory[];
 };
 

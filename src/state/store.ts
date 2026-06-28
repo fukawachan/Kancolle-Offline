@@ -82,6 +82,7 @@ import type {
   Player,
   PlayerOptions,
   Quest,
+  RecordStats,
   RepairDock,
   SaveState,
   Ship,
@@ -133,7 +134,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
@@ -1029,6 +1030,7 @@ function claimExpedition(db: Database.Database, deckId: number) {
   const tx = db.transaction(() => {
     applyExpeditionOutcome(db, snapshot, outcome);
     if (run.status !== "returning") completeExpeditionProgress(db, definition.id);
+    incrementRecordMissionStats(db, outcome.clearResult > 0);
     const save = getSave(db);
     result = {
       missionId: definition.id,
@@ -1562,6 +1564,16 @@ function ensureExpeditionSettings(db: Database.Database) {
   `).run();
 }
 
+function ensureRecordStats(db: Database.Database) {
+  const row = db.prepare("SELECT COALESCE(SUM(completed_count), 0) AS completed FROM expedition_progress").get() as Row;
+  const completed = Math.max(0, Math.trunc(safeNum(row.completed)));
+  db.prepare(`
+    INSERT OR IGNORE INTO record_stats
+      (id, battle_win, battle_lose, practice_win, practice_lose, mission_count, mission_success)
+    VALUES (1, 0, 0, 0, 0, ?, ?)
+  `).run(completed, completed);
+}
+
 function getExpeditionSettings(db: Database.Database) {
   ensureExpeditionSettings(db);
   return mapExpeditionSettings(
@@ -1747,6 +1759,7 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     if (mode !== "practice" && settlement.dropShipId > 0) createShip(db, settlement.dropShipId);
     if (mode === "practice") markPracticeState(db, record.practiceEnemyId, record.result?.rank);
     if (mode === "sortie" || mode === "combined") applyMapProgress(db, record);
+    incrementRecordBattleStats(db, mode, record.result?.rank);
     loaded.saveRecord(nextBattle as unknown as JsonObject);
   });
   tx();
@@ -1754,6 +1767,38 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
   if (questEvent) recordQuestEvent(db, questEvent);
   recordQuestEvent(db, { kind: "simple", subcategory: "battle" });
   return { save: getSave(db), record: nextBattle, applied: true };
+}
+
+function incrementRecordBattleStats(db: Database.Database, mode: BattleMode, rank: unknown) {
+  ensureRecordStats(db);
+  const victory = isBattleVictoryRank(rank);
+  if (mode === "practice") {
+    db.prepare(`
+      UPDATE record_stats
+      SET practice_win = practice_win + ?, practice_lose = practice_lose + ?
+      WHERE id = 1
+    `).run(victory ? 1 : 0, victory ? 0 : 1);
+    return;
+  }
+  db.prepare(`
+    UPDATE record_stats
+    SET battle_win = battle_win + ?, battle_lose = battle_lose + ?
+    WHERE id = 1
+  `).run(victory ? 1 : 0, victory ? 0 : 1);
+}
+
+function incrementRecordMissionStats(db: Database.Database, success: boolean) {
+  ensureRecordStats(db);
+  db.prepare(`
+    UPDATE record_stats
+    SET mission_count = mission_count + 1,
+        mission_success = mission_success + ?
+    WHERE id = 1
+  `).run(success ? 1 : 0);
+}
+
+function isBattleVictoryRank(rank: unknown) {
+  return rank === "S" || rank === "A" || rank === "B";
 }
 
 function battleQuestEvent(record: BattleRecord, mode: BattleMode): QuestEvent | null {
@@ -2000,6 +2045,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 8) migrateToV8(db);
   if (currentVersion < 9) migrateToV9(db);
   if (currentVersion < 10) migrateToV10(db);
+  if (currentVersion < 11) migrateToV11(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2007,6 +2053,7 @@ function migrate(db: Database.Database) {
   repairMaps(db);
   repairDeckShipIds(db);
   ensureQuestStates(db);
+  ensureRecordStats(db);
 }
 
 function repairDeckShipIds(db: Database.Database) {
@@ -2037,6 +2084,10 @@ function migrateToV10(db: Database.Database) {
     db.prepare("ALTER TABLE quests ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'").run();
   }
   ensureQuestStates(db);
+}
+
+function migrateToV11(db: Database.Database) {
+  ensureRecordStats(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2206,6 +2257,7 @@ function schemaVersion(db: Database.Database) {
 function resetSchema(db: Database.Database) {
   db.exec(`
     DROP TABLE IF EXISTS expedition_settings;
+    DROP TABLE IF EXISTS record_stats;
     DROP TABLE IF EXISTS use_items;
     DROP TABLE IF EXISTS expedition_runs;
     DROP TABLE IF EXISTS expedition_progress;
@@ -2368,6 +2420,15 @@ function createSchema(db: Database.Database) {
       clock_offset_ms INTEGER NOT NULL,
       unlock_all INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS record_stats (
+      id INTEGER PRIMARY KEY,
+      battle_win INTEGER NOT NULL,
+      battle_lose INTEGER NOT NULL,
+      practice_win INTEGER NOT NULL,
+      practice_lose INTEGER NOT NULL,
+      mission_count INTEGER NOT NULL,
+      mission_success INTEGER NOT NULL
+    );
   `);
 }
 
@@ -2439,6 +2500,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
     seedMissingMaps(db);
     seedExpeditionProgress(db);
     ensureExpeditionSettings(db);
+    ensureRecordStats(db);
   });
   tx();
   return getSave(db);
@@ -2455,6 +2517,7 @@ function getSave(db: Database.Database): SaveState {
   settleMaterialRecovery(db);
   ensureQuestStates(db);
   refreshQuestPeriods(db);
+  ensureRecordStats(db);
 
   return {
     player: mapPlayer(player),
@@ -2473,6 +2536,7 @@ function getSave(db: Database.Database): SaveState {
     expeditionSettings: mapExpeditionSettings(
       db.prepare("SELECT * FROM expedition_settings WHERE id = 1").get() as Row
     ),
+    recordStats: mapRecordStats(db.prepare("SELECT * FROM record_stats WHERE id = 1").get() as Row),
     useItems: (db.prepare("SELECT * FROM use_items ORDER BY id").all() as Row[]).map(mapUseItem)
   };
 }
@@ -2596,6 +2660,17 @@ function mapExpeditionSettings(row: Row): ExpeditionSettings {
     fixedSeed: row.fixed_seed == null ? null : Number(row.fixed_seed),
     clockOffsetMs: Number(row.clock_offset_ms),
     unlockAll: Number(row.unlock_all)
+  };
+}
+
+function mapRecordStats(row: Row): RecordStats {
+  return {
+    battleWin: Math.max(0, Math.trunc(safeNum(row.battle_win))),
+    battleLose: Math.max(0, Math.trunc(safeNum(row.battle_lose))),
+    practiceWin: Math.max(0, Math.trunc(safeNum(row.practice_win))),
+    practiceLose: Math.max(0, Math.trunc(safeNum(row.practice_lose))),
+    missionCount: Math.max(0, Math.trunc(safeNum(row.mission_count))),
+    missionSuccess: Math.max(0, Math.trunc(safeNum(row.mission_success)))
   };
 }
 
