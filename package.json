@@ -12,6 +12,7 @@
     "generate:master-data": "node scripts/generate-master-data.cjs",
     "generate:quest-data": "node scripts/generate-quest-data.mjs",
     "generate:expedition-data": "node scripts/generate-expedition-data.mjs",
+    "generate:shop-data": "node scripts/generate-shop-data.mjs",
     "generate:sortie-data": "node scripts/generate-sortie-data.mjs",
     "generate:routing-data": "node scripts/generate-routing-data.mjs",
     "generate:arsenal-data": "node scripts/generate-arsenal-data.mjs",

@@ -242,6 +242,18 @@ async function readPngFallback(cacheDir: string, url: string) {
     return TRANSPARENT_PNG;
   }
 
+  const itemFairyMatch = pathname.match(/^\/kcs2\/img\/item\/fairy\/([12])\.png$/i);
+  if (itemFairyMatch) {
+    const fallbackPath = path.resolve(resolvedCacheDir, `./kcs2/img/duty/fairy/${itemFairyMatch[1]}.png`);
+    if (!fallbackPath.startsWith(`${resolvedCacheDir}${path.sep}`)) return null;
+
+    try {
+      return await readFile(fallbackPath);
+    } catch {
+      return null;
+    }
+  }
+
   if (/\.jpe?g$/i.test(pathname)) {
     const fallbackPath = path.resolve(resolvedCacheDir, `.${pathname.replace(/\.jpe?g$/i, ".png")}`);
     if (!fallbackPath.startsWith(`${resolvedCacheDir}${path.sep}`)) return null;

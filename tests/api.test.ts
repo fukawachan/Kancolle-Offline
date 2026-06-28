@@ -45,6 +45,13 @@ describe("local kcsapi endpoints", () => {
     });
   }
 
+  async function get(pathname: string) {
+    return app.inject({
+      method: "GET",
+      url: pathname
+    });
+  }
+
   function expectBattlePhasePlaceholders(data: any) {
     expect(data).toHaveProperty("api_air_base_attack");
     expect(data).toHaveProperty("api_opening_taisen");
@@ -369,6 +376,56 @@ describe("local kcsapi endpoints", () => {
     expect(useitemById.get(49)).toMatchObject({ api_id: 49, api_name: "ドック開放キー", api_description: [expect.any(String)] });
     expect(useitemById.get(55)).toMatchObject({ api_id: 55, api_name: "ケッコン指輪", api_description: [expect.any(String)] });
     expect(useitemById.get(64)).toMatchObject({ api_id: 64, api_name: "補強増設", api_description: [expect.any(String)] });
+  });
+
+  it("provides official non-payment shop masters and cabinet order", async () => {
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    const payitemById = new Map(start2.api_mst_payitem.map((item: any) => [item.api_id, item]));
+
+    expect(start2.api_mst_payitem).toHaveLength(32);
+    expect(payitemById.get(1)).toMatchObject({
+      api_id: 1,
+      api_name: "燃料パック250",
+      api_price: 100,
+      api_item: [250, 0, 0, 0, 0, 0, 0, 0]
+    });
+    expect(payitemById.get(10)).toMatchObject({ api_id: 10, api_name: "ドック増設セット", api_price: 1000 });
+    expect(payitemById.get(26)).toMatchObject({ api_id: 26, api_name: "補強増設", api_price: 500 });
+    expect(start2.api_mst_item_shop).toEqual({
+      api_cabinet_1: [1, 2, 3, 4, 15, 5, 31, 7, 6, 32, 11, 14, 10, -1],
+      api_cabinet_2: [16, 17, 20, 19, 8, 9, 18, 22, 23, 26, 24, 25, 27, 28, 29, 30, -1, -1]
+    });
+
+    const cabinetIds = [
+      ...start2.api_mst_item_shop.api_cabinet_1,
+      ...start2.api_mst_item_shop.api_cabinet_2
+    ].filter((id: number) => id > 0);
+    expect(cabinetIds.every((id: number) => payitemById.has(id))).toBe(true);
+  });
+
+  it("uses the current client payitemuse response shape without creating paid purchases", async () => {
+    const payitems = await post("api_get_member/payitem");
+    expect(payitems.json().api_data).toEqual([]);
+
+    const use = await post("api_req_member/payitemuse", { api_payitem_id: 1, api_force_flag: 0 });
+    expect(use.json().api_data).toEqual({ api_caution_flag: 0 });
+
+    const after = await post("api_get_member/payitem");
+    expect(after.json().api_data).toEqual([]);
+  });
+
+  it("serves shop fairy item image fallbacks without broadening missing PNG fallback", async () => {
+    const fairy1 = await get("/kcs2/img/item/fairy/1.png?version=6.2.1.0");
+    const fairy2 = await get("/kcs2/img/item/fairy/2.png?version=6.2.1.0");
+    const missing = await get("/kcs2/img/item/fairy/3.png?version=6.2.1.0");
+
+    expect(fairy1.statusCode).toBe(200);
+    expect(fairy1.headers["content-type"]).toBe("image/png");
+    expect(fairy1.body.length).toBeGreaterThan(0);
+    expect(fairy2.statusCode).toBe(200);
+    expect(fairy2.headers["content-type"]).toBe("image/png");
+    expect(fairy2.body.length).toBeGreaterThan(0);
+    expect(missing.statusCode).toBe(404);
   });
 
   it("returns port aggregate and core get_member resources from the same persisted save", async () => {

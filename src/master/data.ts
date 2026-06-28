@@ -14,6 +14,10 @@ import {
   EXPEDITION_MASTERS,
   EXPEDITION_USEITEM_MASTERS,
 } from "./expedition-data.js";
+import {
+  SHOP_ITEM_SHOP,
+  SHOP_PAYITEM_MASTERS,
+} from "./shop-data.js";
 
 export function mapMasterId(areaId: number, mapNo: number) {
   return areaId * 10 + mapNo;
@@ -93,7 +97,7 @@ export const masterData = {
   api_mst_furniture: FURNITURE,
   api_mst_furnituregraph: [],
   api_mst_useitem: EXPEDITION_USEITEM_MASTERS,
-  api_mst_payitem: [],
+  api_mst_payitem: SHOP_PAYITEM_MASTERS,
   api_mst_bgm: [
     { api_id: 1, api_name: "母港", api_rarity: 1 },
     { api_id: 2, api_name: "海原越えて", api_rarity: 1 }
@@ -109,7 +113,7 @@ export const masterData = {
   api_mst_equip_exslot_ship: EQUIP_EXSLOT_SHIP,
   api_mst_equip_limit_exslot: EQUIP_LIMIT_EXSLOT,
   api_mst_equip_ship: EQUIP_SHIP,
-  api_mst_item_shop: { api_cabinet_1: [], api_cabinet_2: [] },
+  api_mst_item_shop: SHOP_ITEM_SHOP,
   api_mst_mapcell: FALLBACK_MAP_CELLS
 };
 
