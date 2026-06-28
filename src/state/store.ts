@@ -109,6 +109,18 @@ type BuildClaimResult =
 type DevelopmentResult =
   | { ok: true; items: (SlotItem | null)[]; materials: Materials }
   | { ok: false; error: string };
+export type SlotImprovementApplication = {
+  targetItemId: number;
+  nextMasterId: number;
+  nextLevel: number;
+  materialCost: MaterialDelta;
+  consumedSlotItemIds: number[];
+  useItemCosts: { id: number; count: number }[];
+  success: boolean;
+};
+type SlotImprovementResult =
+  | { ok: true; slotItem: SlotItem; materials: Materials }
+  | { ok: false; error: string };
 type ShipLevelSetResult = { ok: true; ship: Ship } | { ok: false; error: string };
 type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
 type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
@@ -417,6 +429,8 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE slot_items SET locked = ? WHERE id = ?").run(next, itemId);
       return next;
     },
+    applySlotImprovement: (application: SlotImprovementApplication): SlotImprovementResult =>
+      applySlotImprovement(db, application),
     modernizeShip: (shipId: number, consumedShipIds: number[], options: ModernizeOptions = {}): ModernizeResult | null => {
       const awayShips = activeExpeditionShipIds(db);
       if (awayShips.has(shipId) || consumedShipIds.some((id) => awayShips.has(id))) return null;
@@ -2805,6 +2819,58 @@ function createSlotItem(db: Database.Database, masterId: number): SlotItem {
   return mapSlotItem(db.prepare("SELECT * FROM slot_items WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
 }
 
+function applySlotImprovement(db: Database.Database, application: SlotImprovementApplication): SlotImprovementResult {
+  const targetItemId = Math.trunc(Number(application.targetItemId));
+  const nextMasterId = Math.trunc(Number(application.nextMasterId));
+  const nextLevel = Math.max(0, Math.min(10, Math.trunc(Number(application.nextLevel))));
+  if (!Number.isInteger(targetItemId) || targetItemId <= 0) return { ok: false, error: "Unknown equipment" };
+  if (!Number.isInteger(nextMasterId) || nextMasterId <= 0) return { ok: false, error: "Unknown improvement target" };
+
+  const save = getSave(db);
+  const target = save.slotItems.find((item) => item.id === targetItemId);
+  if (!target) return { ok: false, error: "Unknown equipment" };
+  const awayItems = activeExpeditionSlotItemIds(db);
+  if (awayItems.has(targetItemId)) return { ok: false, error: "Equipment is away on expedition" };
+
+  const consumedIds = [...new Set(
+    application.consumedSlotItemIds
+      .map((id) => Math.trunc(Number(id)))
+      .filter((id) => id > 0)
+  )];
+  if (consumedIds.includes(targetItemId)) return { ok: false, error: "Target equipment cannot be consumed" };
+  if (consumedIds.some((id) => awayItems.has(id))) return { ok: false, error: "Fodder equipment is away on expedition" };
+
+  const equippedIds = equippedSlotItemIds(save);
+  const consumedItems = consumedIds.map((id) => save.slotItems.find((item) => item.id === id));
+  if (consumedItems.some((item) => item == null)) return { ok: false, error: "Unknown fodder equipment" };
+  if (consumedItems.some((item) => item!.locked !== 0)) return { ok: false, error: "Locked equipment cannot be consumed" };
+  if (consumedIds.some((id) => equippedIds.has(id))) return { ok: false, error: "Equipped fodder equipment cannot be consumed" };
+  if (!hasMaterials(save.materials, application.materialCost)) return { ok: false, error: "Insufficient improvement materials" };
+
+  const useItemCost = useItemCostMap(application.useItemCosts);
+  if (application.success && !hasUseItems(save.useItems, useItemCost)) {
+    return { ok: false, error: "Insufficient special improvement items" };
+  }
+
+  const tx = db.transaction(() => {
+    consumeMaterials(db, application.materialCost);
+    for (const id of consumedIds) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
+    if (application.success) {
+      db.prepare("UPDATE slot_items SET master_id = ?, level = ? WHERE id = ?")
+        .run(nextMasterId, nextLevel, targetItemId);
+      consumeUseItemCosts(db, useItemCost);
+    }
+  });
+  tx();
+  recordQuestEvent(db, { kind: "simple", subcategory: "improvement" });
+
+  const nextSave = getSave(db);
+  const updated = nextSave.slotItems.find((item) => item.id === targetItemId);
+  return updated
+    ? { ok: true, slotItem: updated, materials: nextSave.materials }
+    : { ok: false, error: "Unknown equipment" };
+}
+
 function createShip(db: Database.Database, masterId: number): Ship {
   const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
   const maxHp = shipInitialMaxHp(master);
@@ -2933,6 +2999,32 @@ function consumeShipUpgradeUseItems(db: Database.Database, cost: Map<number, num
   for (const [itemId, count] of cost) {
     consumeUseItem(db, itemId, count);
   }
+}
+
+function useItemCostMap(costs: { id: number; count: number }[]) {
+  const result = new Map<number, number>();
+  for (const cost of costs) {
+    const id = Math.trunc(Number(cost.id));
+    const count = Math.max(0, Math.trunc(Number(cost.count)));
+    if (id > 0 && count > 0) result.set(id, (result.get(id) ?? 0) + count);
+  }
+  return result;
+}
+
+function consumeUseItemCosts(db: Database.Database, cost: Map<number, number>) {
+  for (const [itemId, count] of cost) {
+    consumeUseItem(db, itemId, count);
+  }
+}
+
+function equippedSlotItemIds(save: SaveState) {
+  const ids = new Set<number>();
+  for (const ship of save.ships) {
+    for (const slotItemId of [...ship.slotIds, ship.exSlotId]) {
+      if (slotItemId > 0) ids.add(slotItemId);
+    }
+  }
+  return ids;
 }
 
 function onSlotForShip(

@@ -52,6 +52,26 @@ describe("local kcsapi endpoints", () => {
     });
   }
 
+  function prepareAkashiFactory() {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-28T03:00:00.000Z")); // Sunday noon in JST.
+    const akashi = store.createShip(187);
+    store.changeDeckShip(1, 0, akashi.id);
+    return akashi;
+  }
+
+  function resetSlotItems() {
+    store.db.prepare("DELETE FROM slot_items").run();
+  }
+
+  async function remodelCandidateFor(sourceMasterId: number) {
+    const list = (await post("api_req_kousyou/remodel_slotlist")).json().api_data;
+    expect(Array.isArray(list)).toBe(true);
+    const candidate = list.find((item: any) => item.api_slot_id === sourceMasterId);
+    expect(candidate).toBeDefined();
+    return candidate;
+  }
+
   function expectBattlePhasePlaceholders(data: any) {
     expect(data).toHaveProperty("api_air_base_attack");
     expect(data).toHaveProperty("api_opening_taisen");
@@ -641,6 +661,178 @@ describe("local kcsapi endpoints", () => {
       { api_id: -1, api_slotitem_id: -1 }
     ]);
     expect(craft.api_material).toEqual([970, 970, 970, 970, 10, 10, 50, 5]);
+  });
+
+  it("requires Akashi as first fleet flagship before listing equipment improvements", async () => {
+    resetSlotItems();
+    store.createSlotItem(2);
+
+    const list = (await post("api_req_kousyou/remodel_slotlist")).json().api_data;
+
+    expect(list).toEqual([]);
+  });
+
+  it("lists current Akashi factory candidates from owned equipment and JST weekday rules", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+    store.createSlotItem(2);
+
+    const candidate = await remodelCandidateFor(2);
+
+    expect(candidate).toMatchObject({
+      api_slot_id: 2,
+      api_sp_type: 0,
+      api_req_fuel: 10,
+      api_req_bull: 30,
+      api_req_steel: 60,
+      api_req_bauxite: 0,
+      api_req_buildkit: 1,
+      api_req_remodelkit: 1,
+      api_req_slot_id: 0,
+      api_req_slot_num: 0
+    });
+  });
+
+  it("returns low, high, and conversion improvement costs for the selected equipment", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+    const target = store.createSlotItem(2);
+    const candidate = await remodelCandidateFor(2);
+
+    const low = (await post("api_req_kousyou/remodel_slotlist_detail", {
+      api_id: candidate.api_id,
+      api_slot_id: target.id
+    })).json().api_data;
+    expect(low).toMatchObject({
+      api_req_buildkit: 1,
+      api_certain_buildkit: 2,
+      api_req_remodelkit: 1,
+      api_certain_remodelkit: 2,
+      api_req_slot_id: 0,
+      api_req_slot_num: 0,
+      api_change_flag: 0
+    });
+
+    store.db.prepare("UPDATE slot_items SET level = 6 WHERE id = ?").run(target.id);
+    const high = (await post("api_req_kousyou/remodel_slotlist_detail", {
+      api_id: candidate.api_id,
+      api_slot_id: target.id
+    })).json().api_data;
+    expect(high).toMatchObject({
+      api_req_buildkit: 1,
+      api_certain_buildkit: 2,
+      api_req_remodelkit: 1,
+      api_certain_remodelkit: 2,
+      api_req_slot_id: 2,
+      api_req_slot_num: 1,
+      api_change_flag: 0
+    });
+
+    store.db.prepare("UPDATE slot_items SET level = 10 WHERE id = ?").run(target.id);
+    const conversion = (await post("api_req_kousyou/remodel_slotlist_detail", {
+      api_id: candidate.api_id,
+      api_slot_id: target.id
+    })).json().api_data;
+    expect(conversion).toMatchObject({
+      api_req_buildkit: 2,
+      api_certain_buildkit: 3,
+      api_req_remodelkit: 3,
+      api_certain_remodelkit: 6,
+      api_req_slot_id: 2,
+      api_req_slot_num: 2,
+      api_change_flag: 1
+    });
+  });
+
+  it("applies certain equipment improvement and consumes guaranteed costs", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+    const target = store.createSlotItem(2);
+    const candidate = await remodelCandidateFor(2);
+
+    const result = (await post("api_req_kousyou/remodel_slot", {
+      api_id: candidate.api_id,
+      api_slot_id: target.id,
+      api_certain_flag: 1
+    })).json().api_data;
+
+    expect(result.api_remodel_flag).toBe(1);
+    expect(result.api_use_slot_id).toEqual([]);
+    expect(result.api_after_slot).toMatchObject({
+      api_id: target.id,
+      api_slotitem_id: 2,
+      api_level: 1
+    });
+    expect(result.api_after_material).toEqual([990, 970, 940, 1000, 10, 10, 48, 3]);
+    expect(store.getSave().slotItems.find((item) => item.id === target.id)).toMatchObject({
+      masterId: 2,
+      level: 1
+    });
+  });
+
+  it("consumes normal high-stage equipment improvement costs on failure while preserving the target", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+    const target = store.createSlotItem(2);
+    const fodder = store.createSlotItem(2);
+    store.db.prepare("UPDATE slot_items SET level = 6 WHERE id = ?").run(target.id);
+    arsenalRolls = [0.999999];
+    const candidate = await remodelCandidateFor(2);
+
+    const result = (await post("api_req_kousyou/remodel_slot", {
+      api_id: candidate.api_id,
+      api_slot_id: target.id,
+      api_certain_flag: 0
+    })).json().api_data;
+
+    expect(result.api_remodel_flag).toBe(0);
+    expect(result.api_use_slot_id).toEqual([fodder.id]);
+    expect(result.api_after_slot).toMatchObject({
+      api_id: target.id,
+      api_slotitem_id: 2,
+      api_level: 6
+    });
+    expect(result.api_after_material).toEqual([990, 970, 940, 1000, 10, 10, 49, 4]);
+    expect(store.getSave().slotItems.find((item) => item.id === target.id)).toMatchObject({
+      masterId: 2,
+      level: 6
+    });
+    expect(store.getSave().slotItems.some((item) => item.id === fodder.id)).toBe(false);
+  });
+
+  it("converts MAX equipment on successful improvement and keeps target flags", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+    const target = store.createSlotItem(2);
+    const fodder1 = store.createSlotItem(2);
+    const fodder2 = store.createSlotItem(2);
+    store.db.prepare("UPDATE slot_items SET level = 10, proficiency = 4, locked = 1 WHERE id = ?").run(target.id);
+    store.db.prepare("UPDATE materials SET screw = 10 WHERE player_id = 1").run();
+    const candidate = await remodelCandidateFor(2);
+
+    const result = (await post("api_req_kousyou/remodel_slot", {
+      api_id: candidate.api_id,
+      api_slot_id: target.id,
+      api_certain_flag: 1
+    })).json().api_data;
+
+    expect(result.api_remodel_flag).toBe(1);
+    expect(result.api_remodel_id).toEqual([2, 63]);
+    expect(result.api_use_slot_id).toEqual([fodder1.id, fodder2.id]);
+    expect(result.api_after_slot).toMatchObject({
+      api_id: target.id,
+      api_slotitem_id: 63,
+      api_level: 0,
+      api_alv: 4,
+      api_locked: 1
+    });
+    expect(result.api_after_material).toEqual([990, 970, 940, 1000, 10, 10, 47, 4]);
+    expect(store.getSave().slotItems.find((item) => item.id === target.id)).toMatchObject({
+      masterId: 63,
+      level: 0,
+      proficiency: 4,
+      locked: 1
+    });
   });
 
   it("builds immediately with api_highspeed and returns the ship's initial equipment on claim", async () => {

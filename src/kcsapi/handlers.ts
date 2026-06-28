@@ -70,6 +70,11 @@ import {
   type DevelopmentRecipe
 } from "./arsenal.js";
 import { playerTotalExpForLevel } from "./experience.js";
+import {
+  prepareRemodelSlotExecution,
+  remodelSlotDetailPayload,
+  remodelSlotListPayload
+} from "./improvement.js";
 
 export type HandlerContext = {
   stateStore: StateStore;
@@ -450,13 +455,40 @@ register("api_req_kousyou/getship", (input, context) => {
 });
 register("api_req_kousyou/destroyship", (input, context) => apiOk({ api_material: toMaterialValues(context.stateStore.destroyShip(csvNums(input.body.api_ship_id, [1]))) }));
 register("api_req_kousyou/open_new_dock", () => apiOk({ api_opened: 1 }));
-register("api_req_kousyou/remodel_slotlist", (_input, context) => apiOk({ api_list: context.stateStore.getSave().slotItems.map(toSlotItem) }));
-register("api_req_kousyou/remodel_slotlist_detail", () => apiOk({ api_certain_buildkit: 0, api_req_buildkit: 1, api_req_remodelkit: 1 }));
+register("api_req_kousyou/remodel_slotlist", (_input, context) =>
+  apiOk(remodelSlotListPayload(context.stateStore.getSave()))
+);
+register("api_req_kousyou/remodel_slotlist_detail", (input, context) => {
+  const detail = remodelSlotDetailPayload(
+    context.stateStore.getSave(),
+    num(input.body.api_id, 0),
+    num(input.body.api_slot_id, 0)
+  );
+  return detail.ok ? apiOk(detail.data) : apiError(detail.error, 400);
+});
 register("api_req_kousyou/remodel_slot", (input, context) => {
-  const itemId = num(input.body.api_slot_id ?? input.body.api_item_id, 1);
-  context.stateStore.lockSlotItem(itemId, 1);
-  context.stateStore.recordQuestEvent({ kind: "simple", subcategory: "improvement" });
-  return apiOk({ api_remodel_flag: 1, api_after_slot: context.stateStore.getSave().slotItems.map(toSlotItem).find((item) => item.api_id === itemId) });
+  const certain = num(input.body.api_certain_flag, 0) === 1;
+  const prepared = prepareRemodelSlotExecution(
+    context.stateStore.getSave(),
+    num(input.body.api_id, 0),
+    num(input.body.api_slot_id ?? input.body.api_item_id, 0),
+    certain,
+    certain ? 0 : context.arsenalRandom()
+  );
+  if (!prepared.ok) return apiError(prepared.error, 400);
+
+  const applied = context.stateStore.applySlotImprovement(prepared.application);
+  if (!applied.ok) return apiError(applied.error, 400);
+
+  return apiOk({
+    api_remodel_flag: prepared.success ? 1 : 0,
+    api_after_slot: toSlotItem(applied.slotItem),
+    api_use_slot_id: prepared.application.consumedSlotItemIds,
+    api_after_material: toMaterialValues(applied.materials),
+    api_remodel_id: prepared.remodelId,
+    api_voice_ship_id: prepared.voiceShipId,
+    api_voice_id: prepared.voiceId
+  });
 });
 
 register("api_req_mission/start", (input, context) => {

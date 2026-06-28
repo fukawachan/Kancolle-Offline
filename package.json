@@ -16,6 +16,7 @@
     "generate:sortie-data": "node scripts/generate-sortie-data.mjs",
     "generate:routing-data": "node scripts/generate-routing-data.mjs",
     "generate:arsenal-data": "node scripts/generate-arsenal-data.mjs",
+    "generate:improvement-data": "node scripts/generate-improvement-data.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
