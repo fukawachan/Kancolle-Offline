@@ -1,5 +1,5 @@
 import { masterData } from "../master/data.js";
-import { SHIPS, SLOT_ITEMS, SHIP_TYPES } from "../master/generated-data.js";
+import { EQUIP_TYPES, SHIPS, SLOT_ITEMS, SHIP_TYPES } from "../master/generated-data.js";
 import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { apiError, apiOk } from "../kcsapi/envelope.js";
 import { toShip, toSlotItem } from "../kcsapi/serializers.js";
@@ -31,13 +31,18 @@ export type UseItemSummary = {
 
 export type MasterListQuery = {
   search?: string;
-  limit?: number;
-  offset?: number;
+  limit?: number | string;
+  offset?: number | string;
+  stype?: number | string;
+  type?: number | string;
 };
 
 // Build a lookup for ship type names
 const shipTypeNameMap: Map<number, string> = new Map(
   SHIP_TYPES.map((t) => [t.api_id, t.api_name])
+);
+const equipTypeNameMap: Map<number, string> = new Map(
+  EQUIP_TYPES.map((t) => [t.api_id, t.api_name])
 );
 
 // Build lookup maps for fast master validation
@@ -50,10 +55,14 @@ export function handleListShipMasters(query: MasterListQuery) {
   const search = (query.search ?? "").toLowerCase().trim();
   const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
   const offset = Math.max(0, Number(query.offset) || 0);
+  const stype = positiveIntegerFilter(query.stype);
 
   let filtered = SHIPS;
+  if (stype != null) {
+    filtered = filtered.filter((s) => s.api_stype === stype);
+  }
   if (search) {
-    filtered = SHIPS.filter(
+    filtered = filtered.filter(
       (s) =>
         s.api_name.toLowerCase().includes(search) ||
         s.api_yomi.toLowerCase().includes(search)
@@ -77,10 +86,14 @@ export function handleListSlotItemMasters(query: MasterListQuery) {
   const search = (query.search ?? "").toLowerCase().trim();
   const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
   const offset = Math.max(0, Number(query.offset) || 0);
+  const type = positiveIntegerFilter(query.type);
 
   let filtered = SLOT_ITEMS;
+  if (type != null) {
+    filtered = filtered.filter((s) => (s.api_type[2] ?? 0) === type);
+  }
   if (search) {
-    filtered = SLOT_ITEMS.filter(
+    filtered = filtered.filter(
       (s) =>
         s.api_name.toLowerCase().includes(search) ||
         s.api_yomi.toLowerCase().includes(search)
@@ -94,10 +107,16 @@ export function handleListSlotItemMasters(query: MasterListQuery) {
     name: s.api_name,
     yomi: s.api_yomi,
     type: s.api_type[2] ?? 0, // equipType is index 2 in the type array
-    typeName: `Type ${s.api_type[2] ?? 0}`,
+    typeName: equipTypeNameMap.get(s.api_type[2] ?? 0) ?? `Type ${s.api_type[2] ?? 0}`,
   }));
 
   return apiOk({ items, total, limit, offset });
+}
+
+function positiveIntegerFilter(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export function handleListPlayerShips(stateStore: StateStore) {

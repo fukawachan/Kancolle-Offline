@@ -42,10 +42,58 @@ describe("debug inventory controls", () => {
   it("renders ship level controls and the items tab", async () => {
     const response = await app.inject({ method: "GET", url: "/debug" });
 
+    expect(response.body).not.toContain("&u8230");
+    expect(response.body).not.toContain("&u88C5");
+    expect(response.body).toContain('id="ship-type-filter"');
+    expect(response.body).toContain('id="equip-type-filter"');
     expect(response.body).toContain('id="tab-items"');
     expect(response.body).toContain("Items");
     expect(response.body).toContain("setShipLevel");
     expect(response.body).toContain("/debug/api/useitems/set");
+  });
+
+  it("filters ship masters by ship type", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/debug/api/ships/masters?stype=2&limit=100"
+    });
+    const data = response.json().api_data;
+
+    expect(data.total).toBeGreaterThan(0);
+    expect(data.items.length).toBeGreaterThan(0);
+    expect(data.items.every((ship: { stype: number }) => ship.stype === 2)).toBe(true);
+    expect(data.items).toContainEqual(expect.objectContaining({ stype: 2, stypeName: "駆逐艦" }));
+  });
+
+  it("filters equipment masters by equipment type with real type names", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/debug/api/equipment/masters?type=6&limit=100"
+    });
+    const data = response.json().api_data;
+
+    expect(data.total).toBeGreaterThan(0);
+    expect(data.items.length).toBeGreaterThan(0);
+    expect(data.items.every((item: { type: number }) => item.type === 6)).toBe(true);
+    expect(data.items).toContainEqual(expect.objectContaining({ type: 6, typeName: "艦上戦闘機" }));
+  });
+
+  it("combines search text with master type filters", async () => {
+    const ships = await app.inject({
+      method: "GET",
+      url: `/debug/api/ships/masters?stype=2&search=${encodeURIComponent("吹雪")}`
+    });
+    const equipment = await app.inject({
+      method: "GET",
+      url: `/debug/api/equipment/masters?type=6&search=${encodeURIComponent("零式艦戦")}`
+    });
+
+    expect(ships.json().api_data.items).toContainEqual(
+      expect.objectContaining({ name: expect.stringContaining("吹雪"), stype: 2 })
+    );
+    expect(equipment.json().api_data.items).toContainEqual(
+      expect.objectContaining({ name: expect.stringContaining("零式艦戦"), type: 6 })
+    );
   });
 
   it("updates a ship level through the debug API", async () => {

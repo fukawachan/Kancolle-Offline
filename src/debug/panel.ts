@@ -1,3 +1,8 @@
+import { EQUIP_TYPES, SHIPS, SHIP_TYPES, SLOT_ITEMS } from "../master/generated-data.js";
+
+const SHIP_TYPE_FILTER_OPTIONS = buildShipTypeFilterOptions();
+const EQUIP_TYPE_FILTER_OPTIONS = buildEquipTypeFilterOptions();
+
 export function renderDebugPanel(): string {
   return `<!doctype html>
 <html lang="ja">
@@ -67,12 +72,15 @@ export function renderDebugPanel(): string {
         display: flex; gap: 8px; padding: 10px 16px;
         border-bottom: 1px solid #1e2a36; flex-shrink: 0;
       }
-      .search-bar input {
+      .search-bar input,
+      .search-bar select {
         flex: 1; padding: 6px 12px; border: 1px solid #30363d;
         border-radius: 6px; background: #0d1117; color: #c9d1d9;
         font: inherit; outline: none;
       }
-      .search-bar input:focus { border-color: #58a6ff; }
+      .search-bar select { flex: 0 0 190px; }
+      .search-bar input:focus,
+      .search-bar select:focus { border-color: #58a6ff; }
       .search-bar button {
         padding: 6px 16px; border: 1px solid #30363d; border-radius: 6px;
         background: #21262d; color: #c9d1d9; font: inherit; cursor: pointer;
@@ -165,14 +173,14 @@ export function renderDebugPanel(): string {
   </head>
   <body>
     <header>
-      <h1>&#x1F6E0; Debug Panel — &u8230;&u5A18; &amp; &u88C5;&u5099; Management</h1>
+      <h1>&#x1F6E0; Debug Panel — Ships &amp; Equipment Management</h1>
       <a href="/">&larr; Back to Launcher</a>
       <a href="/kcs2/index.php" target="_blank">Open Game &nearr;</a>
     </header>
 
     <nav class="tabs">
-      <button id="tab-ships" class="active" onclick="switchTab('ships')">&u8230;&u5A18; Ships (840)</button>
-      <button id="tab-equipment" onclick="switchTab('equipment')">&u88C5;&u5099; Equipment (572)</button>
+      <button id="tab-ships" class="active" onclick="switchTab('ships')">Ships (${SHIPS.length})</button>
+      <button id="tab-equipment" onclick="switchTab('equipment')">Equipment (${SLOT_ITEMS.length})</button>
       <button id="tab-items" onclick="switchTab('items')">Items</button>
       <button id="tab-expeditions" onclick="switchTab('expeditions')">Expeditions (63)</button>
     </nav>
@@ -183,6 +191,9 @@ export function renderDebugPanel(): string {
         <div class="section">
           <div class="section-header">Master Ship List</div>
           <div class="search-bar">
+            <select id="ship-type-filter" onchange="searchShips()">
+              ${SHIP_TYPE_FILTER_OPTIONS}
+            </select>
             <input id="ship-search" type="text" placeholder="Search by name or reading..."
                    onkeydown="if(event.key==='Enter') searchShips()">
             <button onclick="searchShips()">Search</button>
@@ -203,6 +214,9 @@ export function renderDebugPanel(): string {
         <div class="section">
           <div class="section-header">Master Equipment List</div>
           <div class="search-bar">
+            <select id="equip-type-filter" onchange="searchEquipment()">
+              ${EQUIP_TYPE_FILTER_OPTIONS}
+            </select>
             <input id="equip-search" type="text" placeholder="Search by name or reading..."
                    onkeydown="if(event.key==='Enter') searchEquipment()">
             <button onclick="searchEquipment()">Search</button>
@@ -261,8 +275,8 @@ export function renderDebugPanel(): string {
 
     <script>
       const LIMIT = 20;
-      let shipOffset = 0, shipTotal = 0, shipSearch = "";
-      let equipOffset = 0, equipTotal = 0, equipSearch = "";
+      let shipOffset = 0, shipTotal = 0, shipSearch = "", shipType = "";
+      let equipOffset = 0, equipTotal = 0, equipSearch = "", equipType = "";
       let useItemOffset = 0, useItemTotal = 0, useItemSearch = "";
       let currentTab = "ships";
 
@@ -298,6 +312,7 @@ export function renderDebugPanel(): string {
       // ---- Ships ----
       function searchShips() {
         shipSearch = document.getElementById("ship-search").value.trim();
+        shipType = document.getElementById("ship-type-filter").value;
         shipOffset = 0;
         document.getElementById("ship-master-list").innerHTML = "";
         loadMoreShips();
@@ -312,6 +327,7 @@ export function renderDebugPanel(): string {
         try {
           const params = new URLSearchParams({ limit: String(LIMIT), offset: String(shipOffset) });
           if (shipSearch) params.set("search", shipSearch);
+          if (shipType) params.set("stype", shipType);
 
           const resp = await fetch("/debug/api/ships/masters?" + params.toString(), { cache: "no-store" });
           const json = parseApi(await resp.text());
@@ -454,6 +470,7 @@ export function renderDebugPanel(): string {
       // ---- Equipment ----
       function searchEquipment() {
         equipSearch = document.getElementById("equip-search").value.trim();
+        equipType = document.getElementById("equip-type-filter").value;
         equipOffset = 0;
         document.getElementById("equip-master-list").innerHTML = "";
         loadMoreEquipment();
@@ -468,6 +485,7 @@ export function renderDebugPanel(): string {
         try {
           const params = new URLSearchParams({ limit: String(LIMIT), offset: String(equipOffset) });
           if (equipSearch) params.set("search", equipSearch);
+          if (equipType) params.set("type", equipType);
 
           const resp = await fetch("/debug/api/equipment/masters?" + params.toString(), { cache: "no-store" });
           const json = parseApi(await resp.text());
@@ -487,7 +505,7 @@ export function renderDebugPanel(): string {
             row.innerHTML =
               '<span class="info">' +
                 '<span class="name">' + esc(item.name) + '</span> ' +
-                '<span class="meta">[' + item.id + '] Type ' + item.type + ' &mdash; ' + esc(item.yomi) + '</span>' +
+                '<span class="meta">[' + item.id + '] ' + esc(item.typeName || ("Type " + item.type)) + ' &mdash; ' + esc(item.yomi) + '</span>' +
               '</span>' +
               '<button class="btn-add" onclick="addEquipment(' + item.id + ')">+ Add</button>';
             list.appendChild(row);
@@ -803,4 +821,48 @@ export function renderDebugPanel(): string {
     </script>
   </body>
 </html>`;
+}
+
+function buildShipTypeFilterOptions(): string {
+  const usedTypeIds = new Set(SHIPS.map((ship) => ship.api_stype));
+  const options = SHIP_TYPES
+    .filter((type) => usedTypeIds.has(type.api_id))
+    .sort((a, b) => a.api_sortno - b.api_sortno || a.api_id - b.api_id)
+    .map((type) => optionHtml(type.api_id, `[${type.api_id}] ${type.api_name}`));
+  return [optionHtml("", "All ship types"), ...options].join("\n");
+}
+
+function buildEquipTypeFilterOptions(): string {
+  const usedTypeIds = new Set(SLOT_ITEMS.map((item) => item.api_type[2] ?? 0));
+  const typeById = new Map(EQUIP_TYPES.map((type) => [type.api_id, type] as const));
+  const typeOrder = new Map(EQUIP_TYPES.map((type, index) => [type.api_id, index] as const));
+  const options = [...usedTypeIds]
+    .filter((typeId) => typeId > 0)
+    .sort((a, b) => (typeOrder.get(a) ?? Number.MAX_SAFE_INTEGER) - (typeOrder.get(b) ?? Number.MAX_SAFE_INTEGER) || a - b)
+    .map((typeId) => {
+      const type = typeById.get(typeId);
+      return optionHtml(typeId, `[${typeId}] ${type?.api_name ?? `Type ${typeId}`}`);
+    });
+  return [optionHtml("", "All equipment types"), ...options].join("\n");
+}
+
+function optionHtml(value: number | string, label: string): string {
+  return `<option value="${escapeHtml(String(value))}">${escapeHtml(label)}</option>`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case "&":
+        return "&amp;";
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case '"':
+        return "&quot;";
+      default:
+        return "&#39;";
+    }
+  });
 }
