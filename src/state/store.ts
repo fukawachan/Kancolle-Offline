@@ -24,7 +24,12 @@ import {
   type RoutingFleet
 } from "../master/routing.js";
 import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
-import { playerLevelForExp, shipLevelForExp, shipLevelupInfo } from "../kcsapi/experience.js";
+import {
+  playerLevelForExp,
+  shipLevelForExp,
+  shipLevelupInfo,
+  shipTotalExpForLevel
+} from "../kcsapi/experience.js";
 import {
   buildExpeditionSnapshot,
   expeditionDefinition,
@@ -103,6 +108,8 @@ type BuildClaimResult =
 type DevelopmentResult =
   | { ok: true; items: (SlotItem | null)[]; materials: Materials }
   | { ok: false; error: string };
+type ShipLevelSetResult = { ok: true; ship: Ship } | { ok: false; error: string };
+type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
 type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
 type ModernizeOptions = { destroyConsumedEquipment?: boolean };
 type QuestClearResult =
@@ -165,6 +172,12 @@ const SHIP_UPGRADE_USEITEM_FIELDS = [
   ["api_report_count", 78],
   ["api_tech_count", 94]
 ] as const;
+const MATERIAL_USEITEM_COLUMNS = new Map<number, keyof Materials>([
+  [1, "repairKit"],
+  [2, "buildKit"],
+  [3, "devmat"],
+  [4, "screw"]
+]);
 const QUEST_BONUS_TYPE = {
   material: 1,
   ship: 0xb,
@@ -311,6 +324,10 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE ships SET locked = ? WHERE id = ?").run(next, shipId);
       return next;
     },
+    setShipLevel: (shipId: number, level: number): ShipLevelSetResult =>
+      setShipLevel(db, shipId, level),
+    setUseItemCount: (itemId: number, count: number): UseItemSetResult =>
+      setUseItemCount(db, itemId, count),
     supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }) => {
       const save = getSave(db);
       const awayShips = activeExpeditionShipIds(db);
@@ -2634,6 +2651,70 @@ function parseJson<T>(value: unknown, fallback: T): T {
     return JSON.parse(value) as T;
   } catch {
     return fallback;
+  }
+}
+
+function setShipLevel(db: Database.Database, shipId: number, level: number): ShipLevelSetResult {
+  const id = Math.trunc(Number(shipId));
+  const nextLevel = Number(level);
+  if (!Number.isInteger(nextLevel) || nextLevel < 1 || nextLevel > 99) {
+    return { ok: false, error: "Level must be an integer from 1 to 99" };
+  }
+
+  const save = getSave(db);
+  const ship = save.ships.find((item) => item.id === id);
+  if (!ship) return { ok: false, error: "Unknown ship" };
+  if (activeExpeditionShipIds(db).has(id)) return { ok: false, error: "Ship is away on expedition" };
+
+  const exp = shipTotalExpForLevel(nextLevel);
+  db.prepare("UPDATE ships SET level = ?, exp = ? WHERE id = ?").run(nextLevel, exp, id);
+  const updated = db.prepare("SELECT * FROM ships WHERE id = ?").get(id) as Row | undefined;
+  return updated ? { ok: true, ship: mapShip(updated) } : { ok: false, error: "Unknown ship" };
+}
+
+function setUseItemCount(db: Database.Database, itemId: number, count: number): UseItemSetResult {
+  const id = Math.trunc(Number(itemId));
+  const nextCount = Number(count);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Unknown use item" };
+  if (!Number.isInteger(nextCount) || nextCount < 0) {
+    return { ok: false, error: "Count must be a non-negative integer" };
+  }
+  if (!masterData.api_mst_useitem.some((item) => item.api_id === id)) {
+    return { ok: false, error: "Unknown use item" };
+  }
+
+  const material = MATERIAL_USEITEM_COLUMNS.get(id);
+  if (material) {
+    setMaterialUseItemCount(db, material, nextCount);
+    return { ok: true, item: { id, count: nextCount } };
+  }
+
+  if (nextCount === 0) {
+    db.prepare("DELETE FROM use_items WHERE id = ?").run(id);
+  } else {
+    db.prepare(`
+      INSERT INTO use_items (id, count) VALUES (?, ?)
+      ON CONFLICT(id) DO UPDATE SET count = excluded.count
+    `).run(id, nextCount);
+  }
+  return { ok: true, item: { id, count: nextCount } };
+}
+
+function setMaterialUseItemCount(db: Database.Database, material: keyof Materials, count: number) {
+  const column = materialColumn(material);
+  db.prepare(`UPDATE materials SET ${column} = ? WHERE player_id = 1`).run(count);
+}
+
+function materialColumn(material: keyof Materials) {
+  switch (material) {
+    case "fuel": return "fuel";
+    case "ammo": return "ammo";
+    case "steel": return "steel";
+    case "bauxite": return "bauxite";
+    case "buildKit": return "build_kit";
+    case "repairKit": return "repair_kit";
+    case "devmat": return "devmat";
+    case "screw": return "screw";
   }
 }
 

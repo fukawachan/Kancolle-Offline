@@ -93,11 +93,28 @@ export function renderDebugPanel(): string {
       .list-row .info { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .list-row .info .name { font-weight: 500; }
       .list-row .info .meta { font-size: 12px; color: #8b949e; }
+      .list-row .actions {
+        display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+      }
       .list-row button {
         padding: 4px 14px; border: 1px solid; border-radius: 5px;
         font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
         flex-shrink: 0;
       }
+      .list-row input.level-input,
+      .list-row input.count-input {
+        width: 68px; padding: 4px 6px; border: 1px solid #30363d;
+        border-radius: 5px; background: #0d1117; color: #c9d1d9;
+        font: inherit; font-size: 12px;
+      }
+      .list-row .btn-small {
+        padding: 4px 8px; border-color: #30363d; background: #21262d; color: #c9d1d9;
+      }
+      .list-row .btn-small:hover { background: #30363d; }
+      .btn-set {
+        border-color: #1f6feb; background: #1f6feb; color: #fff;
+      }
+      .btn-set:hover { background: #388bfd; }
       .btn-add {
         border-color: #238636; background: #238636; color: #fff;
       }
@@ -156,6 +173,7 @@ export function renderDebugPanel(): string {
     <nav class="tabs">
       <button id="tab-ships" class="active" onclick="switchTab('ships')">&u8230;&u5A18; Ships (840)</button>
       <button id="tab-equipment" onclick="switchTab('equipment')">&u88C5;&u5099; Equipment (572)</button>
+      <button id="tab-items" onclick="switchTab('items')">Items</button>
       <button id="tab-expeditions" onclick="switchTab('expeditions')">Expeditions (63)</button>
     </nav>
 
@@ -199,6 +217,26 @@ export function renderDebugPanel(): string {
       </div>
     </div>
 
+    <!-- Items Tab -->
+    <div id="panel-items" class="tab-panel">
+      <div class="content-area">
+        <div class="section">
+          <div class="section-header">Common Remodel Items</div>
+          <div id="common-useitem-list" class="list"></div>
+        </div>
+        <div class="section">
+          <div class="section-header">All Editable Items</div>
+          <div class="search-bar">
+            <input id="useitem-search" type="text" placeholder="Search by name, description, or ID..."
+                   onkeydown="if(event.key==='Enter') searchUseItems()">
+            <button onclick="searchUseItems()">Search</button>
+          </div>
+          <div id="useitem-master-list" class="list"></div>
+          <button id="useitem-load-more" class="btn-load-more" style="display:none" onclick="loadMoreUseItems()">Load more...</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Expeditions Tab -->
     <div id="panel-expeditions" class="tab-panel">
       <div class="section">
@@ -225,6 +263,7 @@ export function renderDebugPanel(): string {
       const LIMIT = 20;
       let shipOffset = 0, shipTotal = 0, shipSearch = "";
       let equipOffset = 0, equipTotal = 0, equipSearch = "";
+      let useItemOffset = 0, useItemTotal = 0, useItemSearch = "";
       let currentTab = "ships";
 
       // Parse svdata= prefixed or plain JSON responses
@@ -239,6 +278,8 @@ export function renderDebugPanel(): string {
       refreshOwnedEquipment();
       // Pre-warm equipment search too so tab switch is instant
       searchEquipment();
+      refreshUseItems();
+      searchUseItems();
       refreshExpeditions();
 
       // ---- Tab switching ----
@@ -250,6 +291,7 @@ export function renderDebugPanel(): string {
         document.getElementById("tab-" + tab).classList.add("active");
         if (tab === "ships") refreshOwnedShips();
         if (tab === "equipment") refreshOwnedEquipment();
+        if (tab === "items") { refreshUseItems(); searchUseItems(); }
         if (tab === "expeditions") refreshExpeditions();
       }
 
@@ -348,12 +390,43 @@ export function renderDebugPanel(): string {
                 '<span class="name">#' + ship.api_id + ' [Mst:' + ship.api_ship_id + ']</span> ' +
                 '<span class="meta">Lv.' + ship.api_lv + ' &middot; HP ' + ship.api_nowhp + '/' + ship.api_maxhp + '</span>' +
               '</span>' +
-              '<button class="btn-remove" onclick="removeShip(' + ship.api_id + ')">&times; Remove</button>';
+              '<span class="actions">' +
+                '<input id="ship-level-' + ship.api_id + '" class="level-input" type="number" min="1" max="99" value="' + ship.api_lv + '" ' +
+                  'onkeydown="if(event.key===\\'Enter\\') setShipLevel(' + ship.api_id + ')">' +
+                '<button class="btn-set" onclick="setShipLevel(' + ship.api_id + ')">Set Lv</button>' +
+                '<button class="btn-remove" onclick="removeShip(' + ship.api_id + ')">&times; Remove</button>' +
+              '</span>';
             list.appendChild(row);
           }
         } catch (err) {
           list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
           count.textContent = "";
+        }
+      }
+
+      async function setShipLevel(shipId) {
+        const input = document.getElementById("ship-level-" + shipId);
+        const level = Number(input && input.value);
+        if (!Number.isInteger(level) || level < 1 || level > 99) {
+          showStatus("Ship level must be an integer from 1 to 99.", "error");
+          return;
+        }
+        try {
+          const resp = await fetch("/debug/api/ships/level", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({ shipId, level })
+          });
+          const json = parseApi(await resp.text());
+          if (json.api_result !== 1) {
+            showStatus(json.api_result_msg || "Failed to set ship level", "error");
+            return;
+          }
+          showStatus(json.api_data.message, "success");
+          refreshOwnedShips();
+        } catch (err) {
+          showStatus("Error setting ship level: " + err.message, "error");
         }
       }
 
@@ -500,6 +573,127 @@ export function renderDebugPanel(): string {
           refreshOwnedEquipment();
         } catch (err) {
           showStatus("Error removing equipment: " + err.message, "error");
+        }
+      }
+
+      // ---- Use items ----
+      async function refreshUseItems() {
+        const list = document.getElementById("common-useitem-list");
+        list.innerHTML = '<div class="loading">Loading...</div>';
+        try {
+          const resp = await fetch("/debug/api/player/useitems", { cache: "no-store" });
+          const json = parseApi(await resp.text());
+          const items = (json.api_data && json.api_data.commonItems) || [];
+          list.innerHTML = "";
+          if (!items.length) {
+            list.innerHTML = '<div class="list-empty">No common items available.</div>';
+            return;
+          }
+          for (const item of items) {
+            list.appendChild(renderUseItemRow(item, "common"));
+          }
+        } catch (err) {
+          list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
+        }
+      }
+
+      function searchUseItems() {
+        useItemSearch = document.getElementById("useitem-search").value.trim();
+        useItemOffset = 0;
+        document.getElementById("useitem-master-list").innerHTML = "";
+        loadMoreUseItems();
+      }
+
+      async function loadMoreUseItems() {
+        const list = document.getElementById("useitem-master-list");
+        const btn = document.getElementById("useitem-load-more");
+        btn.style.display = "none";
+        if (useItemOffset === 0) list.innerHTML = '<div class="loading">Loading...</div>';
+
+        try {
+          const params = new URLSearchParams({ limit: String(LIMIT), offset: String(useItemOffset) });
+          if (useItemSearch) params.set("search", useItemSearch);
+
+          const resp = await fetch("/debug/api/useitems/masters?" + params.toString(), { cache: "no-store" });
+          const json = parseApi(await resp.text());
+          const data = json.api_data;
+          useItemTotal = data.total;
+
+          if (useItemOffset === 0) list.innerHTML = "";
+          if (!data.items.length && useItemOffset === 0) {
+            list.innerHTML = '<div class="list-empty">No items match your search.</div>';
+            return;
+          }
+
+          for (const item of data.items) {
+            list.appendChild(renderUseItemRow(item, "master"));
+          }
+
+          useItemOffset += data.items.length;
+          if (useItemOffset < useItemTotal) {
+            btn.style.display = "block";
+            btn.textContent = "Load more... (" + useItemOffset + "/" + useItemTotal + ")";
+          }
+        } catch (err) {
+          if (useItemOffset === 0) list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
+          showStatus("Failed to load item masters: " + err.message, "error");
+        }
+      }
+
+      function renderUseItemRow(item, source) {
+        const row = document.createElement("div");
+        const inputId = "useitem-" + source + "-" + item.id;
+        row.className = "list-row";
+        row.innerHTML =
+          '<span class="info">' +
+            '<span class="name">' + esc(item.name) + '</span> ' +
+            '<span class="meta">[' + item.id + '] Count ' + item.count +
+              (item.description ? ' &middot; ' + esc(item.description) : '') +
+            '</span>' +
+          '</span>' +
+          '<span class="actions">' +
+            '<button class="btn-small" onclick="adjustUseItem(\\'' + inputId + '\\',' + item.id + ',-10)">-10</button>' +
+            '<button class="btn-small" onclick="adjustUseItem(\\'' + inputId + '\\',' + item.id + ',-1)">-1</button>' +
+            '<input id="' + inputId + '" class="count-input" type="number" min="0" value="' + item.count + '" ' +
+              'onkeydown="if(event.key===\\'Enter\\') setUseItemCount(\\'' + inputId + '\\',' + item.id + ')">' +
+            '<button class="btn-small" onclick="adjustUseItem(\\'' + inputId + '\\',' + item.id + ',1)">+1</button>' +
+            '<button class="btn-small" onclick="adjustUseItem(\\'' + inputId + '\\',' + item.id + ',10)">+10</button>' +
+            '<button class="btn-set" onclick="setUseItemCount(\\'' + inputId + '\\',' + item.id + ')">Set</button>' +
+          '</span>';
+        return row;
+      }
+
+      async function adjustUseItem(inputId, itemId, delta) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        input.value = String(Math.max(0, Number(input.value || 0) + delta));
+        await setUseItemCount(inputId, itemId);
+      }
+
+      async function setUseItemCount(inputId, itemId) {
+        const input = document.getElementById(inputId);
+        const count = Number(input && input.value);
+        if (!Number.isInteger(count) || count < 0) {
+          showStatus("Item count must be a non-negative integer.", "error");
+          return;
+        }
+        try {
+          const resp = await fetch("/debug/api/useitems/set", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({ itemId, count })
+          });
+          const json = parseApi(await resp.text());
+          if (json.api_result !== 1) {
+            showStatus(json.api_result_msg || "Failed to set item count", "error");
+            return;
+          }
+          showStatus(json.api_data.message, "success");
+          refreshUseItems();
+          searchUseItems();
+        } catch (err) {
+          showStatus("Error setting item count: " + err.message, "error");
         }
       }
 

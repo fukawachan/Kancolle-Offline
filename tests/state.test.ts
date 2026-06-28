@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPracticeBattle } from "../src/kcsapi/battle.js";
+import { shipTotalExpForLevel } from "../src/kcsapi/experience.js";
 import { masterData } from "../src/master/data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
@@ -56,6 +57,86 @@ describe("SQLite state store", () => {
     expect(nagatoMaster.api_taik).toEqual([80, 94]);
     expect(nagato.maxHp).toBe(nagatoMaster.api_taik[0]);
     expect(nagato.hp).toBe(nagato.maxHp);
+  });
+
+  it("sets a ship level and synchronizes cumulative experience", () => {
+    store.registerAccount(15);
+
+    const result = store.setShipLevel(1, 20);
+
+    expect(result).toMatchObject({
+      ok: true,
+      ship: {
+        id: 1,
+        level: 20,
+        exp: shipTotalExpForLevel(20)
+      }
+    });
+    const saved = store.getSave().ships.find((ship) => ship.id === 1)!;
+    expect(saved.level).toBe(20);
+    expect(saved.exp).toBe(shipTotalExpForLevel(20));
+  });
+
+  it("rejects invalid, unknown, and expedition-away ship level edits", () => {
+    store.registerAccount(15);
+
+    expect(store.setShipLevel(1, 0)).toEqual({
+      ok: false,
+      error: "Level must be an integer from 1 to 99"
+    });
+    expect(store.setShipLevel(999, 20)).toEqual({
+      ok: false,
+      error: "Unknown ship"
+    });
+
+    const expeditionShip = store.createShip(9);
+    store.changeDeckShip(2, 0, expeditionShip.id);
+    store.unlockAllExpeditions(true);
+    const started = store.startExpedition(2, 1);
+    expect(started.ok).toBe(true);
+
+    expect(store.setShipLevel(expeditionShip.id, 20)).toEqual({
+      ok: false,
+      error: "Ship is away on expedition"
+    });
+  });
+
+  it("sets ordinary use item counts and removes zero-count rows", () => {
+    store.registerAccount(15);
+
+    const set = store.setUseItemCount(58, 3);
+    expect(set).toEqual({ ok: true, item: { id: 58, count: 3 } });
+    expect(store.getSave().useItems.find((item) => item.id === 58)).toEqual({ id: 58, count: 3 });
+
+    const cleared = store.setUseItemCount(58, 0);
+    expect(cleared).toEqual({ ok: true, item: { id: 58, count: 0 } });
+    expect(store.getSave().useItems.find((item) => item.id === 58)).toBeUndefined();
+  });
+
+  it("sets material-backed use item counts through the materials table", () => {
+    store.registerAccount(15);
+
+    expect(store.setUseItemCount(1, 44)).toEqual({ ok: true, item: { id: 1, count: 44 } });
+    expect(store.setUseItemCount(4, 12)).toEqual({ ok: true, item: { id: 4, count: 12 } });
+
+    const save = store.getSave();
+    expect(save.materials.repairKit).toBe(44);
+    expect(save.materials.screw).toBe(12);
+    expect(save.useItems.find((item) => item.id === 1)).toBeUndefined();
+    expect(save.useItems.find((item) => item.id === 4)).toBeUndefined();
+  });
+
+  it("rejects invalid use item edits", () => {
+    store.registerAccount(15);
+
+    expect(store.setUseItemCount(58, -1)).toEqual({
+      ok: false,
+      error: "Count must be a non-negative integer"
+    });
+    expect(store.setUseItemCount(999999, 1)).toEqual({
+      ok: false,
+      error: "Unknown use item"
+    });
   });
 
   it("runs construction through validated dock states and the ship master build time", () => {

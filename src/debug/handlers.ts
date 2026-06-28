@@ -1,3 +1,4 @@
+import { masterData } from "../master/data.js";
 import { SHIPS, SLOT_ITEMS, SHIP_TYPES } from "../master/generated-data.js";
 import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { apiError, apiOk } from "../kcsapi/envelope.js";
@@ -21,6 +22,13 @@ export type SlotItemMasterSummary = {
   typeName: string;
 };
 
+export type UseItemSummary = {
+  id: number;
+  name: string;
+  description: string;
+  count: number;
+};
+
 export type MasterListQuery = {
   search?: string;
   limit?: number;
@@ -35,6 +43,8 @@ const shipTypeNameMap: Map<number, string> = new Map(
 // Build lookup maps for fast master validation
 const shipMasterIds: Set<number> = new Set(SHIPS.map((s) => s.api_id));
 const slotMasterIds: Set<number> = new Set(SLOT_ITEMS.map((s) => s.api_id));
+const resourcePseudoUseItemIds = new Set([31, 32, 33, 34]);
+const commonUseItemIds = [58, 78, 65, 74, 75, 77, 92, 94, 70, 73, 64, 67, 66, 54, 59, 52, 55];
 
 export function handleListShipMasters(query: MasterListQuery) {
   const search = (query.search ?? "").toLowerCase().trim();
@@ -98,6 +108,21 @@ export function handleListPlayerShips(stateStore: StateStore) {
 export function handleListPlayerSlotItems(stateStore: StateStore) {
   const save = stateStore.getSave();
   return apiOk(save.slotItems.map(toSlotItem));
+}
+
+export function handleSetShipLevel(
+  params: { shipId?: unknown; level?: unknown },
+  stateStore: StateStore
+) {
+  const result = stateStore.setShipLevel(Number(params.shipId), Number(params.level));
+  if (!result.ok) return apiError(result.error, 400);
+
+  const save = stateStore.getSave();
+  const master = SHIPS.find((s) => s.api_id === result.ship.masterId);
+  return apiOk({
+    ship: toShip(result.ship, save.slotItems),
+    message: `Set ${master?.api_name ?? "ship"} #${result.ship.id} to Lv.${result.ship.level}`,
+  });
 }
 
 export function handleAddShip(params: { masterId?: unknown }, stateStore: StateStore) {
@@ -181,6 +206,66 @@ export function handleRemoveSlotItem(params: { itemId?: unknown }, stateStore: S
   });
 }
 
+export function handleListUseItemMasters(query: MasterListQuery, stateStore: StateStore) {
+  const search = (query.search ?? "").toLowerCase().trim();
+  const limit = Math.max(1, Math.min(100, Number(query.limit) || 20));
+  const offset = Math.max(0, Number(query.offset) || 0);
+  const save = stateStore.hasAccount() ? stateStore.getSave() : null;
+
+  let filtered = editableUseItemMasters();
+  if (search) {
+    filtered = filtered.filter((item) => {
+      const description = useItemDescription(item).toLowerCase();
+      return (
+        item.api_name.toLowerCase().includes(search) ||
+        String(item.api_id).includes(search) ||
+        description.includes(search)
+      );
+    });
+  }
+
+  const total = filtered.length;
+  const page = filtered.slice(offset, offset + limit);
+  return apiOk({
+    items: page.map((item) => useItemSummary(item, save)),
+    total,
+    limit,
+    offset,
+  });
+}
+
+export function handleListPlayerUseItems(stateStore: StateStore) {
+  const save = stateStore.getSave();
+  const masters = editableUseItemMasters();
+  const commonItems = commonUseItemIds
+    .map((id) => masters.find((item) => item.api_id === id))
+    .filter((item): item is NonNullable<typeof item> => item != null)
+    .map((item) => useItemSummary(item, save));
+  const items = masters
+    .map((item) => useItemSummary(item, save))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => a.id - b.id);
+  return apiOk({ commonItems, items });
+}
+
+export function handleSetUseItemCount(
+  params: { itemId?: unknown; count?: unknown },
+  stateStore: StateStore
+) {
+  const result = stateStore.setUseItemCount(Number(params.itemId), Number(params.count));
+  if (!result.ok) return apiError(result.error, 400);
+
+  const save = stateStore.getSave();
+  const master = masterData.api_mst_useitem.find((item) => item.api_id === result.item.id);
+  const summary = master
+    ? useItemSummary(master, save)
+    : { id: result.item.id, name: `Use item ${result.item.id}`, description: "", count: result.item.count };
+  return apiOk({
+    item: summary,
+    message: `Set ${summary.name} (${summary.id}) to ${summary.count}`,
+  });
+}
+
 export function handleExpeditionStatus(stateStore: StateStore) {
   const save = stateStore.getSave();
   const member = stateStore.getMissionMemberState();
@@ -244,4 +329,35 @@ export function handleForceCompleteExpedition(
 export function handleResetExpeditions(stateStore: StateStore) {
   stateStore.resetExpeditionProgress();
   return handleExpeditionStatus(stateStore);
+}
+
+function editableUseItemMasters() {
+  return masterData.api_mst_useitem
+    .filter((item) => item.api_name.trim().length > 0)
+    .filter((item) => !resourcePseudoUseItemIds.has(item.api_id))
+    .sort((a, b) => a.api_id - b.api_id);
+}
+
+function useItemSummary(
+  item: (typeof masterData.api_mst_useitem)[number],
+  save: ReturnType<StateStore["getSave"]> | null
+): UseItemSummary {
+  return {
+    id: item.api_id,
+    name: item.api_name,
+    description: useItemDescription(item),
+    count: save ? useItemCount(save, item.api_id) : 0,
+  };
+}
+
+function useItemDescription(item: (typeof masterData.api_mst_useitem)[number]) {
+  return item.api_description.join(" ").replace(/<br>/g, " ");
+}
+
+function useItemCount(save: ReturnType<StateStore["getSave"]>, itemId: number) {
+  if (itemId === 1) return save.materials.repairKit;
+  if (itemId === 2) return save.materials.buildKit;
+  if (itemId === 3) return save.materials.devmat;
+  if (itemId === 4) return save.materials.screw;
+  return save.useItems.find((item) => item.id === itemId)?.count ?? 0;
 }

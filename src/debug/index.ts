@@ -6,10 +6,14 @@ import {
   handleListSlotItemMasters,
   handleListPlayerShips,
   handleListPlayerSlotItems,
+  handleListPlayerUseItems,
+  handleListUseItemMasters,
   handleAddShip,
   handleRemoveShip,
+  handleSetShipLevel,
   handleAddSlotItem,
   handleRemoveSlotItem,
+  handleSetUseItemCount,
   handleConfigureExpeditions,
   handleExpeditionStatus,
   handleForceCompleteExpedition,
@@ -76,6 +80,19 @@ export function registerDebugRoutes(
     }
   });
 
+  // ---- Player use items ----
+  app.get("/debug/api/player/useitems", async (_request, reply) => {
+    try {
+      if (!stateStore.hasAccount()) {
+        return sendApi(reply, apiOk({ commonItems: [], items: [] }));
+      }
+      const result = handleListPlayerUseItems(stateStore);
+      return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
   // ---- Add ship ----
   app.post("/debug/api/ships/add", async (request, reply) => {
     try {
@@ -90,6 +107,20 @@ export function registerDebugRoutes(
     }
   });
 
+  // ---- Set ship level ----
+  app.post("/debug/api/ships/level", async (request, reply) => {
+    try {
+      if (!stateStore.hasAccount()) {
+        return sendApi(reply, apiError("No account registered. Register via the launcher first.", 400));
+      }
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = handleSetShipLevel(body, stateStore);
+      return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
   // ---- Remove ship ----
   app.post("/debug/api/ships/remove", async (request, reply) => {
     try {
@@ -98,6 +129,31 @@ export function registerDebugRoutes(
       }
       const body = (request.body ?? {}) as Record<string, unknown>;
       const result = handleRemoveShip(body, stateStore);
+      return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  // ---- Use item master list ----
+  app.get("/debug/api/useitems/masters", async (request, reply) => {
+    try {
+      const query = (request.query ?? {}) as Record<string, string>;
+      const result = handleListUseItemMasters(query, stateStore);
+      return sendApi(reply, result);
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  // ---- Set use item count ----
+  app.post("/debug/api/useitems/set", async (request, reply) => {
+    try {
+      if (!stateStore.hasAccount()) {
+        return sendApi(reply, apiError("No account registered. Register via the launcher first.", 400));
+      }
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const result = handleSetUseItemCount(body, stateStore);
       return sendApi(reply, result);
     } catch (err) {
       return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
