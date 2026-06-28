@@ -30,7 +30,14 @@ import { buildQuestList, type QuestListOptions } from "./quests.js";
 
 export const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
 
-export function toBasic(player: Player, furniture?: FurnitureState, resourceManifest?: ResourceManifest) {
+const MEDAL_USEITEM_ID = 57;
+
+export function toBasic(
+  player: Player,
+  furniture?: FurnitureState,
+  useItems: SaveState["useItems"] = [],
+  resourceManifest?: ResourceManifest
+) {
   return {
     api_member_id: player.id,
     api_nickname: player.nickname,
@@ -65,7 +72,7 @@ export function toBasic(player: Player, furniture?: FurnitureState, resourceMani
     api_firstflag: 1,
     api_tutorial_progress: player.tutorialProgress,
     api_pvp: [0, 0],
-    api_medals: 0,
+    api_medals: useItemCount(useItems, MEDAL_USEITEM_ID),
     api_large_dock: 1
   };
 }
@@ -291,7 +298,7 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
     api_deck_port: save.decks.map(toDeck),
     api_ndock: save.repairDocks.map((dock) => toRepairDock(dock, save.ships)),
     api_ship: save.ships.map((s) => toShip(s, save.slotItems)),
-    api_basic: toBasic(save.player, save.furniture, resourceManifest),
+    api_basic: toBasic(save.player, save.furniture, save.useItems, resourceManifest),
     api_log: [],
     api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),
     api_parallel_quest_count: masterData.api_mst_const.api_parallel_quest_max.api_int_value,
@@ -301,7 +308,7 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
 
 export function toRequireInfo(save: SaveState, resourceManifest?: ResourceManifest) {
   return {
-    api_basic: toBasic(save.player, save.furniture, resourceManifest),
+    api_basic: toBasic(save.player, save.furniture, save.useItems, resourceManifest),
     api_extra_supply: [0, 0],
     api_oss_setting: {
       api_oss_items: [0, 0, 0, 0],
@@ -318,6 +325,10 @@ export function toRequireInfo(save: SaveState, resourceManifest?: ResourceManife
 
 function toBasicFurniture(furniture?: FurnitureState) {
   return furnitureSetArray(furniture?.set);
+}
+
+function useItemCount(useItems: SaveState["useItems"], itemId: number) {
+  return useItems.find((item) => item.id === itemId)?.count ?? 0;
 }
 
 export function normalizePortBgmId(portBgmId: number, resourceManifest?: ResourceManifest) {

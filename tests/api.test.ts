@@ -506,6 +506,20 @@ describe("local kcsapi endpoints", () => {
     expect(after.json().api_data).toEqual([]);
   });
 
+  it("publishes medal use item counts through basic aggregates used by the shop", async () => {
+    store.db.prepare("INSERT INTO use_items (id, count) VALUES (57, 30)").run();
+
+    const useitem = await post("api_get_member/useitem");
+    const basic = await post("api_get_member/basic");
+    const port = await post("api_port/port");
+    const requireInfo = await post("api_get_member/require_info");
+
+    expect(useitem.json().api_data).toContainEqual({ api_id: 57, api_count: 30 });
+    expect(basic.json().api_data.api_medals).toBe(30);
+    expect(port.json().api_data.api_basic.api_medals).toBe(30);
+    expect(requireInfo.json().api_data.api_basic.api_medals).toBe(30);
+  });
+
   it("serves shop fairy item image fallbacks without broadening missing PNG fallback", async () => {
     const fairy1 = await get("/kcs2/img/item/fairy/1.png?version=6.2.1.0");
     const fairy2 = await get("/kcs2/img/item/fairy/2.png?version=6.2.1.0");

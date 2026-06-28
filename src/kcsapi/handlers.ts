@@ -111,7 +111,7 @@ register("api_port/airCorpsCondRecoveryWithTimer", () => apiOk({ api_recovery: [
 register("api_get_member/require_info", (_input, context) => apiOk(toRequireInfo(context.stateStore.getSave(), context.resourceManifest)));
 register("api_get_member/basic", (_input, context) => {
   const save = context.stateStore.getSave();
-  return apiOk(toBasic(save.player, save.furniture, context.resourceManifest));
+  return apiOk(toBasic(save.player, save.furniture, save.useItems, context.resourceManifest));
 });
 register("api_get_member/material", (_input, context) => apiOk(toMaterials(context.stateStore.getSave().materials)));
 register("api_get_member/deck", (_input, context) => apiOk(context.stateStore.getSave().decks.map(toDeck)));
@@ -173,7 +173,8 @@ register("api_get_member/chart_additional_info", (_input, context) => apiOk(char
 
 register("api_req_init/nickname", (input, context) => {
   const player = context.stateStore.updateNickname(str(input.body.api_nickname ?? input.body.api_name, "Local Admiral"));
-  return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
+  const save = context.stateStore.getSave();
+  return apiOk(toBasic(player, save.furniture, save.useItems, context.resourceManifest));
 });
 register("api_req_init/firstship", (input, context) => {
   const save = context.stateStore.getSave();
@@ -184,7 +185,8 @@ register("api_req_init/firstship", (input, context) => {
 });
 register("api_req_member/updatecomment", (input, context) => {
   const player = context.stateStore.updateComment(str(input.body.api_cmt, ""));
-  return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
+  const save = context.stateStore.getSave();
+  return apiOk(toBasic(player, save.furniture, save.useItems, context.resourceManifest));
 });
 register("api_req_member/updatedeckname", (input, context) => {
   const deckId = num(input.body.api_deck_id ?? input.body.api_id, 1);
@@ -192,7 +194,8 @@ register("api_req_member/updatedeckname", (input, context) => {
 });
 register("api_req_member/update_tutorial_progress", (input, context) => {
   const player = context.stateStore.updateTutorialProgress(num(input.body.api_progress, 100));
-  return apiOk(toBasic(player, context.stateStore.getSave().furniture, context.resourceManifest));
+  const save = context.stateStore.getSave();
+  return apiOk(toBasic(player, save.furniture, save.useItems, context.resourceManifest));
 });
 register("api_req_member/set_option_setting", (input, context) => {
   const options = context.stateStore.updateOptions({
