@@ -73,7 +73,7 @@ describe("local Fastify server", () => {
     expect(editboxRule).toContain("-webkit-appearance: none");
   });
 
-  it("installs a local osapi inspection bridge before the cached client bundle", async () => {
+  it("installs a local osapi bridge before the cached client bundle", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
@@ -94,6 +94,7 @@ describe("local Fastify server", () => {
     const bridgeScript = extractScriptContaining(response.body, "installLocalOsapiBridge");
     const originalPostMessages: unknown[][] = [];
     const messageEvents: FakeMessageEvent[] = [];
+    const checkoutRequests: Array<{ url: string; body: string }> = [];
     const listeners: Record<string, Array<(event: FakeMessageEvent) => void>> = {};
     const fakeWindow: any = {
       __KANCOLLE_LOCAL__: { query: { osapi_root: "osapi.dmm.com" } },
@@ -124,6 +125,13 @@ describe("local Fastify server", () => {
       URL,
       URLSearchParams,
       MessageEvent: FakeMessageEvent,
+      fetch: async (url: string, init: { body?: string } = {}) => {
+        checkoutRequests.push({ url, body: String(init.body ?? "") });
+        return {
+          ok: true,
+          json: async () => ({ api_result: 1, api_data: { api_check_value: 2 } })
+        };
+      },
       setTimeout: (callback: () => void) => {
         callback();
         return 0;
@@ -146,13 +154,32 @@ describe("local Fastify server", () => {
     });
     expect(originalPostMessages).toEqual([]);
 
+    received = undefined;
+    expect(() => fakeWindow.parent.postMessage(
+      "0\t26\t500\t2\t補強増設\t補強増設\thttp://127.0.0.1:3020/kcs/images/purchase_items/26.jpg",
+      "https://osapi.dmm.com"
+    )).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(received).toMatchObject({
+      type: "message",
+      origin: "https://osapi.dmm.com",
+      data: "2"
+    });
+    expect(checkoutRequests).toEqual([
+      {
+        url: "/kcsapi/api_dmm_payment/paycheck",
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=2"
+      }
+    ]);
+    expect(originalPostMessages).toEqual([]);
+
     expect(fakeWindow.parent.postMessage("0\titem", "https://osapi.dmm.com")).toBe("native-postMessage");
     expect(fakeWindow.parent.postMessage("2\tFirst Fleet", "https://example.com")).toBe("native-postMessage");
     expect(originalPostMessages).toEqual([
       ["0\titem", "https://osapi.dmm.com"],
       ["2\tFirst Fleet", "https://example.com"]
     ]);
-    expect(messageEvents).toHaveLength(1);
+    expect(messageEvents).toHaveLength(2);
   });
 
   it("serves the local launcher and single-world registration page", async () => {
@@ -390,6 +417,111 @@ describe("local Fastify server", () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("image/png");
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+  });
+
+  it("serves cache-backed ship art for special-remodel silhouette and full-x2 requests", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const silhouette = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/sp_remodel/silhouette/0698_4471.png?version=62"
+    });
+    const fullX2 = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/sp_remodel/full_x2/0698_0000.png?version=62"
+    });
+
+    expect(silhouette.statusCode).toBe(200);
+    expect(silhouette.headers["content-type"]).toContain("image/png");
+    expect(silhouette.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+    expect(silhouette.body.length).toBeGreaterThan(1000);
+    expect(fullX2.statusCode).toBe(200);
+    expect(fullX2.headers["content-type"]).toContain("image/png");
+    expect(fullX2.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+    expect(fullX2.body.length).toBeGreaterThan(1000);
+  });
+
+  it("serves transparent placeholders for special-remodel text overlay requests", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+    const transparentPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+      "base64"
+    ).toString();
+
+    for (const url of [
+      "/kcs2/resources/ship/sp_remodel/text_remodel_mes/0278_1783.png?version=62",
+      "/kcs2/resources/ship/sp_remodel/text_class/0698_0000.png?version=62",
+      "/kcs2/resources/ship/sp_remodel/text_name/0698_0000.png?version=62"
+    ]) {
+      const response = await app.inject({ method: "GET", url });
+
+      expect(response.statusCode, url).toBe(200);
+      expect(response.headers["content-type"]).toContain("image/png");
+      expect(response.body).toBe(transparentPng);
+    }
+  });
+
+  it("serves empty animation keys for missing special-remodel animation metadata", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/sp_remodel/animation_key/0698_remodel.json?version=62"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/json");
+    expect(response.json()).toEqual({ keys: [], setting: {} });
+  });
+
+  it("serves special-remodel fallbacks for every client-declared special remodel pair", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+    const specialRemodelPairs = [
+      [149, 591], [277, 594], [594, 599], [350, 587], [293, 622],
+      [579, 630], [150, 592], [628, 629], [278, 698], [698, 610],
+      [610, 646], [228, 651], [651, 656], [215, 652], [306, 662],
+      [73, 501], [501, 506], [307, 663], [663, 668], [318, 883],
+      [883, 888], [396, 707], [369, 588], [588, 667], [667, 588],
+      [136, 911], [911, 916], [285, 894], [894, 899], [204, 959],
+      [151, 593], [593, 954], [954, 593], [145, 961], [316, 951],
+      [325, 955], [955, 960], [960, 955], [121, 502], [502, 507],
+      [323, 975], [357, 968], [392, 969], [152, 694], [324, 956],
+      [373, 981], [202, 986], [203, 987], [680, 983], [330, 963]
+    ] as const;
+
+    for (const [currentId, targetId] of specialRemodelPairs) {
+      const current = String(currentId).padStart(4, "0");
+      const target = String(targetId).padStart(4, "0");
+      const text = await app.inject({
+        method: "GET",
+        url: `/kcs2/resources/ship/sp_remodel/text_remodel_mes/${current}_0000.png?version=62`
+      });
+      const silhouette = await app.inject({
+        method: "GET",
+        url: `/kcs2/resources/ship/sp_remodel/silhouette/${target}_0000.png?version=62`
+      });
+
+      expect(text.statusCode, `text_remodel_mes ${currentId}->${targetId}`).toBe(200);
+      expect(text.headers["content-type"]).toContain("image/png");
+      expect(silhouette.statusCode, `silhouette ${currentId}->${targetId}`).toBe(200);
+      expect(silhouette.headers["content-type"]).toContain("image/png");
+    }
   });
 
   it("falls back to an audible default port BGM when the client asks with a stale or legacy id", async () => {

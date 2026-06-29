@@ -107,21 +107,24 @@ function renderLocalOsapiBridgeScript() {
         var bridgeTarget = window.parent || window;
         var originalPostMessage = bridgeTarget.postMessage;
         var inspectionTypes = { "1": true, "2": true, "3": true, "4": true };
+        var checkoutUrl = String(local.apiRoot || "/kcsapi").replace(/\\/+$/, "") + "/api_dmm_payment/paycheck";
 
         bridgeTarget.postMessage = function localPostMessage(message, targetOrigin) {
-          var inspection = parseInspectionMessage(message);
-          if (targetOrigin === osapiOrigin && inspection) {
-            var inspectionTextId = inspection.type === "2" && !/\\S/.test(inspection.text)
-              ? ""
-              : localInspectionTextId(inspection.type, inspection.text);
-            setTimeout(function dispatchLocalInspectionMessage() {
-              window.dispatchEvent(new MessageEvent("message", {
-                data: inspectionTextId,
-                origin: osapiOrigin,
-                source: bridgeTarget
-              }));
-            }, 0);
-            return;
+          if (targetOrigin === osapiOrigin) {
+            var purchase = parsePurchaseMessage(message);
+            if (purchase) {
+              submitLocalPurchase(purchase);
+              return;
+            }
+
+            var inspection = parseInspectionMessage(message);
+            if (inspection) {
+              var inspectionTextId = inspection.type === "2" && !/\\S/.test(inspection.text)
+                ? ""
+                : localInspectionTextId(inspection.type, inspection.text);
+              dispatchOsapiMessage(inspectionTextId);
+              return;
+            }
           }
 
           return originalPostMessage.apply(bridgeTarget, arguments);
@@ -134,6 +137,74 @@ function renderLocalOsapiBridgeScript() {
           var type = message.slice(0, tabIndex);
           if (!inspectionTypes[type]) return null;
           return { type: type, text: message.slice(tabIndex + 1) };
+        }
+
+        function parsePurchaseMessage(message) {
+          if (typeof message !== "string") return null;
+          var parts = message.split("\\t");
+          if (parts.length < 6 || parts[0] !== "0") return null;
+
+          var id = parsePositiveInteger(parts[1]);
+          var price = parseNonNegativeInteger(parts[2]);
+          var count = parsePositiveInteger(parts[3]);
+          if (!id || price == null || !count) return null;
+
+          return { id: id, price: price, count: count };
+        }
+
+        function parsePositiveInteger(value) {
+          var parsed = Number(value);
+          if (!Number.isFinite(parsed)) return 0;
+          parsed = Math.trunc(parsed);
+          return parsed > 0 ? parsed : 0;
+        }
+
+        function parseNonNegativeInteger(value) {
+          var parsed = Number(value);
+          if (!Number.isFinite(parsed)) return null;
+          parsed = Math.trunc(parsed);
+          return parsed >= 0 ? parsed : null;
+        }
+
+        function submitLocalPurchase(purchase) {
+          if (typeof fetch !== "function") {
+            dispatchOsapiMessage("-1");
+            return;
+          }
+
+          var body = new URLSearchParams();
+          body.set("api_local_purchase", "1");
+          body.set("api_payitem_id", String(purchase.id));
+          body.set("api_price", String(purchase.price));
+          body.set("api_count", String(purchase.count));
+
+          fetch(checkoutUrl, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: body.toString()
+          })
+            .then(function parseResponse(response) {
+              return response && response.ok ? response.json() : null;
+            })
+            .then(function dispatchCheckoutResult(payload) {
+              var ok = payload && payload.api_result === 1
+                && payload.api_data
+                && payload.api_data.api_check_value === 2;
+              dispatchOsapiMessage(ok ? "2" : "-1");
+            })
+            .catch(function dispatchCheckoutFailure() {
+              dispatchOsapiMessage("-1");
+            });
+        }
+
+        function dispatchOsapiMessage(data) {
+          setTimeout(function dispatchLocalOsapiMessage() {
+            window.dispatchEvent(new MessageEvent("message", {
+              data: data,
+              origin: osapiOrigin,
+              source: bridgeTarget
+            }));
+          }, 0);
         }
 
         function localInspectionTextId(type, text) {

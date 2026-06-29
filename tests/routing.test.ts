@@ -386,7 +386,9 @@ function saveWithLos(): SaveState {
       options: { bgmFlag: 1, voiceFlag: 1, seFlag: 1, volBgm: 80, volSe: 80, volVoice: 80 },
       flagshipPosition: 1,
       combinedFleet: 0,
-      portBgmId: 1
+      portBgmId: 1,
+      maxChara: 300,
+      maxSlotItem: 500
     },
     materials: { fuel: 0, ammo: 0, steel: 0, bauxite: 0, buildKit: 0, repairKit: 0, devmat: 0, screw: 0 },
     ships: [

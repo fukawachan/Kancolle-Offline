@@ -125,6 +125,9 @@ type ShipLevelSetResult = { ok: true; ship: Ship } | { ok: false; error: string 
 type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
 type BasicMaterialCounts = Pick<Materials, "fuel" | "ammo" | "steel" | "bauxite">;
 type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; error: string };
+type PendingPayItem = { id: number; count: number };
+type PendingPayItemResult = { ok: true; item: PendingPayItem } | { ok: false; error: string };
+type PayItemPickupResult = { ok: true; cautionFlag: 0 | 1 } | { ok: false; error: string };
 type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
 type ModernizeOptions = { destroyConsumedEquipment?: boolean };
 type QuestClearResult =
@@ -148,7 +151,12 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 11;
+const SCHEMA_VERSION = 12;
+const DEFAULT_MAX_SHIP_COUNT = 300;
+const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
+const OFFICIAL_MAX_SHIP_COUNT = 740;
+const OFFICIAL_MAX_SLOT_ITEM_COUNT = DEFAULT_MAX_SLOT_ITEM_COUNT
+  + ((OFFICIAL_MAX_SHIP_COUNT - DEFAULT_MAX_SHIP_COUNT) / 10) * 40;
 const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
@@ -192,6 +200,31 @@ const MATERIAL_USEITEM_COLUMNS = new Map<number, keyof Materials>([
   [2, "buildKit"],
   [3, "devmat"],
   [4, "screw"]
+]);
+const PAYITEM_EXTRA_REWARDS = new Map<number, {
+  useItems?: Array<{ id: number; count: number }>;
+  slotItems?: Array<{ masterId: number; count: number }>;
+  portExpansion?: boolean;
+}>([
+  [10, { useItems: [{ id: 49, count: 1 }] }],
+  [11, { slotItems: [{ masterId: 42, count: 1 }] }],
+  [12, { slotItems: [{ masterId: 42, count: 3 }, { masterId: 43, count: 2 }] }],
+  [14, { slotItems: [{ masterId: 43, count: 1 }] }],
+  [15, { useItems: [{ id: 52, count: 1 }] }],
+  [16, { portExpansion: true }],
+  [18, { useItems: [{ id: 54, count: 1 }] }],
+  [20, { useItems: [{ id: 55, count: 1 }] }],
+  [21, { useItems: [{ id: 54, count: 1 }] }],
+  [23, { useItems: [{ id: 59, count: 5 }] }],
+  [24, { slotItems: [{ masterId: 145, count: 3 }] }],
+  [25, { slotItems: [{ masterId: 146, count: 2 }] }],
+  [26, { useItems: [{ id: 64, count: 1 }] }],
+  [27, { useItems: [{ id: 73, count: 1 }] }],
+  [28, { useItems: [{ id: 91, count: 3 }] }],
+  [29, { useItems: [{ id: 95, count: 3 }] }],
+  [30, { useItems: [{ id: 102, count: 6 }] }],
+  [31, { useItems: [{ id: 103, count: 2 }] }],
+  [32, { useItems: [{ id: 104, count: 4 }] }]
 ]);
 const QUEST_BONUS_TYPE = {
   material: 1,
@@ -345,6 +378,11 @@ export function createStateStore(options: StateStoreOptions) {
       setUseItemCount(db, itemId, count),
     setBasicMaterials: (materials: BasicMaterialCounts): BasicMaterialSetResult =>
       setBasicMaterials(db, materials),
+    pendingPayItems: () => pendingPayItems(db),
+    addPendingPayItem: (payitemId: number, count: number): PendingPayItemResult =>
+      addPendingPayItem(db, payitemId, count),
+    pickupPendingPayItem: (payitemId: number, force = false): PayItemPickupResult =>
+      pickupPendingPayItem(db, payitemId, force),
     supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }) => {
       const save = getSave(db);
       const awayShips = activeExpeditionShipIds(db);
@@ -492,7 +530,7 @@ export function createStateStore(options: StateStoreOptions) {
       if (!hasUseItems(save.useItems, useItemCost)) return null;
 
       const loadout = shipInitialEquipment(nextMasterId).slice(0, Math.max(0, Math.trunc(safeNum(master.api_slot_num))));
-      if (save.slotItems.length + loadout.filter((slotItemMasterId) => slotItemMasterId > 0).length > 500) return null;
+      if (save.slotItems.length + loadout.filter((slotItemMasterId) => slotItemMasterId > 0).length > save.player.maxSlotItem) return null;
 
       const kyouka = normalizeKyouka(ship.stats);
       const nextKyouka = [0, 0, 0, 0, kyouka[4], kyouka[5], kyouka[6]];
@@ -667,7 +705,7 @@ export function createStateStore(options: StateStoreOptions) {
       if (!masterData.api_mst_ship.some((ship) => ship.api_id === input.resultMasterId)) {
         return { ok: false, error: "Unknown construction result" };
       }
-      if (save.ships.length >= 300) return { ok: false, error: "Ship capacity reached" };
+      if (save.ships.length >= save.player.maxChara) return { ok: false, error: "Ship capacity reached" };
 
       const highspeedCost = input.highspeed ? (input.recipe.large ? 10 : 1) : 0;
       const materialCost: MaterialDelta = {
@@ -721,9 +759,9 @@ export function createStateStore(options: StateStoreOptions) {
       const dock = save.buildDocks.find((item) => item.id === dockId);
       if (!dock) return { ok: false, error: "Unknown build dock" };
       if (dock.state !== 3 || dock.resultMasterId <= 0) return { ok: false, error: "Build is not complete" };
-      if (save.ships.length >= 300) return { ok: false, error: "Ship capacity reached" };
+      if (save.ships.length >= save.player.maxChara) return { ok: false, error: "Ship capacity reached" };
       const initialEquipment = shipInitialEquipment(dock.resultMasterId).filter((masterId) => masterId > 0);
-      if (save.slotItems.length + initialEquipment.length > 500) {
+      if (save.slotItems.length + initialEquipment.length > save.player.maxSlotItem) {
         return { ok: false, error: "Equipment capacity reached" };
       }
 
@@ -752,7 +790,7 @@ export function createStateStore(options: StateStoreOptions) {
         return { ok: false, error: "Unknown development result" };
       }
       const save = getSave(db);
-      if (save.slotItems.length + successfulIds.length > 500) {
+      if (save.slotItems.length + successfulIds.length > save.player.maxSlotItem) {
         return { ok: false, error: "Equipment capacity reached" };
       }
       const attempts = resultMasterIds.length;
@@ -1198,6 +1236,108 @@ function addUseItem(db: Database.Database, itemId: number, count: number) {
   `).run(itemId, count);
 }
 
+function pendingPayItems(db: Database.Database): PendingPayItem[] {
+  ensurePendingPayItems(db);
+  return (db.prepare("SELECT id, count FROM pending_payitems WHERE count > 0 ORDER BY id").all() as Row[])
+    .map(mapPendingPayItem);
+}
+
+function addPendingPayItem(db: Database.Database, payitemId: number, count: number): PendingPayItemResult {
+  ensurePendingPayItems(db);
+  const id = Math.trunc(Number(payitemId));
+  const amount = Math.trunc(Number(count));
+  if (!payItemMaster(id)) return { ok: false, error: "Unknown pay item" };
+  if (!Number.isInteger(amount) || amount < 1 || amount > 10) {
+    return { ok: false, error: "Pay item count must be an integer from 1 to 10" };
+  }
+
+  db.prepare(`
+    INSERT INTO pending_payitems (id, count) VALUES (?, ?)
+    ON CONFLICT(id) DO UPDATE SET count = count + excluded.count
+  `).run(id, amount);
+  const row = db.prepare("SELECT id, count FROM pending_payitems WHERE id = ?").get(id) as Row;
+  return { ok: true, item: mapPendingPayItem(row) };
+}
+
+function pickupPendingPayItem(db: Database.Database, payitemId: number, force: boolean): PayItemPickupResult {
+  ensurePendingPayItems(db);
+  const id = Math.trunc(Number(payitemId));
+  const pending = db.prepare("SELECT id, count FROM pending_payitems WHERE id = ? AND count > 0").get(id) as Row | undefined;
+  if (!pending) return { ok: true, cautionFlag: 0 };
+
+  const master = payItemMaster(id);
+  if (!master) return { ok: false, error: "Unknown pay item" };
+
+  const slotItemCount = payItemSlotItemRewardCount(id);
+  const save = getSave(db);
+  if (!force && slotItemCount > 0 && save.slotItems.length + slotItemCount > save.player.maxSlotItem) {
+    return { ok: true, cautionFlag: 1 };
+  }
+
+  const tx = db.transaction(() => {
+    grantPayItemUnit(db, id, master);
+    decrementPendingPayItem(db, id);
+  });
+  tx();
+  return { ok: true, cautionFlag: 0 };
+}
+
+function grantPayItemUnit(
+  db: Database.Database,
+  payitemId: number,
+  master: (typeof masterData.api_mst_payitem)[number]
+) {
+  const item = Array.isArray(master.api_item) ? master.api_item : [];
+  addMaterials(db, {
+    fuel: safeNum(item[0]),
+    ammo: safeNum(item[1]),
+    steel: safeNum(item[2]),
+    bauxite: safeNum(item[3]),
+    buildKit: safeNum(item[4]),
+    repairKit: safeNum(item[5]),
+    devmat: safeNum(item[6]),
+    screw: safeNum(item[7])
+  });
+
+  const extra = PAYITEM_EXTRA_REWARDS.get(payitemId);
+  for (const reward of extra?.useItems ?? []) addUseItem(db, reward.id, reward.count);
+  for (const reward of extra?.slotItems ?? []) {
+    for (let index = 0; index < reward.count; index += 1) createSlotItem(db, reward.masterId);
+  }
+  if (extra?.portExpansion) expandPortCapacity(db);
+}
+
+function decrementPendingPayItem(db: Database.Database, payitemId: number) {
+  const row = db.prepare("SELECT count FROM pending_payitems WHERE id = ?").get(payitemId) as Row | undefined;
+  const count = Math.max(0, Math.trunc(safeNum(row?.count)));
+  if (count <= 1) {
+    db.prepare("DELETE FROM pending_payitems WHERE id = ?").run(payitemId);
+  } else {
+    db.prepare("UPDATE pending_payitems SET count = ? WHERE id = ?").run(count - 1, payitemId);
+  }
+}
+
+function expandPortCapacity(db: Database.Database) {
+  const row = db.prepare("SELECT max_chara, max_slotitem FROM players WHERE id = 1").get() as Row | undefined;
+  if (!row) return;
+  const currentShips = Math.max(DEFAULT_MAX_SHIP_COUNT, Math.trunc(safeNum(row.max_chara, DEFAULT_MAX_SHIP_COUNT)));
+  const currentSlots = Math.max(DEFAULT_MAX_SLOT_ITEM_COUNT, Math.trunc(safeNum(row.max_slotitem, DEFAULT_MAX_SLOT_ITEM_COUNT)));
+  if (currentShips >= OFFICIAL_MAX_SHIP_COUNT) return;
+
+  const nextShips = Math.min(OFFICIAL_MAX_SHIP_COUNT, currentShips + 10);
+  const nextSlots = Math.min(OFFICIAL_MAX_SLOT_ITEM_COUNT, currentSlots + 40);
+  db.prepare("UPDATE players SET max_chara = ?, max_slotitem = ? WHERE id = 1").run(nextShips, nextSlots);
+}
+
+function payItemMaster(payitemId: number) {
+  return masterData.api_mst_payitem.find((item) => item.api_id === payitemId);
+}
+
+function payItemSlotItemRewardCount(payitemId: number) {
+  return (PAYITEM_EXTRA_REWARDS.get(payitemId)?.slotItems ?? [])
+    .reduce((sum, reward) => sum + Math.max(0, Math.trunc(reward.count)), 0);
+}
+
 function ensureQuestStates(db: Database.Database) {
   const table = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'quests'").get() as Row | undefined;
   if (!table || !columnExists(db, "quests", "period_key") || !columnExists(db, "quests", "progress_json")) return;
@@ -1590,6 +1730,15 @@ function ensureRecordStats(db: Database.Database) {
       (id, battle_win, battle_lose, practice_win, practice_lose, mission_count, mission_success)
     VALUES (1, 0, 0, 0, 0, ?, ?)
   `).run(completed, completed);
+}
+
+function ensurePendingPayItems(db: Database.Database) {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS pending_payitems (
+      id INTEGER PRIMARY KEY,
+      count INTEGER NOT NULL
+    )
+  `).run();
 }
 
 function getExpeditionSettings(db: Database.Database) {
@@ -2064,6 +2213,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 9) migrateToV9(db);
   if (currentVersion < 10) migrateToV10(db);
   if (currentVersion < 11) migrateToV11(db);
+  if (currentVersion < 12) migrateToV12(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2106,6 +2256,16 @@ function migrateToV10(db: Database.Database) {
 
 function migrateToV11(db: Database.Database) {
   ensureRecordStats(db);
+}
+
+function migrateToV12(db: Database.Database) {
+  if (!columnExists(db, "players", "max_chara")) {
+    db.prepare("ALTER TABLE players ADD COLUMN max_chara INTEGER NOT NULL DEFAULT 300").run();
+  }
+  if (!columnExists(db, "players", "max_slotitem")) {
+    db.prepare("ALTER TABLE players ADD COLUMN max_slotitem INTEGER NOT NULL DEFAULT 500").run();
+  }
+  ensurePendingPayItems(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2275,6 +2435,7 @@ function schemaVersion(db: Database.Database) {
 function resetSchema(db: Database.Database) {
   db.exec(`
     DROP TABLE IF EXISTS expedition_settings;
+    DROP TABLE IF EXISTS pending_payitems;
     DROP TABLE IF EXISTS record_stats;
     DROP TABLE IF EXISTS use_items;
     DROP TABLE IF EXISTS expedition_runs;
@@ -2313,7 +2474,9 @@ function createSchema(db: Database.Database) {
       options_json TEXT NOT NULL,
       flagship_position INTEGER NOT NULL,
       combined_fleet INTEGER NOT NULL,
-      port_bgm_id INTEGER NOT NULL
+      port_bgm_id INTEGER NOT NULL,
+      max_chara INTEGER NOT NULL,
+      max_slotitem INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS materials (
       player_id INTEGER PRIMARY KEY,
@@ -2432,6 +2595,10 @@ function createSchema(db: Database.Database) {
       id INTEGER PRIMARY KEY,
       count INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS pending_payitems (
+      id INTEGER PRIMARY KEY,
+      count INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS expedition_settings (
       id INTEGER PRIMARY KEY,
       fixed_seed INTEGER,
@@ -2468,8 +2635,16 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
 
   const tx = db.transaction(() => {
     db.prepare(
-      "INSERT INTO players (id, world_id, nickname, level, exp, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id) VALUES (1, ?, ?, 1, 0, ?, 100, ?, 1, 0, ?)"
-    ).run(worldId, "Local Admiral", "Local offline save", JSON.stringify(defaultOptions), DEFAULT_PORT_BGM_ID);
+      "INSERT INTO players (id, world_id, nickname, level, exp, comment, tutorial_progress, options_json, flagship_position, combined_fleet, port_bgm_id, max_chara, max_slotitem) VALUES (1, ?, ?, 1, 0, ?, 100, ?, 1, 0, ?, ?, ?)"
+    ).run(
+      worldId,
+      "Local Admiral",
+      "Local offline save",
+      JSON.stringify(defaultOptions),
+      DEFAULT_PORT_BGM_ID,
+      DEFAULT_MAX_SHIP_COUNT,
+      DEFAULT_MAX_SLOT_ITEM_COUNT
+    );
     db.prepare(
       "INSERT INTO materials (player_id, fuel, ammo, steel, bauxite, build_kit, repair_kit, devmat, screw, last_recovery_at) VALUES (1, 1000, 1000, 1000, 1000, 10, 10, 50, 5, ?)"
     ).run(Date.now());
@@ -2571,7 +2746,9 @@ function mapPlayer(row: Row): Player {
     options: parseJson<PlayerOptions>(row.options_json, defaultOptions),
     flagshipPosition: Number(row.flagship_position),
     combinedFleet: Number(row.combined_fleet),
-    portBgmId: Number(row.port_bgm_id)
+    portBgmId: Number(row.port_bgm_id),
+    maxChara: Math.max(DEFAULT_MAX_SHIP_COUNT, Math.trunc(safeNum(row.max_chara, DEFAULT_MAX_SHIP_COUNT))),
+    maxSlotItem: Math.max(DEFAULT_MAX_SLOT_ITEM_COUNT, Math.trunc(safeNum(row.max_slotitem, DEFAULT_MAX_SLOT_ITEM_COUNT)))
   };
 }
 
@@ -2693,6 +2870,10 @@ function mapRecordStats(row: Row): RecordStats {
 }
 
 function mapUseItem(row: Row): UseItemInventory {
+  return { id: Number(row.id), count: Number(row.count) };
+}
+
+function mapPendingPayItem(row: Row): PendingPayItem {
   return { id: Number(row.id), count: Number(row.count) };
 }
 

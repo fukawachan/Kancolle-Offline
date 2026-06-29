@@ -106,7 +106,7 @@ export const masterData = {
   api_mst_const: {
     api_parallel_quest_max: { api_string_value: "9999", api_int_value: 9999 },
     api_dpflag_quest: { api_string_value: "1", api_int_value: 1 },
-    api_boko_max_ships: { api_string_value: "300", api_int_value: 300 }
+    api_boko_max_ships: { api_string_value: "", api_int_value: 740 }
   },
   api_mst_shipupgrade: SHIP_UPGRADES,
   api_mst_bgm_season: [],

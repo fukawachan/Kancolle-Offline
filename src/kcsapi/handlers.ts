@@ -93,8 +93,6 @@ export type HandlerInput = {
 type KcsHandler = (input: HandlerInput, context: HandlerContext) => unknown | Promise<unknown>;
 
 const handlers = new Map<string, KcsHandler>();
-const MAX_SHIP_COUNT = 300;
-const MAX_SLOT_ITEM_COUNT = 500;
 const RECORD_SLOT_ITEM_DISPLAY_BONUS = 3;
 const MAX_FURNITURE_COUNT = 200;
 const MATERIAL_CAP = 1_000_000;
@@ -160,7 +158,9 @@ register("api_get_member/mission", (_input, context) =>
 );
 register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
 register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
-register("api_get_member/payitem", () => apiOk([]));
+register("api_get_member/payitem", (_input, context) => apiOk(
+  context.stateStore.pendingPayItems().map(pendingPayItemPayload)
+));
 register("api_get_member/record", (_input, context) => apiOk(recordPayload(context.stateStore.getSave())));
 register("api_req_ranking/mxltvkpyuklh", (input, context) => apiOk(rankingPayload(input, context.stateStore.getSave())));
 register("api_get_member/picture_book", (input, context) => apiOk({ api_list: pictureBookList(input, context.resourceManifest) }));
@@ -211,11 +211,37 @@ register("api_req_member/set_option_setting", (input, context) => {
 register("api_req_member/set_flagship_position", (input, context) => apiOk({ api_flagship_position: context.stateStore.setFlagshipPosition(num(input.body.api_flagship_position, 0)) }));
 register("api_req_member/itemuse", () => apiOk({ api_caution_flag: 0 }));
 register("api_req_member/itemuse_cond", () => apiOk({ api_caution_flag: 0 }));
-register("api_req_member/payitemuse", () => apiOk({ api_caution_flag: 0 }));
+register("api_req_member/payitemuse", (input, context) => {
+  const result = context.stateStore.pickupPendingPayItem(
+    num(input.body.api_payitem_id, 0),
+    num(input.body.api_force_flag, 0) === 1
+  );
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  return apiOk({ api_caution_flag: result.cautionFlag });
+});
 register("api_req_member/get_incentive", () => apiOk({ api_items: [] }));
 register("api_req_member/get_event_selected_reward", () => apiOk({ api_items: [] }));
 register("api_req_member/set_friendly_request", () => apiOk({}));
 register("api_req_member/set_oss_condition", () => apiOk({}));
+
+register("api_dmm_payment/paycheck", (input, context) => {
+  if (num(input.body.api_local_purchase, 0) === 1) {
+    const payitemId = num(input.body.api_payitem_id, 0);
+    const count = num(input.body.api_count, 0);
+    const master = masterData.api_mst_payitem.find((item) => item.api_id === payitemId);
+    if (!master) return apiError("Unknown pay item", 400, {}, 400);
+
+    const price = input.body.api_price == null || input.body.api_price === ""
+      ? master.api_price
+      : num(input.body.api_price, -1);
+    if (price !== master.api_price) return apiError("Pay item price mismatch", 400, {}, 400);
+
+    const result = context.stateStore.addPendingPayItem(payitemId, count);
+    if (!result.ok) return apiError(result.error, 400, {}, 400);
+  }
+
+  return apiOk({ api_check_value: 2 });
+});
 
 register("api_req_hensei/change", (input, context) => {
   const deckId = num(input.body.api_id, 1);
@@ -629,8 +655,7 @@ for (const path of [
   "api_req_practice/battle",
   "api_req_practice/midnight_battle",
   "api_req_practice/battle_result",
-  "api_req_practice/change_matching_kind",
-  "api_dmm_payment/paycheck"
+  "api_req_practice/change_matching_kind"
 ]) {
   register(path, () => apiOk({ api_disabled: 1, api_message: "Local placeholder" }));
 }
@@ -1184,6 +1209,16 @@ function practiceListPayload(rivals: PracticeRival[], states: Record<string, num
   };
 }
 
+function pendingPayItemPayload(item: { id: number; count: number }) {
+  const master = masterData.api_mst_payitem.find((payitem) => payitem.api_id === item.id);
+  return {
+    api_payitem_id: String(item.id),
+    api_name: master?.api_name ?? "",
+    api_description: master?.api_description ?? "",
+    api_count: item.count
+  };
+}
+
 function recordPayload(save: SaveState) {
   const stats = save.recordStats;
   const nextLevelExp = playerTotalExpForLevel(save.player.level + 1);
@@ -1215,8 +1250,8 @@ function recordPayload(save: SaveState) {
     api_deck: save.decks.length,
     api_kdoc: save.buildDocks.length,
     api_ndoc: save.repairDocks.length,
-    api_ship: [save.ships.length, MAX_SHIP_COUNT],
-    api_slotitem: [save.slotItems.length, MAX_SLOT_ITEM_COUNT - RECORD_SLOT_ITEM_DISPLAY_BONUS],
+    api_ship: [save.ships.length, save.player.maxChara],
+    api_slotitem: [save.slotItems.length, save.player.maxSlotItem - RECORD_SLOT_ITEM_DISPLAY_BONUS],
     api_furniture: save.furniture.coins,
     api_furniture_max: MAX_FURNITURE_COUNT,
     api_material_max: MATERIAL_CAP,

@@ -23,11 +23,17 @@ describe("persisted expedition lifecycle", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("migrates to schema v11 and seeds only the first expedition unlocked", () => {
+  it("migrates to schema v12 and seeds only the first expedition unlocked", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const state = store.getMissionMemberState();
+    const player = store.getSave().player;
+    const pendingTable = store.db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pending_payitems'")
+      .get();
 
-    expect(version.version).toBe(11);
+    expect(version.version).toBe(12);
+    expect(player).toMatchObject({ maxChara: 300, maxSlotItem: 500 });
+    expect(pendingTable).toBeTruthy();
     expect(state.api_list_items.find((item) => item.api_mission_id === 1)?.api_state).toBe(1);
     expect(state.api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(0);
   });
@@ -45,7 +51,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(11);
+    expect(version.version).toBe(12);
     expect(save.furniture.owned).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
     expect(save.furniture.set).toEqual({
       api_floor: 1,
@@ -88,7 +94,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(11);
+    expect(version.version).toBe(12);
     expect(save.recordStats).toMatchObject({
       battleWin: 0,
       battleLose: 0,

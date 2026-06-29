@@ -52,6 +52,11 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return resource;
   }
 
+  const spRemodelShipArt = pathname.match(/^\/kcs2\/resources\/ship\/sp_remodel\/(silhouette|full_x2)\/(\d{4})_(\d{4})\.png$/i);
+  if (spRemodelShipArt) {
+    return shipArtFallback(manifest, Number(spRemodelShipArt[2]));
+  }
+
   const shipImage = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card|character_up|character_up_dmg|power_up|power_up_dmg)\/(\d{4})_(\d{4})\.png$/i);
   if (shipImage) {
     const collection = shipCollection(manifest, shipImage[1]);
@@ -247,6 +252,17 @@ function slotCollection(manifest: ResourceManifest, rawKind: string) {
     default:
       return undefined;
   }
+}
+
+function shipArtFallback(manifest: ResourceManifest, id: number) {
+  return (
+    manifest.ship.full.get(id) ||
+    manifest.ship.card.get(id) ||
+    manifest.ship.albumStatus.get(id) ||
+    manifest.ship.banner.get(id) ||
+    manifest.ship.characterUp.get(id) ||
+    manifest.ship.characterUpDamaged.get(id)
+  );
 }
 
 function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {

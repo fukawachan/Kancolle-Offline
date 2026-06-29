@@ -42,6 +42,14 @@ describe("cached resource manifest", () => {
       frame: "3346",
       pathname: "/kcs2/resources/ship/character_up_dmg/0131_3346.png"
     });
+    expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/silhouette/0698_4471.png", manifest)).toMatchObject({
+      id: 698,
+      pathname: manifest.ship.full.get(698)?.pathname
+    });
+    expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/full_x2/0698_0000.png", manifest)).toMatchObject({
+      id: 698,
+      pathname: manifest.ship.full.get(698)?.pathname
+    });
     expect(manifest.slot.card.get(1)).toMatchObject({
       id: 1,
       pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/card\/0001_\d{4}\.png$/)

@@ -333,8 +333,8 @@ describe("local kcsapi endpoints", () => {
       ])
     );
     expect(start2Data.api_mst_const.api_boko_max_ships).toMatchObject({
-      api_string_value: "300",
-      api_int_value: 300
+      api_string_value: "",
+      api_int_value: 740
     });
     expect(options.json().api_data).toMatchObject({
       api_bgm_flag: 1,
@@ -510,6 +510,96 @@ describe("local kcsapi endpoints", () => {
 
     const after = await post("api_get_member/payitem");
     expect(after.json().api_data).toEqual([]);
+  });
+
+  it("records local shop checkout as pending and releases purchased use items on pickup", async () => {
+    const checkout = await post("api_dmm_payment/paycheck", {
+      api_local_purchase: 1,
+      api_payitem_id: 26,
+      api_price: 500,
+      api_count: 2
+    });
+    expect(checkout.json().api_data).toEqual({ api_check_value: 2 });
+
+    const poll = await post("api_dmm_payment/paycheck");
+    expect(poll.json().api_data).toEqual({ api_check_value: 2 });
+
+    const pending = (await post("api_get_member/payitem")).json().api_data;
+    expect(pending).toEqual([
+      expect.objectContaining({
+        api_payitem_id: "26",
+        api_name: "補強増設",
+        api_count: 2
+      })
+    ]);
+
+    const firstPickup = await post("api_req_member/payitemuse", { api_payitem_id: 26, api_force_flag: 0 });
+    expect(firstPickup.json().api_data).toEqual({ api_caution_flag: 0 });
+    expect((await post("api_get_member/payitem")).json().api_data).toEqual([
+      expect.objectContaining({ api_payitem_id: "26", api_count: 1 })
+    ]);
+    expect((await post("api_get_member/useitem")).json().api_data).toContainEqual({ api_id: 64, api_count: 1 });
+
+    const secondPickup = await post("api_req_member/payitemuse", { api_payitem_id: 26, api_force_flag: 0 });
+    expect(secondPickup.json().api_data).toEqual({ api_caution_flag: 0 });
+    expect((await post("api_get_member/payitem")).json().api_data).toEqual([]);
+    expect((await post("api_get_member/useitem")).json().api_data).toContainEqual({ api_id: 64, api_count: 2 });
+  });
+
+  it("releases material, use item, and slot item rewards from purchased payitems", async () => {
+    await post("api_dmm_payment/paycheck", {
+      api_local_purchase: 1,
+      api_payitem_id: 10,
+      api_price: 1000,
+      api_count: 1
+    });
+    await post("api_req_member/payitemuse", { api_payitem_id: 10, api_force_flag: 0 });
+
+    const afterDockSet = store.getSave();
+    expect(afterDockSet.materials).toMatchObject({
+      buildKit: 16,
+      repairKit: 16,
+      devmat: 56
+    });
+    expect(afterDockSet.useItems).toContainEqual({ id: 49, count: 1 });
+
+    await post("api_dmm_payment/paycheck", {
+      api_local_purchase: 1,
+      api_payitem_id: 12,
+      api_price: 1000,
+      api_count: 1
+    });
+    await post("api_req_member/payitemuse", { api_payitem_id: 12, api_force_flag: 0 });
+
+    const slotMasterCounts = new Map<number, number>();
+    for (const item of store.getSave().slotItems) {
+      slotMasterCounts.set(item.masterId, (slotMasterCounts.get(item.masterId) ?? 0) + 1);
+    }
+    expect(slotMasterCounts.get(42)).toBe(3);
+    expect(slotMasterCounts.get(43)).toBe(2);
+    expect((await post("api_get_member/payitem")).json().api_data).toEqual([]);
+  });
+
+  it("expands port capacity when picking up mother port expansion", async () => {
+    const beforeBasic = (await post("api_get_member/basic")).json().api_data;
+    expect(beforeBasic.api_max_chara).toBe(300);
+    expect(beforeBasic.api_max_slotitem).toBe(500);
+
+    await post("api_dmm_payment/paycheck", {
+      api_local_purchase: 1,
+      api_payitem_id: 16,
+      api_price: 1000,
+      api_count: 1
+    });
+    const pickup = await post("api_req_member/payitemuse", { api_payitem_id: 16, api_force_flag: 0 });
+    expect(pickup.json().api_data).toEqual({ api_caution_flag: 0 });
+
+    const basic = (await post("api_get_member/basic")).json().api_data;
+    const record = (await post("api_get_member/record")).json().api_data;
+    expect(basic.api_max_chara).toBe(310);
+    expect(basic.api_max_slotitem).toBe(540);
+    expect(record.api_ship).toEqual([store.getSave().ships.length, 310]);
+    expect(record.api_slotitem).toEqual([store.getSave().slotItems.length, 537]);
   });
 
   it("publishes medal use item counts through basic aggregates used by the shop", async () => {

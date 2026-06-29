@@ -19,6 +19,7 @@ const TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
   "base64"
 );
+const EMPTY_SPECIAL_REMODEL_ANIMATION_KEYS = JSON.stringify({ keys: [], setting: {} });
 
 export type BuildAppOptions = {
   cacheDir: string;
@@ -155,6 +156,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .type(contentType || "application/octet-stream")
         .header("cache-control", "public, max-age=3600")
         .send(await readFile(mappedFallback.filePath));
+    }
+
+    const specialRemodelFallback = readSpecialRemodelFallback(request.url);
+    if (specialRemodelFallback) {
+      return reply
+        .type(specialRemodelFallback.contentType)
+        .header("cache-control", "public, max-age=3600")
+        .send(specialRemodelFallback.body);
     }
 
     const recordAirbaseFallback = await readRecordAirbaseMaintFallback(options.cacheDir, request.url);
@@ -307,6 +316,25 @@ async function readRecordAirbaseMaintFallback(cacheDir: string, url: string) {
   } catch {
     return null;
   }
+}
+
+function readSpecialRemodelFallback(url: string) {
+  const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
+  const textOrArtPng = pathname.match(
+    /^\/kcs2\/resources\/ship\/sp_remodel\/(text_remodel_mes|text_class|text_name|silhouette|full_x2)\/\d{4}_\d{4}\.png$/i
+  );
+  if (textOrArtPng) {
+    return { contentType: "image/png", body: TRANSPARENT_PNG };
+  }
+
+  if (/^\/kcs2\/resources\/ship\/sp_remodel\/animation_key\/\d{4}_remodel\.json$/i.test(pathname)) {
+    return {
+      contentType: "application/json; charset=utf-8",
+      body: EMPTY_SPECIAL_REMODEL_ANIMATION_KEYS
+    };
+  }
+
+  return null;
 }
 
 async function readPngFallback(cacheDir: string, url: string) {

@@ -12,6 +12,8 @@ export type Player = {
   flagshipPosition: number;
   combinedFleet: number;
   portBgmId: number;
+  maxChara: number;
+  maxSlotItem: number;
 };
 
 export type PlayerOptions = {
