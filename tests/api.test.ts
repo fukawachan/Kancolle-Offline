@@ -460,14 +460,19 @@ describe("local kcsapi endpoints", () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const useitemById = new Map(start2.api_mst_useitem.map((item: any) => [item.api_id, item]));
 
-    expect([...useitemById.keys()]).toEqual(expect.arrayContaining([31, 32, 33, 34, 49, 55, 64]));
-    expect(useitemById.get(31)).toMatchObject({ api_id: 31, api_usetype: 0, api_category: 0, api_name: "燃料" });
-    expect(useitemById.get(32)).toMatchObject({ api_id: 32, api_usetype: 0, api_category: 0, api_name: "弾薬" });
-    expect(useitemById.get(33)).toMatchObject({ api_id: 33, api_usetype: 0, api_category: 0, api_name: "鋼材" });
-    expect(useitemById.get(34)).toMatchObject({ api_id: 34, api_usetype: 0, api_category: 0, api_name: "ボーキサイト" });
+    expect([...useitemById.keys()]).toEqual(expect.arrayContaining([31, 32, 33, 34, 44, 49, 55, 57, 61, 64, 97, 105]));
+    expect(useitemById.get(31)).toMatchObject({ api_id: 31, api_usetype: 6, api_category: 16, api_name: "燃料" });
+    expect(useitemById.get(32)).toMatchObject({ api_id: 32, api_usetype: 6, api_category: 17, api_name: "弾薬" });
+    expect(useitemById.get(33)).toMatchObject({ api_id: 33, api_usetype: 6, api_category: 18, api_name: "鋼材" });
+    expect(useitemById.get(34)).toMatchObject({ api_id: 34, api_usetype: 6, api_category: 19, api_name: "ボーキサイト" });
+    expect(useitemById.get(44)).toMatchObject({ api_id: 44, api_usetype: 6, api_category: 21, api_name: "家具コイン" });
     expect(useitemById.get(49)).toMatchObject({ api_id: 49, api_name: "ドック開放キー", api_description: [expect.any(String)] });
-    expect(useitemById.get(55)).toMatchObject({ api_id: 55, api_name: "ケッコン指輪", api_description: [expect.any(String)] });
+    expect(useitemById.get(55)).toMatchObject({ api_id: 55, api_name: "書類一式＆指輪", api_description: [expect.any(String)] });
+    expect(useitemById.get(57)).toMatchObject({ api_id: 57, api_usetype: 4, api_name: "勲章", api_description: [expect.any(String)] });
+    expect(useitemById.get(61)).toMatchObject({ api_id: 61, api_usetype: 4, api_name: "甲種勲章", api_description: [expect.any(String)] });
     expect(useitemById.get(64)).toMatchObject({ api_id: 64, api_name: "補強増設", api_description: [expect.any(String)] });
+    expect(useitemById.get(97)).toMatchObject({ api_id: 97, api_usetype: 4, api_name: "てるてる坊主", api_description: [expect.any(String)] });
+    expect(useitemById.get(105)).toMatchObject({ api_id: 105, api_usetype: 0, api_category: 0, api_name: "格納庫増設" });
   });
 
   it("provides official non-payment shop masters and cabinet order", async () => {
@@ -518,6 +523,78 @@ describe("local kcsapi endpoints", () => {
     expect(basic.json().api_data.api_medals).toBe(30);
     expect(port.json().api_data.api_basic.api_medals).toBe(30);
     expect(requireInfo.json().api_data.api_basic.api_medals).toBe(30);
+  });
+
+  it("publishes every shop resource count through the client-read API path", async () => {
+    store.db.prepare(`
+      UPDATE materials
+      SET fuel = 111, ammo = 222, steel = 333, bauxite = 444,
+        repair_kit = 55, build_kit = 66, devmat = 77, screw = 88
+      WHERE player_id = 1
+    `).run();
+    store.db.prepare("UPDATE furniture SET coins = 345 WHERE id = 1").run();
+    store.db.prepare(`
+      INSERT INTO use_items (id, count) VALUES
+        (57, 30),
+        (58, 2),
+        (61, 3),
+        (78, 4),
+        (97, 5),
+        (105, 6)
+    `).run();
+
+    const material = (await post("api_get_member/material")).json().api_data;
+    const useitem = (await post("api_get_member/useitem")).json().api_data;
+    const basic = (await post("api_get_member/basic")).json().api_data;
+    const port = (await post("api_port/port")).json().api_data;
+    const requireInfo = (await post("api_get_member/require_info")).json().api_data;
+
+    expect(material).toMatchObject([
+      { api_id: 1, api_value: 111 },
+      { api_id: 2, api_value: 222 },
+      { api_id: 3, api_value: 333 },
+      { api_id: 4, api_value: 444 },
+      { api_id: 5, api_value: 66 },
+      { api_id: 6, api_value: 55 },
+      { api_id: 7, api_value: 77 },
+      { api_id: 8, api_value: 88 }
+    ]);
+    expect(useitem).toEqual(expect.arrayContaining([
+      { api_id: 1, api_count: 55 },
+      { api_id: 2, api_count: 66 },
+      { api_id: 3, api_count: 77 },
+      { api_id: 4, api_count: 88 },
+      { api_id: 57, api_count: 30 },
+      { api_id: 58, api_count: 2 },
+      { api_id: 61, api_count: 3 },
+      { api_id: 78, api_count: 4 },
+      { api_id: 97, api_count: 5 },
+      { api_id: 105, api_count: 6 }
+    ]));
+    expect(basic).toMatchObject({ api_fcoin: 345, api_medals: 30 });
+    expect(port.api_basic).toMatchObject({ api_fcoin: 345, api_medals: 30 });
+    expect(requireInfo.api_basic).toMatchObject({ api_fcoin: 345, api_medals: 30 });
+    expect(requireInfo.api_useitem).toEqual(expect.arrayContaining([
+      { api_id: 61, api_count: 3 },
+      { api_id: 97, api_count: 5 },
+      { api_id: 105, api_count: 6 }
+    ]));
+  });
+
+  it("keeps absent medal and special use item counts empty by default", async () => {
+    const basic = (await post("api_get_member/basic")).json().api_data;
+    const port = (await post("api_port/port")).json().api_data;
+    const requireInfo = (await post("api_get_member/require_info")).json().api_data;
+    const useitem = (await post("api_get_member/useitem")).json().api_data;
+    const ids = new Set(useitem.map((item: any) => item.api_id));
+
+    expect(basic.api_medals).toBe(0);
+    expect(port.api_basic.api_medals).toBe(0);
+    expect(requireInfo.api_basic.api_medals).toBe(0);
+    expect(ids.has(57)).toBe(false);
+    expect(ids.has(61)).toBe(false);
+    expect(ids.has(97)).toBe(false);
+    expect(ids.has(105)).toBe(false);
   });
 
   it("serves shop fairy item image fallbacks without broadening missing PNG fallback", async () => {
