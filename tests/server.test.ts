@@ -95,6 +95,12 @@ describe("local Fastify server", () => {
     const originalPostMessages: unknown[][] = [];
     const messageEvents: FakeMessageEvent[] = [];
     const checkoutRequests: Array<{ url: string; body: string }> = [];
+    const checkoutResponses = [
+      { ok: true, text: `svdata=${JSON.stringify({ api_result: 1, api_data: { api_check_value: 2 } })}` },
+      { ok: true, text: JSON.stringify({ api_result: 1, api_data: { api_check_value: 2 } }) },
+      { ok: true, text: "svdata=not-json" },
+      { ok: false, text: "" }
+    ];
     const listeners: Record<string, Array<(event: FakeMessageEvent) => void>> = {};
     const fakeWindow: any = {
       __KANCOLLE_LOCAL__: { query: { osapi_root: "osapi.dmm.com" } },
@@ -127,9 +133,10 @@ describe("local Fastify server", () => {
       MessageEvent: FakeMessageEvent,
       fetch: async (url: string, init: { body?: string } = {}) => {
         checkoutRequests.push({ url, body: String(init.body ?? "") });
+        const response = checkoutResponses.shift() ?? { ok: false, text: "" };
         return {
-          ok: true,
-          json: async () => ({ api_result: 1, api_data: { api_check_value: 2 } })
+          ok: response.ok,
+          text: async () => response.text
         };
       },
       setTimeout: (callback: () => void) => {
@@ -165,10 +172,46 @@ describe("local Fastify server", () => {
       origin: "https://osapi.dmm.com",
       data: "2"
     });
+    received = undefined;
+    expect(() => fakeWindow.parent.postMessage(
+      "0\t26\t500\t1\t補強増設\t補強増設\thttp://127.0.0.1:3020/kcs/images/purchase_items/26.jpg",
+      "https://osapi.dmm.com"
+    )).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(received).toMatchObject({ data: "2" });
+
+    received = undefined;
+    expect(() => fakeWindow.parent.postMessage(
+      "0\t26\t500\t1\t補強増設\t補強増設\thttp://127.0.0.1:3020/kcs/images/purchase_items/26.jpg",
+      "https://osapi.dmm.com"
+    )).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(received).toMatchObject({ data: "-1" });
+
+    received = undefined;
+    expect(() => fakeWindow.parent.postMessage(
+      "0\t26\t500\t1\t補強増設\t補強増設\thttp://127.0.0.1:3020/kcs/images/purchase_items/26.jpg",
+      "https://osapi.dmm.com"
+    )).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(received).toMatchObject({ data: "-1" });
+
     expect(checkoutRequests).toEqual([
       {
         url: "/kcsapi/api_dmm_payment/paycheck",
         body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=2"
+      },
+      {
+        url: "/kcsapi/api_dmm_payment/paycheck",
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1"
+      },
+      {
+        url: "/kcsapi/api_dmm_payment/paycheck",
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1"
+      },
+      {
+        url: "/kcsapi/api_dmm_payment/paycheck",
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1"
       }
     ]);
     expect(originalPostMessages).toEqual([]);
@@ -179,7 +222,14 @@ describe("local Fastify server", () => {
       ["0\titem", "https://osapi.dmm.com"],
       ["2\tFirst Fleet", "https://example.com"]
     ]);
-    expect(messageEvents).toHaveLength(2);
+    expect(messageEvents).toHaveLength(5);
+    expect(messageEvents.map((event) => event.data)).toEqual([
+      expect.stringMatching(/^local-inspection-2-/),
+      "2",
+      "2",
+      "-1",
+      "-1"
+    ]);
   });
 
   it("serves the local launcher and single-world registration page", async () => {

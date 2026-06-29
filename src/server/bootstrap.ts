@@ -184,7 +184,10 @@ function renderLocalOsapiBridgeScript() {
             body: body.toString()
           })
             .then(function parseResponse(response) {
-              return response && response.ok ? response.json() : null;
+              return response && response.ok && typeof response.text === "function" ? response.text() : null;
+            })
+            .then(function parsePayload(text) {
+              return parseApiResponsePayload(text);
             })
             .then(function dispatchCheckoutResult(payload) {
               var ok = payload && payload.api_result === 1
@@ -195,6 +198,19 @@ function renderLocalOsapiBridgeScript() {
             .catch(function dispatchCheckoutFailure() {
               dispatchOsapiMessage("-1");
             });
+        }
+
+        function parseApiResponsePayload(text) {
+          if (typeof text !== "string") return null;
+          var body = text.trim();
+          if (body.indexOf("svdata=") === 0) {
+            body = body.slice("svdata=".length);
+          }
+          try {
+            return JSON.parse(body);
+          } catch (_error) {
+            return null;
+          }
         }
 
         function dispatchOsapiMessage(data) {
