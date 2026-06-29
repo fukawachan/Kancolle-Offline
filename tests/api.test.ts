@@ -65,6 +65,17 @@ describe("local kcsapi endpoints", () => {
     store.db.prepare("DELETE FROM slot_items").run();
   }
 
+  function seedUseItem(itemId: number, count: number) {
+    store.db.prepare(`
+      INSERT INTO use_items (id, count) VALUES (?, ?)
+      ON CONFLICT(id) DO UPDATE SET count = excluded.count
+    `).run(itemId, count);
+  }
+
+  function useItemCount(itemId: number) {
+    return store.getSave().useItems.find((item) => item.id === itemId)?.count ?? 0;
+  }
+
   async function remodelCandidateFor(sourceMasterId: number) {
     const list = (await post("api_req_kousyou/remodel_slotlist")).json().api_data;
     expect(Array.isArray(list)).toBe(true);
@@ -600,6 +611,176 @@ describe("local kcsapi endpoints", () => {
     expect(basic.api_max_slotitem).toBe(540);
     expect(record.api_ship).toEqual([store.getSave().ships.length, 310]);
     expect(record.api_slotitem).toEqual([store.getSave().slotItems.length, 537]);
+  });
+
+  it("exchanges medals for resources and consumes one medal", async () => {
+    store.db.prepare(`
+      UPDATE materials
+      SET fuel = 100, ammo = 200, steel = 300, bauxite = 400, repair_kit = 5
+      WHERE player_id = 1
+    `).run();
+    seedUseItem(57, 5);
+
+    const response = await post("api_req_member/itemuse", {
+      api_useitem_id: 57,
+      api_force_flag: 1,
+      api_exchange_type: 0
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_caution_flag: 0,
+        api_material: [300, 300, 300, 300, 0, 2, 0, 0]
+      }
+    });
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 400,
+      ammo: 500,
+      steel: 600,
+      bauxite: 700,
+      repairKit: 7
+    });
+    expect(useItemCount(57)).toBe(4);
+  });
+
+  it("exchanges four medals for a remodel blueprint", async () => {
+    seedUseItem(57, 4);
+
+    const response = await post("api_req_member/itemuse", {
+      api_useitem_id: 57,
+      api_force_flag: 1,
+      api_exchange_type: 1
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_caution_flag: 0,
+        api_getitem: [{ api_usemst: 6, api_mst_id: 58, api_getcount: 1 }]
+      }
+    });
+    expect(useItemCount(57)).toBe(0);
+    expect(useItemCount(58)).toBe(1);
+  });
+
+  it("exchanges medals for improvement materials", async () => {
+    store.db.prepare("UPDATE materials SET screw = 10 WHERE player_id = 1").run();
+    seedUseItem(57, 2);
+
+    const response = await post("api_req_member/itemuse", {
+      api_useitem_id: 57,
+      api_force_flag: 1,
+      api_exchange_type: 2
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_caution_flag: 0,
+        api_material: [0, 0, 0, 0, 0, 0, 0, 4]
+      }
+    });
+    expect(store.getSave().materials.screw).toBe(14);
+    expect(useItemCount(57)).toBe(1);
+  });
+
+  it("rejects use item exchange when inventory is insufficient without mutating save", async () => {
+    store.db.prepare(`
+      UPDATE materials
+      SET fuel = 100, ammo = 200, steel = 300, bauxite = 400, repair_kit = 5
+      WHERE player_id = 1
+    `).run();
+    seedUseItem(57, 3);
+
+    const response = await post("api_req_member/itemuse", {
+      api_useitem_id: 57,
+      api_force_flag: 1,
+      api_exchange_type: 1
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 400,
+      api_result_msg: "Insufficient use item count"
+    });
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 100,
+      ammo: 200,
+      steel: 300,
+      bauxite: 400,
+      repairKit: 5
+    });
+    expect(useItemCount(57)).toBe(3);
+    expect(useItemCount(58)).toBe(0);
+  });
+
+  it("exchanges a first-class medal for resources and large furniture boxes", async () => {
+    store.db.prepare("UPDATE materials SET fuel = 1000, devmat = 50, screw = 10 WHERE player_id = 1").run();
+    seedUseItem(61, 1);
+
+    const response = await post("api_req_member/itemuse", {
+      api_useitem_id: 61,
+      api_force_flag: 1
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_caution_flag: 0,
+        api_material: [10000, 0, 0, 0, 0, 0, 10, 10],
+        api_getitem: [{ api_usemst: 6, api_mst_id: 12, api_getcount: 10 }]
+      }
+    });
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 11000,
+      devmat: 60,
+      screw: 20
+    });
+    expect(useItemCount(61)).toBe(0);
+    expect(useItemCount(12)).toBe(10);
+  });
+
+  it("opens furniture boxes into furniture coins and consumes the boxes", async () => {
+    store.db.prepare("UPDATE furniture SET coins = 100 WHERE id = 1").run();
+    seedUseItem(10, 1);
+    seedUseItem(11, 1);
+    seedUseItem(12, 1);
+
+    const small = await post("api_req_member/itemuse", { api_useitem_id: 10, api_force_flag: 1 });
+    const medium = await post("api_req_member/itemuse", { api_useitem_id: 11, api_force_flag: 1 });
+    const large = await post("api_req_member/itemuse", { api_useitem_id: 12, api_force_flag: 1 });
+
+    expect(small.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_getitem: [{ api_usemst: 5, api_mst_id: 44, api_getcount: 200 }] }
+    });
+    expect(medium.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_getitem: [{ api_usemst: 5, api_mst_id: 44, api_getcount: 400 }] }
+    });
+    expect(large.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_getitem: [{ api_usemst: 5, api_mst_id: 44, api_getcount: 700 }] }
+    });
+    expect(store.getSave().furniture.coins).toBe(1400);
+    expect(useItemCount(10)).toBe(0);
+    expect(useItemCount(11)).toBe(0);
+    expect(useItemCount(12)).toBe(0);
+  });
+
+  it("rejects unsupported usable items without consuming them", async () => {
+    seedUseItem(60, 1);
+
+    const response = await post("api_req_member/itemuse", {
+      api_useitem_id: 60,
+      api_force_flag: 1
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 400,
+      api_result_msg: "Use item is not implemented"
+    });
+    expect(useItemCount(60)).toBe(1);
   });
 
   it("publishes medal use item counts through basic aggregates used by the shop", async () => {

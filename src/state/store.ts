@@ -128,6 +128,24 @@ type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; 
 type PendingPayItem = { id: number; count: number };
 type PendingPayItemResult = { ok: true; item: PendingPayItem } | { ok: false; error: string };
 type PayItemPickupResult = { ok: true; cautionFlag: 0 | 1 } | { ok: false; error: string };
+type UseItemMaterialReward = readonly [number, number, number, number, number, number, number, number];
+type UseItemGetItemReward = {
+  usemst: number;
+  masterId: number;
+  count: number;
+  slotItem?: JsonObject;
+};
+type UseItemUseResult =
+  | { ok: true; cautionFlag: 0 | 1; materialRewards: UseItemMaterialReward; getItems: UseItemGetItemReward[] }
+  | { ok: false; error: string };
+type UseItemAction = {
+  cost: Array<{ id: number; count: number }>;
+  materials: MaterialDelta;
+  materialRewards: UseItemMaterialReward;
+  useItems: Array<{ id: number; count: number }>;
+  furnitureCoins: number;
+  getItems: UseItemGetItemReward[];
+};
 type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
 type ModernizeOptions = { destroyConsumedEquipment?: boolean };
 type QuestClearResult =
@@ -201,6 +219,13 @@ const MATERIAL_USEITEM_COLUMNS = new Map<number, keyof Materials>([
   [3, "devmat"],
   [4, "screw"]
 ]);
+const MEDAL_USEITEM_ID = 57;
+const REMODEL_BLUEPRINT_USEITEM_ID = 58;
+const FIRST_CLASS_MEDAL_USEITEM_ID = 61;
+const FURNITURE_COIN_USEITEM_ID = 44;
+const LARGE_FURNITURE_BOX_USEITEM_ID = 12;
+const USEITEM_GET_REWARD_TYPE = 6;
+const FURNITURE_COIN_REWARD_TYPE = 5;
 const PAYITEM_EXTRA_REWARDS = new Map<number, {
   useItems?: Array<{ id: number; count: number }>;
   slotItems?: Array<{ masterId: number; count: number }>;
@@ -376,6 +401,8 @@ export function createStateStore(options: StateStoreOptions) {
       setShipLevel(db, shipId, level),
     setUseItemCount: (itemId: number, count: number): UseItemSetResult =>
       setUseItemCount(db, itemId, count),
+    useItem: (itemId: number, exchangeType = 0, force = false): UseItemUseResult =>
+      useItem(db, itemId, exchangeType, force),
     setBasicMaterials: (materials: BasicMaterialCounts): BasicMaterialSetResult =>
       setBasicMaterials(db, materials),
     pendingPayItems: () => pendingPayItems(db),
@@ -2979,6 +3006,145 @@ function setUseItemCount(db: Database.Database, itemId: number, count: number): 
     `).run(id, nextCount);
   }
   return { ok: true, item: { id, count: nextCount } };
+}
+
+function useItem(db: Database.Database, itemId: number, exchangeType: number, force: boolean): UseItemUseResult {
+  void force;
+  const id = Math.trunc(Number(itemId));
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Unknown use item" };
+  const master = masterData.api_mst_useitem.find((item) => item.api_id === id);
+  if (!master) return { ok: false, error: "Unknown use item" };
+  if (safeNum(master.api_usetype) !== 4) return { ok: false, error: "Unsupported use item" };
+
+  const requestedExchangeType = Math.trunc(Number(exchangeType));
+  const action = useItemAction(id, requestedExchangeType);
+  if (!action) return useItemActionError(id, requestedExchangeType);
+
+  const save = getSave(db);
+  const cost = useItemCostMap(action.cost);
+  if (!hasUseItems(save.useItems, cost)) return { ok: false, error: "Insufficient use item count" };
+
+  const tx = db.transaction(() => {
+    consumeUseItemCosts(db, cost);
+    if (action.materialRewards.some((value) => value > 0)) addMaterials(db, action.materials);
+    for (const reward of action.useItems) addUseItem(db, reward.id, reward.count);
+    addFurnitureCoins(db, action.furnitureCoins);
+  });
+  tx();
+
+  return {
+    ok: true,
+    cautionFlag: 0,
+    materialRewards: action.materialRewards,
+    getItems: action.getItems
+  };
+}
+
+function useItemAction(itemId: number, exchangeType: number): UseItemAction | null {
+  switch (itemId) {
+    case MEDAL_USEITEM_ID:
+      return medalUseItemAction(exchangeType);
+    case FIRST_CLASS_MEDAL_USEITEM_ID:
+      return exchangeType === 0
+        ? useItemActionDefinition({
+          cost: [{ id: FIRST_CLASS_MEDAL_USEITEM_ID, count: 1 }],
+          materials: { fuel: 10000, devmat: 10, screw: 10 },
+          useItems: [{ id: LARGE_FURNITURE_BOX_USEITEM_ID, count: 10 }],
+          getItems: [{ usemst: USEITEM_GET_REWARD_TYPE, masterId: LARGE_FURNITURE_BOX_USEITEM_ID, count: 10 }]
+        })
+        : null;
+    case 10:
+      return furnitureBoxUseItemAction(10, 200, exchangeType);
+    case 11:
+      return furnitureBoxUseItemAction(11, 400, exchangeType);
+    case 12:
+      return furnitureBoxUseItemAction(12, 700, exchangeType);
+    default:
+      return null;
+  }
+}
+
+function medalUseItemAction(exchangeType: number): UseItemAction | null {
+  switch (exchangeType) {
+    case 0:
+      return useItemActionDefinition({
+        cost: [{ id: MEDAL_USEITEM_ID, count: 1 }],
+        materials: { fuel: 300, ammo: 300, steel: 300, bauxite: 300, repairKit: 2 }
+      });
+    case 1:
+      return useItemActionDefinition({
+        cost: [{ id: MEDAL_USEITEM_ID, count: 4 }],
+        useItems: [{ id: REMODEL_BLUEPRINT_USEITEM_ID, count: 1 }],
+        getItems: [{ usemst: USEITEM_GET_REWARD_TYPE, masterId: REMODEL_BLUEPRINT_USEITEM_ID, count: 1 }]
+      });
+    case 2:
+      return useItemActionDefinition({
+        cost: [{ id: MEDAL_USEITEM_ID, count: 1 }],
+        materials: { screw: 4 }
+      });
+    default:
+      return null;
+  }
+}
+
+function furnitureBoxUseItemAction(itemId: number, coins: number, exchangeType: number): UseItemAction | null {
+  if (exchangeType !== 0) return null;
+  return useItemActionDefinition({
+    cost: [{ id: itemId, count: 1 }],
+    furnitureCoins: coins,
+    getItems: [{ usemst: FURNITURE_COIN_REWARD_TYPE, masterId: FURNITURE_COIN_USEITEM_ID, count: coins }]
+  });
+}
+
+function useItemActionDefinition(action: Partial<UseItemAction> & Pick<UseItemAction, "cost">): UseItemAction {
+  const materials = action.materials ?? {};
+  return {
+    cost: action.cost,
+    materials,
+    materialRewards: action.materialRewards ?? materialRewardValues(materials),
+    useItems: action.useItems ?? [],
+    furnitureCoins: action.furnitureCoins ?? 0,
+    getItems: action.getItems ?? []
+  };
+}
+
+function useItemActionError(itemId: number, exchangeType: number): UseItemUseResult {
+  const id = Math.trunc(Number(itemId));
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Unknown use item" };
+  const master = masterData.api_mst_useitem.find((item) => item.api_id === id);
+  if (!master) return { ok: false, error: "Unknown use item" };
+  if (safeNum(master.api_usetype) !== 4) return { ok: false, error: "Unsupported use item" };
+
+  if (
+    (id === MEDAL_USEITEM_ID && ![0, 1, 2].includes(exchangeType))
+    || ([FIRST_CLASS_MEDAL_USEITEM_ID, 10, 11, 12].includes(id) && exchangeType !== 0)
+  ) {
+    return { ok: false, error: "Unsupported use item exchange type" };
+  }
+  return { ok: false, error: "Use item is not implemented" };
+}
+
+function materialRewardValues(delta: MaterialDelta): UseItemMaterialReward {
+  return [
+    rewardAmount(delta.fuel),
+    rewardAmount(delta.ammo),
+    rewardAmount(delta.steel),
+    rewardAmount(delta.bauxite),
+    rewardAmount(delta.buildKit),
+    rewardAmount(delta.repairKit),
+    rewardAmount(delta.devmat),
+    rewardAmount(delta.screw)
+  ];
+}
+
+function rewardAmount(value: number | undefined) {
+  return Math.max(0, Math.trunc(Number(value ?? 0)));
+}
+
+function addFurnitureCoins(db: Database.Database, coins: number) {
+  const count = Math.max(0, Math.trunc(Number(coins)));
+  if (count <= 0) return;
+  db.prepare("UPDATE furniture SET coins = max(0, coins + ?) WHERE id = 1").run(count);
 }
 
 function setMaterialUseItemCount(db: Database.Database, material: keyof Materials, count: number) {

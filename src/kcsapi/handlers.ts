@@ -209,7 +209,26 @@ register("api_req_member/set_option_setting", (input, context) => {
   return apiOk(options);
 });
 register("api_req_member/set_flagship_position", (input, context) => apiOk({ api_flagship_position: context.stateStore.setFlagshipPosition(num(input.body.api_flagship_position, 0)) }));
-register("api_req_member/itemuse", () => apiOk({ api_caution_flag: 0 }));
+register("api_req_member/itemuse", (input, context) => {
+  const result = context.stateStore.useItem(
+    num(input.body.api_useitem_id, 0),
+    num(input.body.api_exchange_type, 0),
+    num(input.body.api_force_flag, 0) === 1
+  );
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+
+  const payload: Record<string, unknown> = { api_caution_flag: result.cautionFlag };
+  if (result.materialRewards.some((value) => value > 0)) payload.api_material = [...result.materialRewards];
+  if (result.getItems.length > 0) {
+    payload.api_getitem = result.getItems.map((item) => ({
+      api_usemst: item.usemst,
+      api_mst_id: item.masterId,
+      api_getcount: item.count,
+      ...(item.slotItem ? { api_slotitem: item.slotItem } : {})
+    }));
+  }
+  return apiOk(payload);
+});
 register("api_req_member/itemuse_cond", () => apiOk({ api_caution_flag: 0 }));
 register("api_req_member/payitemuse", (input, context) => {
   const result = context.stateStore.pickupPendingPayItem(
