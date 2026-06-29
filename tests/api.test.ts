@@ -57,6 +57,7 @@ describe("local kcsapi endpoints", () => {
     vi.setSystemTime(new Date("2026-06-28T03:00:00.000Z")); // Sunday noon in JST.
     const akashi = store.createShip(187);
     store.changeDeckShip(1, 0, akashi.id);
+    store.clearDeckFollowerShips(1);
     return akashi;
   }
 
@@ -763,7 +764,28 @@ describe("local kcsapi endpoints", () => {
     expect(list).toEqual([]);
   });
 
-  it("lists current Akashi factory candidates from owned equipment and JST weekday rules", async () => {
+  it("lists three current Akashi factory candidates even when only one target equipment is owned", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+    store.createSlotItem(2);
+
+    const list = (await post("api_req_kousyou/remodel_slotlist")).json().api_data;
+
+    expect(list.map((item: any) => item.api_slot_id)).toEqual([2, 4, 14]);
+    expect(list).toHaveLength(3);
+  });
+
+  it("lists three current Akashi factory candidates even when no target equipment is owned", async () => {
+    prepareAkashiFactory();
+    resetSlotItems();
+
+    const list = (await post("api_req_kousyou/remodel_slotlist")).json().api_data;
+
+    expect(list.map((item: any) => item.api_slot_id)).toEqual([2, 4, 14]);
+    expect(list).toHaveLength(3);
+  });
+
+  it("lists current Akashi factory candidate costs from JST weekday rules", async () => {
     prepareAkashiFactory();
     resetSlotItems();
     store.createSlotItem(2);

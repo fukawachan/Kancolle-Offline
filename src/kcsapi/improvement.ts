@@ -48,11 +48,7 @@ export function remodelSlotListPayload(save: SaveState, now = new Date()) {
   for (const recipe of improvementRecipes) {
     if (entries.length >= 3) break;
     if (!recipeAvailable(recipe, context.weekday, context.assistantShipMasterId)) continue;
-    const target = firstUpgradeableTarget(save, recipe);
-    if (!target) continue;
-    const selected = selectedStageForLevel(recipe, target.level);
-    if (!selected) continue;
-    entries.push(listEntry(recipe, selected.stage));
+    entries.push(listEntry(recipe, recipe.stages.low));
   }
   return entries;
 }
