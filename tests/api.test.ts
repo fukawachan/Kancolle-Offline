@@ -2431,11 +2431,32 @@ describe("local kcsapi endpoints", () => {
       api_deck_id: 2
     });
     const data = response.json().api_data;
-    const deckById = new Map(data.api_deck.map((deck: any) => [deck.api_id, deck]));
+    const decks = (await post("api_get_member/deck")).json().api_data;
+    const deckById = new Map(decks.map((deck: any) => [deck.api_id, deck]));
 
     expect(response.json()).toMatchObject({ api_result: 1 });
+    expect(data).toMatchObject({ api_id: 2, api_ship: [1, 2, -1, -1, -1, -1] });
     expect(deckById.get(1)).toMatchObject({ api_ship: [-1, -1, -1, -1, -1, -1] });
     expect(deckById.get(2)).toMatchObject({ api_ship: [1, 2, -1, -1, -1, -1] });
+  });
+
+  it("returns the deployed deck when applying a formation preset to the current deck", async () => {
+    await post("api_req_hensei/preset_register", { api_deck_id: 1, api_preset_no: 1, api_name: "Main" });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: 3 });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 1, api_ship_id: 4 });
+
+    const response = await post("api_req_hensei/preset_select", {
+      api_preset_no: 1,
+      api_deck_id: 1
+    });
+    const data = response.json().api_data;
+
+    expect(response.json()).toMatchObject({ api_result: 1 });
+    expect(data).toMatchObject({ api_id: 1, api_ship: [1, 2, -1, -1, -1, -1] });
+    expect((await post("api_get_member/deck")).json().api_data[0]).toMatchObject({
+      api_id: 1,
+      api_ship: [1, 2, -1, -1, -1, -1]
+    });
   });
 
   it("provides equippable ship type metadata for the remodel equipment list", async () => {

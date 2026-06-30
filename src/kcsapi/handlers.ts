@@ -285,11 +285,14 @@ register("api_req_hensei/preset_register", (input, context) => {
   return preset ? apiOk(toPresetDeck(preset)) : apiError("Unknown deck or formation preset slot", 400, {}, 400);
 });
 register("api_req_hensei/preset_select", (input, context) => {
+  const deckId = num(input.body.api_deck_id ?? input.body.api_id, 1);
   const result = context.stateStore.selectPresetDeck(
     num(input.body.api_preset_no ?? input.body.api_preset_id, 1),
-    num(input.body.api_deck_id ?? input.body.api_id, 1)
+    deckId
   );
-  return result.ok ? apiOk({ api_deck: result.decks.map(toDeck) }) : apiError(result.error, 400, {}, 400);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  const deck = result.decks.find((item) => item.id === deckId);
+  return deck ? apiOk(toDeck(deck)) : apiError("Unknown deck", 400, {}, 400);
 });
 register("api_req_hensei/preset_delete", (input, context) => {
   const deleted = context.stateStore.deletePresetDeck(num(input.body.api_preset_no ?? input.body.api_preset_id, 1));
