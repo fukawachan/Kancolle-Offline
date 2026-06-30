@@ -26,7 +26,7 @@ import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
-import type { PresetSlot, PresetSlotItem, SaveState } from "../state/types.js";
+import type { PresetDeck, PresetSlot, PresetSlotItem, SaveState } from "../state/types.js";
 import {
   battleResultPayload,
   createCombinedBattle,
@@ -156,7 +156,7 @@ register("api_get_member/mapinfo", (_input, context) =>
 register("api_get_member/mission", (_input, context) =>
   apiOk(context.stateStore.getMissionMemberState())
 );
-register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
+register("api_get_member/preset_deck", (_input, context) => apiOk(presetDeckPayload(context.stateStore.getSave())));
 register("api_get_member/preset_slot", (_input, context) => apiOk(presetSlotPayload(context.stateStore.getSave())));
 register("api_get_member/payitem", (_input, context) => apiOk(
   context.stateStore.pendingPayItems().map(pendingPayItemPayload)
@@ -274,12 +274,40 @@ register("api_req_hensei/change", (input, context) => {
 });
 register("api_req_hensei/lock", (input, context) => apiOk({ api_locked: context.stateStore.toggleShipLock(num(input.body.api_ship_id, 1)) }));
 register("api_req_hensei/combined", (input, context) => apiOk({ api_combined_flag: context.stateStore.setCombinedFleet(num(input.body.api_combined_type, 0)) }));
-register("api_req_hensei/preset_register", () => apiOk({ api_preset_no: 1 }));
-register("api_req_hensei/preset_select", (_input, context) => apiOk({ api_deck: context.stateStore.getSave().decks.map(toDeck) }));
-register("api_req_hensei/preset_delete", () => apiOk({}));
-register("api_req_hensei/preset_expand", () => apiOk({ api_max_num: 1 }));
-register("api_req_hensei/preset_lock", () => apiOk({}));
-register("api_req_hensei/preset_order_change", () => apiOk({}));
+register("api_req_hensei/preset_register", (input, context) => {
+  const preset = context.stateStore.registerPresetDeck(
+    num(input.body.api_deck_id ?? input.body.api_id, 1),
+    num(input.body.api_preset_no ?? input.body.api_preset_id, 1),
+    str(input.body.api_name, "")
+  );
+  return preset ? apiOk(toPresetDeck(preset)) : apiError("Unknown deck or formation preset slot", 400, {}, 400);
+});
+register("api_req_hensei/preset_select", (input, context) => {
+  const result = context.stateStore.selectPresetDeck(
+    num(input.body.api_preset_no ?? input.body.api_preset_id, 1),
+    num(input.body.api_deck_id ?? input.body.api_id, 1)
+  );
+  return result.ok ? apiOk({ api_deck: result.decks.map(toDeck) }) : apiError(result.error, 400, {}, 400);
+});
+register("api_req_hensei/preset_delete", (input, context) => {
+  const deleted = context.stateStore.deletePresetDeck(num(input.body.api_preset_no ?? input.body.api_preset_id, 1));
+  return deleted ? apiOk({}) : apiError("Unknown formation preset slot", 400, {}, 400);
+});
+register("api_req_hensei/preset_expand", (_input, context) => {
+  const result = context.stateStore.expandPresetDecks();
+  return result.ok ? apiOk({ api_max_num: result.maxNum }) : apiError(result.error, 400, {}, 400);
+});
+register("api_req_hensei/preset_lock", (input, context) => {
+  const preset = context.stateStore.togglePresetDeckLock(num(input.body.api_preset_no ?? input.body.api_preset_id, 1));
+  return preset ? apiOk({}) : apiError("Unknown formation preset slot", 400, {}, 400);
+});
+register("api_req_hensei/preset_order_change", (input, context) => {
+  const swapped = context.stateStore.swapPresetDecks(
+    num(input.body.api_preset_from, 1),
+    num(input.body.api_preset_to, 1)
+  );
+  return swapped ? apiOk({}) : apiError("Unknown formation preset slot", 400, {}, 400);
+});
 
 register("api_req_hokyu/charge", (input, context) => {
   const supplied = context.stateStore.supplyShips(csvNums(input.body.api_id_items, [1]), {
@@ -830,6 +858,26 @@ function toQuestBonus(bonus: { type: number; name: string; count: number; item?:
     api_count: bonus.count,
     api_name: bonus.name,
     api_item: bonus.item ?? {}
+  };
+}
+
+function presetDeckPayload(save: SaveState) {
+  const apiDeck: Record<string, ReturnType<typeof toPresetDeck>> = {};
+  for (const preset of save.presetDecks) {
+    apiDeck[String(preset.presetNo)] = toPresetDeck(preset);
+  }
+  return {
+    api_max_num: save.presetDeckSettings.maxNum,
+    api_deck: apiDeck
+  };
+}
+
+function toPresetDeck(preset: PresetDeck) {
+  return {
+    api_preset_no: preset.presetNo,
+    api_name: preset.name,
+    api_ship: preset.shipIds,
+    api_lock_flag: preset.locked
   };
 }
 

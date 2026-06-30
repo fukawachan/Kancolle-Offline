@@ -84,6 +84,7 @@ import type {
   Materials,
   Player,
   PlayerOptions,
+  PresetDeck,
   PresetSlot,
   PresetSlotItem,
   Quest,
@@ -137,6 +138,8 @@ type PresetSlotSelectResult =
   | { ok: true; ship: Ship; materials: Materials }
   | { ok: false; error: string };
 type PresetSlotExpandResult = { ok: true; maxNum: number } | { ok: false; error: string };
+type PresetDeckSelectResult = { ok: true; decks: Deck[] } | { ok: false; error: string };
+type PresetDeckExpandResult = { ok: true; maxNum: number } | { ok: false; error: string };
 type PendingPayItem = { id: number; count: number };
 type PendingPayItemResult = { ok: true; item: PendingPayItem } | { ok: false; error: string };
 type PayItemPickupResult = { ok: true; cautionFlag: 0 | 1 } | { ok: false; error: string };
@@ -181,7 +184,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 14;
+const SCHEMA_VERSION = 15;
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -194,6 +197,10 @@ const DEFAULT_PRESET_SLOT_COUNT = 4;
 const MAX_PRESET_SLOT_COUNT = 18;
 const PRESET_SLOT_EXPAND_STEP = 2;
 const PRESET_SLOT_EXPAND_USEITEM_ID = 49;
+const DEFAULT_PRESET_DECK_COUNT = 3;
+const MAX_PRESET_DECK_COUNT = 20;
+const PRESET_DECK_EXPAND_STEP = 1;
+const PRESET_DECK_EXPAND_USEITEM_ID = 49;
 const PRESET_DEPLOY_MODE_A = 1;
 const PRESET_DEPLOY_MODE_B = 2;
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
@@ -415,6 +422,14 @@ export function createStateStore(options: StateStoreOptions) {
       tx();
       return getSave(db).decks.find((item) => item.id === deckId);
     },
+    registerPresetDeck: (deckId: number, presetNo: number, name: string) =>
+      registerPresetDeck(db, deckId, presetNo, name),
+    deletePresetDeck: (presetNo: number) => deletePresetDeck(db, presetNo),
+    togglePresetDeckLock: (presetNo: number) => togglePresetDeckLock(db, presetNo),
+    expandPresetDecks: (): PresetDeckExpandResult => expandPresetDecks(db),
+    swapPresetDecks: (fromPresetNo: number, toPresetNo: number) => swapPresetDecks(db, fromPresetNo, toPresetNo),
+    selectPresetDeck: (presetNo: number, deckId: number): PresetDeckSelectResult =>
+      selectPresetDeck(db, presetNo, deckId),
     toggleShipLock: (shipId: number, explicit?: number) => {
       const ship = getSave(db).ships.find((item) => item.id === shipId);
       if (!ship) return null;
@@ -2299,6 +2314,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 12) migrateToV12(db);
   if (currentVersion < 13) migrateToV13(db);
   if (currentVersion < 14) migrateToV14(db);
+  if (currentVersion < 15) migrateToV15(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2308,6 +2324,7 @@ function migrate(db: Database.Database) {
   ensureQuestStates(db);
   ensureRecordStats(db);
   ensurePresetSlotSettings(db);
+  ensurePresetDeckSettings(db);
 }
 
 function repairDeckShipIds(db: Database.Database) {
@@ -2368,6 +2385,10 @@ function migrateToV13(db: Database.Database) {
 
 function migrateToV14(db: Database.Database) {
   ensurePresetSlotSettings(db);
+}
+
+function migrateToV15(db: Database.Database) {
+  ensurePresetDeckSettings(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2540,6 +2561,8 @@ function resetSchema(db: Database.Database) {
     DROP TABLE IF EXISTS expedition_settings;
     DROP TABLE IF EXISTS pending_payitems;
     DROP TABLE IF EXISTS record_stats;
+    DROP TABLE IF EXISTS preset_decks;
+    DROP TABLE IF EXISTS preset_deck_settings;
     DROP TABLE IF EXISTS preset_slots;
     DROP TABLE IF EXISTS preset_slot_settings;
     DROP TABLE IF EXISTS use_items;
@@ -2635,6 +2658,16 @@ function createSchema(db: Database.Database) {
       ex_slot_flag INTEGER NOT NULL,
       locked INTEGER NOT NULL,
       selected_mode INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS preset_deck_settings (
+      id INTEGER PRIMARY KEY,
+      max_num INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS preset_decks (
+      preset_no INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      ship_ids_json TEXT NOT NULL,
+      locked INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS decks (
       id INTEGER PRIMARY KEY,
@@ -2785,6 +2818,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
     }
 
     ensurePresetSlotSettings(db);
+    ensurePresetDeckSettings(db);
 
     const deckShips = [
       [1, 2, -1, -1, -1, -1],
@@ -2835,6 +2869,7 @@ function getSave(db: Database.Database): SaveState {
   refreshQuestPeriods(db);
   ensureRecordStats(db);
   ensurePresetSlotSettings(db);
+  ensurePresetDeckSettings(db);
 
   return {
     player: mapPlayer(player),
@@ -2844,6 +2879,10 @@ function getSave(db: Database.Database): SaveState {
     presetSlots: (db.prepare("SELECT * FROM preset_slots ORDER BY preset_no").all() as Row[]).map(mapPresetSlot),
     presetSlotSettings: mapPresetSlotSettings(
       db.prepare("SELECT * FROM preset_slot_settings WHERE id = 1").get() as Row
+    ),
+    presetDecks: (db.prepare("SELECT * FROM preset_decks ORDER BY preset_no").all() as Row[]).map(mapPresetDeck),
+    presetDeckSettings: mapPresetDeckSettings(
+      db.prepare("SELECT * FROM preset_deck_settings WHERE id = 1").get() as Row
     ),
     decks: (db.prepare("SELECT * FROM decks ORDER BY id").all() as Row[]).map(mapDeck),
     repairDocks: (db.prepare("SELECT * FROM repair_docks ORDER BY id").all() as Row[]).map(mapRepairDock),
@@ -2942,6 +2981,21 @@ function mapPresetSlot(row: Row): PresetSlot {
 function mapPresetSlotSettings(row: Row): { maxNum: number } {
   return {
     maxNum: normalizePresetSlotMaxNum(row.max_num)
+  };
+}
+
+function mapPresetDeck(row: Row): PresetDeck {
+  return {
+    presetNo: Number(row.preset_no),
+    name: String(row.name ?? ""),
+    shipIds: normalizeDeckShipIds(parseJson<number[]>(row.ship_ids_json, [-1, -1, -1, -1, -1, -1])),
+    locked: normalizeBinaryFlag(row.locked)
+  };
+}
+
+function mapPresetDeckSettings(row: Row): { maxNum: number } {
+  return {
+    maxNum: normalizePresetDeckMaxNum(row.max_num)
   };
 }
 
@@ -3097,9 +3151,27 @@ function ensurePresetSlotSettings(db: Database.Database) {
   }
 }
 
+function ensurePresetDeckSettings(db: Database.Database) {
+  const row = db.prepare("SELECT max_num FROM preset_deck_settings WHERE id = 1").get() as Row | undefined;
+  if (!row) {
+    db.prepare("INSERT INTO preset_deck_settings (id, max_num) VALUES (1, ?)").run(DEFAULT_PRESET_DECK_COUNT);
+    return;
+  }
+
+  const maxNum = normalizePresetDeckMaxNum(row.max_num);
+  if (maxNum !== Number(row.max_num)) {
+    db.prepare("UPDATE preset_deck_settings SET max_num = ? WHERE id = 1").run(maxNum);
+  }
+}
+
 function normalizePresetSlotMaxNum(value: unknown) {
   const maxNum = Math.trunc(safeNum(value, DEFAULT_PRESET_SLOT_COUNT));
   return Math.max(1, Math.min(MAX_PRESET_SLOT_COUNT, maxNum));
+}
+
+function normalizePresetDeckMaxNum(value: unknown) {
+  const maxNum = Math.trunc(safeNum(value, DEFAULT_PRESET_DECK_COUNT));
+  return Math.max(1, Math.min(MAX_PRESET_DECK_COUNT, maxNum));
 }
 
 function normalizePresetNo(value: unknown, maxNum: number) {
@@ -3132,6 +3204,173 @@ function normalizePresetSlotItems(value: unknown): PresetSlotItem[] {
   return values
     .map((item) => normalizePresetSlotItem(item))
     .filter((item): item is PresetSlotItem => item != null);
+}
+
+function registerPresetDeck(
+  db: Database.Database,
+  deckId: number,
+  requestedPresetNo: number,
+  name: string
+): PresetDeck | null {
+  const save = getSave(db);
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetDeckSettings.maxNum);
+  const deck = save.decks.find((item) => item.id === deckId);
+  if (presetNo == null || !deck) return null;
+
+  const current = save.presetDecks.find((item) => item.presetNo === presetNo);
+  upsertPresetDeck(db, {
+    presetNo,
+    name,
+    shipIds: normalizeDeckShipIds(deck.shipIds),
+    locked: current?.locked ?? 0
+  });
+
+  return getSave(db).presetDecks.find((item) => item.presetNo === presetNo) ?? null;
+}
+
+function deletePresetDeck(db: Database.Database, requestedPresetNo: number) {
+  const save = getSave(db);
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetDeckSettings.maxNum);
+  if (presetNo == null) return false;
+  db.prepare("DELETE FROM preset_decks WHERE preset_no = ?").run(presetNo);
+  return true;
+}
+
+function togglePresetDeckLock(db: Database.Database, requestedPresetNo: number): PresetDeck | null {
+  const save = getSave(db);
+  const preset = presetDeckFromSave(save, requestedPresetNo);
+  if (!preset) return null;
+  const next = preset.locked ? 0 : 1;
+  db.prepare("UPDATE preset_decks SET locked = ? WHERE preset_no = ?").run(next, preset.presetNo);
+  return getSave(db).presetDecks.find((item) => item.presetNo === preset.presetNo) ?? null;
+}
+
+function expandPresetDecks(db: Database.Database): PresetDeckExpandResult {
+  const save = getSave(db);
+  const currentMax = save.presetDeckSettings.maxNum;
+  if (currentMax >= MAX_PRESET_DECK_COUNT) return { ok: true, maxNum: currentMax };
+
+  const cost = new Map([[PRESET_DECK_EXPAND_USEITEM_ID, 1]]);
+  if (!hasUseItems(save.useItems, cost)) return { ok: false, error: "Insufficient formation preset expansion item" };
+
+  const nextMax = Math.min(MAX_PRESET_DECK_COUNT, currentMax + PRESET_DECK_EXPAND_STEP);
+  const tx = db.transaction(() => {
+    consumeUseItem(db, PRESET_DECK_EXPAND_USEITEM_ID, 1);
+    db.prepare("UPDATE preset_deck_settings SET max_num = ? WHERE id = 1").run(nextMax);
+  });
+  tx();
+  return { ok: true, maxNum: nextMax };
+}
+
+function swapPresetDecks(db: Database.Database, requestedFromPresetNo: number, requestedToPresetNo: number) {
+  const save = getSave(db);
+  const fromPresetNo = normalizePresetNo(requestedFromPresetNo, save.presetDeckSettings.maxNum);
+  const toPresetNo = normalizePresetNo(requestedToPresetNo, save.presetDeckSettings.maxNum);
+  if (fromPresetNo == null || toPresetNo == null) return false;
+  if (fromPresetNo === toPresetNo) return true;
+
+  const from = save.presetDecks.find((item) => item.presetNo === fromPresetNo);
+  const to = save.presetDecks.find((item) => item.presetNo === toPresetNo);
+  const tx = db.transaction(() => {
+    db.prepare("DELETE FROM preset_decks WHERE preset_no IN (?, ?)").run(fromPresetNo, toPresetNo);
+    if (from) upsertPresetDeck(db, { ...from, presetNo: toPresetNo });
+    if (to) upsertPresetDeck(db, { ...to, presetNo: fromPresetNo });
+  });
+  tx();
+  return true;
+}
+
+function selectPresetDeck(
+  db: Database.Database,
+  requestedPresetNo: number,
+  deckId: number
+): PresetDeckSelectResult {
+  const save = getSave(db);
+  const preset = presetDeckFromSave(save, requestedPresetNo);
+  const deck = save.decks.find((item) => item.id === deckId);
+  if (!preset) return { ok: false, error: "Unknown formation preset" };
+  if (!deck) return { ok: false, error: "Unknown deck" };
+  if (deckIsAway(db, deckId)) return { ok: false, error: "Deck is away on expedition" };
+
+  const knownShipIds = new Set(save.ships.map((ship) => ship.id));
+  const targetShipIds = normalizeDeckShipIds(
+    preset.shipIds.map((shipId) => (shipId > 0 && knownShipIds.has(shipId) ? shipId : -1))
+  );
+  const awayShips = activeExpeditionShipIds(db);
+  if (targetShipIds.some((shipId) => shipId > 0 && awayShips.has(shipId))) {
+    return { ok: false, error: "Preset includes a ship away on expedition" };
+  }
+
+  const presetShipIds = new Set(targetShipIds.filter((shipId) => shipId > 0));
+  const updatedDecks = save.decks.map((item) => {
+    const shipIds = item.id === deckId
+      ? [...targetShipIds]
+      : normalizeDeckShipIds(item.shipIds).map((shipId) => (presetShipIds.has(shipId) ? -1 : shipId));
+    return { id: item.id, shipIds };
+  });
+  normalizeDeckAssignments(updatedDecks);
+
+  const update = db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?");
+  const tx = db.transaction(() => {
+    for (const item of updatedDecks) update.run(JSON.stringify(item.shipIds), item.id);
+    if (deckId === 1) repairFlagshipPosition(db, save.player.flagshipPosition, updatedDecks);
+  });
+  tx();
+
+  return { ok: true, decks: getSave(db).decks };
+}
+
+function upsertPresetDeck(db: Database.Database, preset: PresetDeck) {
+  db.prepare(`
+    INSERT INTO preset_decks (
+      preset_no,
+      name,
+      ship_ids_json,
+      locked
+    ) VALUES (?, ?, ?, ?)
+    ON CONFLICT(preset_no) DO UPDATE SET
+      name = excluded.name,
+      ship_ids_json = excluded.ship_ids_json,
+      locked = excluded.locked
+  `).run(
+    preset.presetNo,
+    preset.name,
+    JSON.stringify(normalizeDeckShipIds(preset.shipIds)),
+    normalizeBinaryFlag(preset.locked)
+  );
+}
+
+function presetDeckFromSave(save: SaveState, requestedPresetNo: number) {
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetDeckSettings.maxNum);
+  return presetNo == null ? null : save.presetDecks.find((item) => item.presetNo === presetNo) ?? null;
+}
+
+function normalizeDeckAssignments(decks: Array<{ id: number; shipIds: number[] }>) {
+  const seenShips = new Set<number>();
+  for (const deck of decks) {
+    for (let slot = 0; slot < deck.shipIds.length; slot += 1) {
+      const assignedShipId = deck.shipIds[slot];
+      if (assignedShipId <= 0) continue;
+      if (seenShips.has(assignedShipId)) {
+        deck.shipIds[slot] = -1;
+      } else {
+        seenShips.add(assignedShipId);
+      }
+    }
+    deck.shipIds = normalizeDeckShipIds(deck.shipIds);
+  }
+}
+
+function repairFlagshipPosition(
+  db: Database.Database,
+  currentPosition: number,
+  decks: Array<{ id: number; shipIds: number[] }>
+) {
+  const deck1 = decks.find((deck) => deck.id === 1);
+  if (!deck1 || deck1.shipIds[currentPosition - 1] > 0) return;
+  const firstShipIdx = deck1.shipIds.findIndex((id) => id > 0);
+  const nextPosition = firstShipIdx >= 0 ? firstShipIdx + 1 : 1;
+  db.prepare("UPDATE players SET flagship_position = ? WHERE id = 1").run(nextPosition);
 }
 
 function registerPresetSlot(db: Database.Database, requestedPresetNo: number, shipId: number): PresetSlot | null {

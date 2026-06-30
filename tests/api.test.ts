@@ -2275,7 +2275,7 @@ describe("local kcsapi endpoints", () => {
     const defaultDecks = (await post("api_get_member/ship_deck")).json().api_data;
     const invalidDecks = (await post("api_get_member/ship_deck", { api_deck_rid: "999,abc" })).json().api_data;
 
-    expect(presetDeck).toMatchObject({ api_max_num: 0 });
+    expect(presetDeck).toMatchObject({ api_max_num: 3 });
     expect(presetDeck.api_deck).toEqual({});
     expect(Array.isArray(presetDeck.api_deck)).toBe(false);
 
@@ -2291,6 +2291,81 @@ describe("local kcsapi endpoints", () => {
     expect(defaultDecks.api_deck_data.map((deck: any) => deck.api_id)).toEqual([1, 2, 3, 4]);
     expect(defaultDecks.api_ship_data.map((ship: any) => ship.api_id).sort()).toEqual([1, 2, 3, 4]);
     expect(invalidDecks).toEqual({ api_deck_data: [], api_ship_data: [] });
+  });
+
+  it("saves and updates formation preset records from the selected deck", async () => {
+    const register = await post("api_req_hensei/preset_register", {
+      api_deck_id: 1,
+      api_preset_no: 1,
+      api_name: "Sortie A"
+    });
+    await post("api_req_hensei/preset_lock", { api_preset_no: 1 });
+    const saved = (await post("api_get_member/preset_deck")).json().api_data;
+    const deleteRecord = await post("api_req_hensei/preset_delete", { api_preset_no: 1 });
+    const afterDelete = (await post("api_get_member/preset_deck")).json().api_data;
+
+    expect(register.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_preset_no: 1,
+        api_name: "Sortie A",
+        api_ship: [1, 2, -1, -1, -1, -1],
+        api_lock_flag: 0
+      }
+    });
+    expect(saved).toMatchObject({ api_max_num: 3 });
+    expect(saved.api_deck).toMatchObject({
+      "1": {
+        api_preset_no: 1,
+        api_name: "Sortie A",
+        api_ship: [1, 2, -1, -1, -1, -1],
+        api_lock_flag: 1
+      }
+    });
+    expect(deleteRecord.json()).toMatchObject({ api_result: 1 });
+    expect(afterDelete.api_deck).toEqual({});
+  });
+
+  it("expands formation preset capacity and swaps record order", async () => {
+    seedUseItem(49, 1);
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: 3 });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: 4 });
+
+    const expand = await post("api_req_hensei/preset_expand");
+    await post("api_req_hensei/preset_register", { api_deck_id: 1, api_preset_no: 1, api_name: "Main" });
+    await post("api_req_hensei/preset_register", { api_deck_id: 2, api_preset_no: 4, api_name: "Escort" });
+    const swap = await post("api_req_hensei/preset_order_change", { api_preset_from: 1, api_preset_to: 4 });
+    const afterSwap = (await post("api_get_member/preset_deck")).json().api_data;
+
+    expect(expand.json()).toMatchObject({ api_result: 1, api_data: { api_max_num: 4 } });
+    expect(useItemCount(49)).toBe(0);
+    expect(swap.json()).toMatchObject({ api_result: 1 });
+    expect(afterSwap.api_max_num).toBe(4);
+    expect(afterSwap.api_deck["1"]).toMatchObject({
+      api_preset_no: 1,
+      api_name: "Escort",
+      api_ship: [3, 4, -1, -1, -1, -1]
+    });
+    expect(afterSwap.api_deck["4"]).toMatchObject({
+      api_preset_no: 4,
+      api_name: "Main",
+      api_ship: [1, 2, -1, -1, -1, -1]
+    });
+  });
+
+  it("deploys a formation preset onto another deck and removes duplicate ship assignments", async () => {
+    await post("api_req_hensei/preset_register", { api_deck_id: 1, api_preset_no: 1, api_name: "Main" });
+
+    const response = await post("api_req_hensei/preset_select", {
+      api_preset_no: 1,
+      api_deck_id: 2
+    });
+    const data = response.json().api_data;
+    const deckById = new Map(data.api_deck.map((deck: any) => [deck.api_id, deck]));
+
+    expect(response.json()).toMatchObject({ api_result: 1 });
+    expect(deckById.get(1)).toMatchObject({ api_ship: [-1, -1, -1, -1, -1, -1] });
+    expect(deckById.get(2)).toMatchObject({ api_ship: [1, 2, -1, -1, -1, -1] });
   });
 
   it("provides equippable ship type metadata for the remodel equipment list", async () => {

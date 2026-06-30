@@ -85,6 +85,17 @@ export type PresetSlotSettings = {
   maxNum: number;
 };
 
+export type PresetDeck = {
+  presetNo: number;
+  name: string;
+  shipIds: number[];
+  locked: number;
+};
+
+export type PresetDeckSettings = {
+  maxNum: number;
+};
+
 export type Deck = {
   id: number;
   name: string;
@@ -205,6 +216,8 @@ export type SaveState = {
   slotItems: SlotItem[];
   presetSlots: PresetSlot[];
   presetSlotSettings: PresetSlotSettings;
+  presetDecks: PresetDeck[];
+  presetDeckSettings: PresetDeckSettings;
   decks: Deck[];
   repairDocks: RepairDock[];
   buildDocks: BuildDock[];
