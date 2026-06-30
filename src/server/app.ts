@@ -9,6 +9,7 @@ import type { ResponseFormat } from "../kcsapi/envelope.js";
 import { API_HTTP_STATUS, apiError, apiOk, serializeApiResponse } from "../kcsapi/envelope.js";
 import { handleKcsApi, requestToHandlerInput } from "../kcsapi/handlers.js";
 import { createResourceManifest, readMappedResource } from "../resources/manifest.js";
+import type { FileResource, ResourceManifest } from "../resources/types.js";
 import { renderBootstrap } from "./bootstrap.js";
 import { renderLauncher, renderWorldPage } from "./launcher.js";
 import { LOCAL_WORLD_ID } from "../state/store.js";
@@ -19,7 +20,15 @@ const TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
   "base64"
 );
-const EMPTY_SPECIAL_REMODEL_ANIMATION_KEYS = JSON.stringify({ keys: [], setting: {} });
+const SPECIAL_REMODEL_STAGE_CENTER = { x: 600, y: 360 };
+const SPECIAL_REMODEL_MAX_SHIP_WIDTH = 820;
+const SPECIAL_REMODEL_MAX_SHIP_HEIGHT = 680;
+const SPECIAL_REMODEL_DEFAULT_SCALE = 0.5;
+const SPECIAL_REMODEL_ANIMATION_TYPE = {
+  delay: 1,
+  shipCamera: 2,
+  playVoice: 6
+} as const;
 
 export type BuildAppOptions = {
   cacheDir: string;
@@ -158,7 +167,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .send(await readFile(mappedFallback.filePath));
     }
 
-    const specialRemodelFallback = readSpecialRemodelFallback(request.url);
+    const specialRemodelFallback = await readSpecialRemodelFallback(request.url, resourceManifest);
     if (specialRemodelFallback) {
       return reply
         .type(specialRemodelFallback.contentType)
@@ -318,23 +327,117 @@ async function readRecordAirbaseMaintFallback(cacheDir: string, url: string) {
   }
 }
 
-function readSpecialRemodelFallback(url: string) {
+async function readSpecialRemodelFallback(url: string, manifest: ResourceManifest) {
   const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
-  const textOrArtPng = pathname.match(
-    /^\/kcs2\/resources\/ship\/sp_remodel\/(text_remodel_mes|text_class|text_name|silhouette|full_x2)\/\d{4}_\d{4}\.png$/i
+  const textOrSilhouettePng = pathname.match(
+    /^\/kcs2\/resources\/ship\/sp_remodel\/(text_remodel_mes|text_class|text_name|silhouette)\/\d{4}_\d{4}\.png$/i
   );
-  if (textOrArtPng) {
+  if (textOrSilhouettePng) {
     return { contentType: "image/png", body: TRANSPARENT_PNG };
   }
 
-  if (/^\/kcs2\/resources\/ship\/sp_remodel\/animation_key\/\d{4}_remodel\.json$/i.test(pathname)) {
+  const fullX2 = pathname.match(/^\/kcs2\/resources\/ship\/sp_remodel\/full_x2\/(\d{4})_\d{4}\.png$/i);
+  if (fullX2) {
+    return {
+      contentType: "image/png",
+      body: (await readSpecialRemodelShipArt(manifest, Number(fullX2[1]))) ?? TRANSPARENT_PNG
+    };
+  }
+
+  const animationKey = pathname.match(/^\/kcs2\/resources\/ship\/sp_remodel\/animation_key\/(\d{4})_remodel\.json$/i);
+  if (animationKey) {
+    const shipId = Number(animationKey[1]);
     return {
       contentType: "application/json; charset=utf-8",
-      body: EMPTY_SPECIAL_REMODEL_ANIMATION_KEYS
+      body: JSON.stringify(await specialRemodelAnimationKeys(manifest, shipId))
     };
   }
 
   return null;
+}
+
+async function readSpecialRemodelShipArt(manifest: ResourceManifest, shipId: number) {
+  for (const resource of specialRemodelShipArtCandidates(manifest, shipId)) {
+    try {
+      return await readFile(resource.filePath);
+    } catch {
+      // Try the next cached representation when the index points at a missing file.
+    }
+  }
+  return null;
+}
+
+function specialRemodelShipArtCandidates(manifest: ResourceManifest, shipId: number): FileResource[] {
+  return [
+    manifest.ship.spRemodel.fullX2.get(shipId),
+    shipArtFallback(manifest, shipId)
+  ].filter((resource): resource is FileResource => Boolean(resource));
+}
+
+function shipArtFallback(manifest: ResourceManifest, shipId: number) {
+  return (
+    manifest.ship.full.get(shipId) ||
+    manifest.ship.card.get(shipId) ||
+    manifest.ship.albumStatus.get(shipId) ||
+    manifest.ship.banner.get(shipId) ||
+    manifest.ship.characterUp.get(shipId) ||
+    manifest.ship.characterUpDamaged.get(shipId)
+  );
+}
+
+async function specialRemodelAnimationKeys(manifest: ResourceManifest, shipId: number) {
+  const art = await readSpecialRemodelShipArt(manifest, shipId);
+  const scale = specialRemodelShipScale(art);
+
+  return {
+    setting: { zindex: [{ type: SPECIAL_REMODEL_ANIMATION_TYPE.shipCamera, index: 1 }] },
+    keys: [
+      {
+        prop: [
+          {
+            type: SPECIAL_REMODEL_ANIMATION_TYPE.shipCamera,
+            position: SPECIAL_REMODEL_STAGE_CENTER,
+            scale
+          },
+          { type: SPECIAL_REMODEL_ANIMATION_TYPE.playVoice },
+          { type: SPECIAL_REMODEL_ANIMATION_TYPE.delay, duration: 1800 }
+        ]
+      }
+    ]
+  };
+}
+
+function specialRemodelShipScale(art: Buffer | null) {
+  const dimensions = art ? pngDimensions(art) : null;
+  if (!dimensions) return SPECIAL_REMODEL_DEFAULT_SCALE;
+
+  const scale = Math.min(
+    0.68,
+    SPECIAL_REMODEL_MAX_SHIP_WIDTH / dimensions.width,
+    SPECIAL_REMODEL_MAX_SHIP_HEIGHT / dimensions.height
+  );
+  return Number(Math.max(0.35, scale).toFixed(3));
+}
+
+function pngDimensions(png: Buffer) {
+  if (
+    png.length < 24 ||
+    png[0] !== 0x89 ||
+    png[1] !== 0x50 ||
+    png[2] !== 0x4e ||
+    png[3] !== 0x47 ||
+    png[4] !== 0x0d ||
+    png[5] !== 0x0a ||
+    png[6] !== 0x1a ||
+    png[7] !== 0x0a
+  ) {
+    return null;
+  }
+
+  const width = png.readUInt32BE(16);
+  const height = png.readUInt32BE(20);
+  if (!width || !height) return null;
+  return { width, height };
 }
 
 async function readPngFallback(cacheDir: string, url: string) {

@@ -27,6 +27,16 @@ export type ShipResourceManifest = {
   characterUp: Map<number, FileResource>;
   characterUpDamaged: Map<number, FileResource>;
   full: Map<number, FileResource>;
+  spRemodel: ShipSpecialRemodelResourceManifest;
+};
+
+export type ShipSpecialRemodelResourceManifest = {
+  silhouette: Map<number, FileResource>;
+  fullX2: Map<number, FileResource>;
+  textRemodelMessage: Map<number, FileResource>;
+  textClass: Map<number, FileResource>;
+  textName: Map<number, FileResource>;
+  animationKey: Map<number, FileResource>;
 };
 
 export type SlotResourceManifest = {

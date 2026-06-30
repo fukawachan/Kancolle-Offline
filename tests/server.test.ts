@@ -419,12 +419,52 @@ describe("local Fastify server", () => {
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
-  it("serves cache-backed ship art for special-remodel silhouette and full-x2 requests", async () => {
+  it("serves official special-remodel resources from the extra cache before generated fallbacks", async () => {
+    const extraCacheDir = path.join(tempDir, "cache-extra");
+    const fullX2Dir = path.join(extraCacheDir, "kcs2/resources/ship/sp_remodel/full_x2");
+    const animationKeyDir = path.join(extraCacheDir, "kcs2/resources/ship/sp_remodel/animation_key");
+    await mkdir(fullX2Dir, { recursive: true });
+    await mkdir(animationKeyDir, { recursive: true });
+    await writeFile(path.join(fullX2Dir, "0698_3344.png"), "official-full-x2");
+    await writeFile(
+      path.join(animationKeyDir, "0698_remodel.json"),
+      JSON.stringify({ keys: [{ prop: [{ type: 6 }] }], setting: { zindex: [{ type: 2, index: 1 }] } })
+    );
+
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      extraCacheDir,
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const fullX2 = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/sp_remodel/full_x2/0698_3344.png?version=62"
+    });
+    const animationKey = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/sp_remodel/animation_key/0698_remodel.json?version=62"
+    });
+
+    expect(fullX2.statusCode).toBe(200);
+    expect(fullX2.headers["content-type"]).toContain("image/png");
+    expect(fullX2.body).toBe("official-full-x2");
+    expect(animationKey.statusCode).toBe(200);
+    expect(animationKey.headers["content-type"]).toContain("application/json");
+    expect(animationKey.json()).toEqual({ keys: [{ prop: [{ type: 6 }] }], setting: { zindex: [{ type: 2, index: 1 }] } });
+  });
+
+  it("serves generated special-remodel fallbacks that avoid using full art as the intro silhouette", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
       unknownLogPath: path.join(tempDir, "unknown.jsonl")
     });
+    const transparentPng = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
+      "base64"
+    ).toString();
 
     const silhouette = await app.inject({
       method: "GET",
@@ -437,8 +477,7 @@ describe("local Fastify server", () => {
 
     expect(silhouette.statusCode).toBe(200);
     expect(silhouette.headers["content-type"]).toContain("image/png");
-    expect(silhouette.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
-    expect(silhouette.body.length).toBeGreaterThan(1000);
+    expect(silhouette.body).toBe(transparentPng);
     expect(fullX2.statusCode).toBe(200);
     expect(fullX2.headers["content-type"]).toContain("image/png");
     expect(fullX2.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
@@ -469,7 +508,7 @@ describe("local Fastify server", () => {
     }
   });
 
-  it("serves empty animation keys for missing special-remodel animation metadata", async () => {
+  it("serves generated animation keys with a centered camera and success voice for missing special-remodel metadata", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
@@ -483,7 +522,21 @@ describe("local Fastify server", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("application/json");
-    expect(response.json()).toEqual({ keys: [], setting: {} });
+    expect(response.json()).toMatchObject({
+      setting: { zindex: expect.any(Array) },
+      keys: [
+        {
+          prop: expect.arrayContaining([
+            expect.objectContaining({
+              type: 2,
+              position: { x: expect.any(Number), y: expect.any(Number) },
+              scale: expect.any(Number)
+            }),
+            expect.objectContaining({ type: 6 })
+          ])
+        }
+      ]
+    });
   });
 
   it("serves special-remodel fallbacks for every client-declared special remodel pair", async () => {
