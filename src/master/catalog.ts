@@ -18,20 +18,35 @@ const BE_LEFT_VOICE_NO = 29;
 const TIME_SIGNAL_VOICE_NOS = Array.from({ length: 24 }, (_value, index) => index + 30);
 const TIRED_BE_LEFT_VOICE_FILE = "129";
 
+export function shipHasDisplayResource(resourceManifest: ResourceManifest, shipId: number) {
+  return (
+    resourceManifest.ship.full.has(shipId) ||
+    resourceManifest.ship.card.has(shipId) ||
+    resourceManifest.ship.banner.has(shipId) ||
+    resourceManifest.ship.albumStatus.has(shipId)
+  );
+}
+
 export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster[] {
   const baseById = new Map(masterData.api_mst_ship.map((ship) => [ship.api_id, ship] as const));
   const deepSeaById = new Map(DEEP_SEA_SHIP_MASTERS.map((ship) => [ship.api_id, ship] as const));
-  const ids = new Set<number>(resourceManifest.ship.albumStatus.keys());
+  const resourceBackedIds = shipDisplayResourceIds(resourceManifest);
+  const ids = resourceBackedIds.size > 0 ? new Set<number>(resourceBackedIds) : new Set<number>(baseById.keys());
 
-  if (ids.size === 0) {
-    for (const id of resourceManifest.ship.card.keys()) ids.add(id);
-  }
-  for (const id of baseById.keys()) ids.add(id);
   for (const id of deepSeaById.keys()) ids.add(id);
 
   return [...ids]
     .sort((a, b) => a - b)
     .map((id) => normalizeShipVoiceFlag(baseById.get(id) ?? deepSeaById.get(id) ?? generatedShipMaster(id), resourceManifest));
+}
+
+function shipDisplayResourceIds(resourceManifest: ResourceManifest) {
+  return new Set<number>([
+    ...resourceManifest.ship.full.keys(),
+    ...resourceManifest.ship.card.keys(),
+    ...resourceManifest.ship.banner.keys(),
+    ...resourceManifest.ship.albumStatus.keys()
+  ]);
 }
 
 export function buildSlotMasters(resourceManifest: ResourceManifest): SlotMaster[] {

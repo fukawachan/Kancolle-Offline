@@ -7,6 +7,7 @@ import {
   buildShipTypes,
   buildSlotEquipTypes,
   buildSlotMasters,
+  shipHasDisplayResource,
   shipPictureBookPage,
   slotPictureBookPage,
   type ShipMaster
@@ -91,6 +92,7 @@ export type HandlerInput = {
 };
 
 type KcsHandler = (input: HandlerInput, context: HandlerContext) => unknown | Promise<unknown>;
+type ShipUpgradeMaster = (typeof masterData.api_mst_shipupgrade)[number];
 
 const handlers = new Map<string, KcsHandler>();
 const RECORD_SLOT_ITEM_DISPLAY_BONUS = 3;
@@ -386,7 +388,9 @@ register("api_req_kaisou/powerup", (input, context) => {
 });
 register("api_req_kaisou/remodeling", (input, context) => {
   const afterShipId = input.body.api_aftershipid == null ? undefined : num(input.body.api_aftershipid, 0);
-  const ship = context.stateStore.remodelShip(num(input.body.api_id, 1), afterShipId);
+  const shipId = num(input.body.api_id, 1);
+  if (!remodelTargetHasDisplayResource(context, shipId, afterShipId)) return apiOk({ api_after_ship: null });
+  const ship = context.stateStore.remodelShip(shipId, afterShipId);
   const save = context.stateStore.getSave();
   return apiOk({ api_after_ship: ship ? toShip(ship, save.slotItems) : null });
 });
@@ -920,12 +924,15 @@ async function recordUnknown(input: HandlerInput, context: HandlerContext) {
 }
 
 function masterDataWithResources(resourceManifest: ResourceManifest) {
-  const ships = buildShipMasters(resourceManifest);
+  const rawShips = buildShipMasters(resourceManifest);
+  const shipIds = new Set(rawShips.map((ship) => ship.api_id));
+  const ships = sanitizeShipRemodelTargets(rawShips, shipIds, resourceManifest);
   const slotItems = buildSlotMasters(resourceManifest);
   const mapInfos = mapInfoMasters(resourceManifest);
   return {
     ...masterData,
     api_mst_ship: ships,
+    api_mst_shipupgrade: shipUpgradesForAvailableShips(masterData.api_mst_shipupgrade, shipIds),
     api_mst_stype: buildShipTypes(slotItems),
     api_mst_slotitem: slotItems,
     api_mst_slotitem_equiptype: buildSlotEquipTypes(slotItems),
@@ -937,6 +944,52 @@ function masterDataWithResources(resourceManifest: ResourceManifest) {
     api_mst_mapbgm: mapBgmMasters(resourceManifest, mapInfos),
     api_mst_mapcell: mapCellMasters(resourceManifest, mapInfos)
   };
+}
+
+function sanitizeShipRemodelTargets(ships: ShipMaster[], shipIds: Set<number>, resourceManifest: ResourceManifest) {
+  return ships.map((ship) => {
+    const targetId = Math.trunc(num(ship.api_aftershipid, 0));
+    if (targetId <= 0 || (shipIds.has(targetId) && shipHasDisplayResource(resourceManifest, targetId))) return ship;
+    return {
+      ...ship,
+      api_aftershipid: 0,
+      api_afterlv: 0,
+      api_afterfuel: 0,
+      api_afterbull: 0
+    };
+  });
+}
+
+function shipUpgradesForAvailableShips(shipUpgrades: ShipUpgradeMaster[], shipIds: Set<number>) {
+  return shipUpgrades.filter((upgrade) => {
+    const targetId = Math.trunc(num(upgrade.api_id, 0));
+    const currentId = Math.trunc(num(upgrade.api_current_ship_id, 0));
+    return shipIds.has(targetId) && (currentId === 0 || shipIds.has(currentId));
+  });
+}
+
+function remodelTargetHasDisplayResource(context: HandlerContext, shipId: number, requestedMasterId?: number) {
+  const ship = context.stateStore.getSave().ships.find((item) => item.id === shipId);
+  if (!ship) return false;
+  const targetId = remodelTargetIdForRequest(ship.masterId, requestedMasterId);
+  return targetId > 0 && shipHasDisplayResource(context.resourceManifest, targetId);
+}
+
+function remodelTargetIdForRequest(currentMasterId: number, requestedMasterId?: number) {
+  const currentMaster = masterData.api_mst_ship.find((ship) => ship.api_id === currentMasterId);
+  if (!currentMaster) return 0;
+
+  const normalTargetId = Math.trunc(num(currentMaster.api_aftershipid, 0));
+  const requested = Math.trunc(num(requestedMasterId, 0));
+  if (requested <= 0) return normalTargetId;
+  if (requested === normalTargetId) return requested;
+
+  const specialTarget = masterData.api_mst_shipupgrade.some(
+    (upgrade) =>
+      Math.trunc(num(upgrade.api_current_ship_id, 0)) === currentMasterId &&
+      Math.trunc(num(upgrade.api_id, 0)) === requested
+  );
+  return specialTarget ? requested : 0;
 }
 
 function shipGraph(resourceManifest: ResourceManifest, ships: ShipMaster[]) {

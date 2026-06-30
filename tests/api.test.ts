@@ -7,6 +7,7 @@ import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js"
 import { createResourceManifest } from "../src/resources/manifest.js";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
+import type { ResourceManifest } from "../src/resources/types.js";
 
 describe("local kcsapi endpoints", () => {
   let tempDir: string;
@@ -77,6 +78,15 @@ describe("local kcsapi endpoints", () => {
     return store.getSave().useItems.find((item) => item.id === itemId)?.count ?? 0;
   }
 
+  function hasShipDisplayResource(resourceManifest: ResourceManifest, shipId: number) {
+    return (
+      resourceManifest.ship.full.has(shipId) ||
+      resourceManifest.ship.card.has(shipId) ||
+      resourceManifest.ship.banner.has(shipId) ||
+      resourceManifest.ship.albumStatus.has(shipId)
+    );
+  }
+
   async function remodelCandidateFor(sourceMasterId: number) {
     const list = (await post("api_req_kousyou/remodel_slotlist")).json().api_data;
     expect(Array.isArray(list)).toBe(true);
@@ -145,6 +155,39 @@ describe("local kcsapi endpoints", () => {
       api_afterfuel: 100,
       api_afterbull: 100
     });
+    expect(start2Data.api_mst_ship.find((ship: any) => ship.api_id === 426)).toMatchObject({
+      api_aftershipid: 0,
+      api_afterlv: 0,
+      api_afterfuel: 0,
+      api_afterbull: 0
+    });
+    const manifest = await createResourceManifest(path.resolve("cache"));
+    const shipIds = new Set<number>(start2Data.api_mst_ship.map((ship: any) => Number(ship.api_id)));
+    for (const [currentId, targetId] of [
+      [426, 1035],
+      [1035, 1040],
+      [710, 1034]
+    ]) {
+      expect(
+        start2Data.api_mst_shipupgrade.some(
+          (upgrade: any) => Number(upgrade.api_current_ship_id || 0) === currentId && Number(upgrade.api_id) === targetId
+        )
+      ).toBe(false);
+    }
+    for (const ship of start2Data.api_mst_ship) {
+      const targetId = Number(ship.api_aftershipid || 0);
+      if (targetId === 0) continue;
+      expect(shipIds.has(targetId), `${ship.api_id} -> ${targetId}`).toBe(true);
+      expect(hasShipDisplayResource(manifest, targetId), `${ship.api_id} -> ${targetId}`).toBe(true);
+    }
+    for (const upgrade of start2Data.api_mst_shipupgrade) {
+      const targetId = Number(upgrade.api_id || 0);
+      const currentId = Number(upgrade.api_current_ship_id || 0);
+      expect(shipIds.has(targetId), `upgrade target ${targetId}`).toBe(true);
+      if (currentId !== 0) {
+        expect(shipIds.has(currentId), `upgrade current ${currentId}`).toBe(true);
+      }
+    }
     expect(start2Data.api_mst_shipupgrade.length).toBeGreaterThan(0);
     expect(start2Data.api_mst_shipupgrade.find((upgrade: any) => upgrade.api_original_ship_id === 9)).toMatchObject({
       api_upgrade_type: 1
@@ -1884,6 +1927,33 @@ describe("local kcsapi endpoints", () => {
       api_data: { api_after_ship: null }
     });
     expect(store.getSave().ships.find((ship) => ship.id === 1)?.masterId).toBe(9);
+  });
+
+  it("does not consume anything when the remodel target is unavailable in the local cache", async () => {
+    const fubukiKaiNi = store.createShip(426);
+    store.db.prepare("UPDATE ships SET level = 99 WHERE id = ?").run(fubukiKaiNi.id);
+    store.db.prepare(`
+      UPDATE materials
+      SET ammo = 50000, steel = 50000, build_kit = 1000, devmat = 500
+      WHERE player_id = 1
+    `).run();
+    seedUseItem(58, 1);
+    seedUseItem(75, 5);
+    seedUseItem(78, 1);
+    const before = store.getSave();
+
+    const response = await post("api_req_kaisou/remodeling", { api_id: fubukiKaiNi.id });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_after_ship: null }
+    });
+    const after = store.getSave();
+    expect(after.ships.find((ship) => ship.id === fubukiKaiNi.id)?.masterId).toBe(426);
+    expect(after.materials).toEqual(before.materials);
+    expect(useItemCount(58)).toBe(1);
+    expect(useItemCount(75)).toBe(5);
+    expect(useItemCount(78)).toBe(1);
   });
 
   it("requires and consumes special ship-upgrade items for remodels", async () => {
