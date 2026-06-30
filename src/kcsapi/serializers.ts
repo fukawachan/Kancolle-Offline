@@ -24,7 +24,7 @@ import type {
   Ship,
   SlotItem
 } from "../state/types.js";
-import { shipApiExp } from "./experience.js";
+import { MARRIED_SHIP_LEVEL_CAP, SHIP_LEVEL_CAP, shipApiExp } from "./experience.js";
 import { repairCost, repairTimeMs } from "./repair.js";
 import { buildQuestList, type QuestListOptions } from "./quests.js";
 
@@ -127,7 +127,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_sortno: master?.api_sortno ?? ship.masterId,
     api_ship_id: ship.masterId,
     api_lv: ship.level,
-    api_exp: shipApiExp(ship.exp, ship.level),
+    api_exp: shipApiExp(ship.exp, ship.level, ship.marriedAt > 0 ? MARRIED_SHIP_LEVEL_CAP : SHIP_LEVEL_CAP),
     api_nowhp: ship.hp,
     api_maxhp: ship.maxHp,
     api_leng: master?.api_leng ?? 1,
@@ -156,7 +156,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_kaihi: [kahiBase, ship.level + 49 + equipSum("api_houk")],
     api_taisen: [taisenBase + kyouka(6), taisenBase + kyouka(6)],
     api_sakuteki: [sakutekiBase, sakutekiBase],
-    api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4), arrVal(master?.api_luck, 1) + equipSum("api_luck")],
+    api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4) + ship.marriageLuckBonus, arrVal(master?.api_luck, 1) + equipSum("api_luck")],
     api_locked: ship.locked,
     api_locked_equip: 0,
     api_sally_area: 0,

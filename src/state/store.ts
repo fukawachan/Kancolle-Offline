@@ -26,6 +26,8 @@ import {
 } from "../master/routing.js";
 import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
 import {
+  MARRIED_SHIP_LEVEL_CAP,
+  SHIP_LEVEL_CAP,
   playerLevelForExp,
   shipLevelForExp,
   shipLevelupInfo,
@@ -123,6 +125,7 @@ type SlotImprovementResult =
   | { ok: true; slotItem: SlotItem; materials: Materials }
   | { ok: false; error: string };
 type ShipLevelSetResult = { ok: true; ship: Ship } | { ok: false; error: string };
+type ShipMarriageResult = { ok: true; ship: Ship } | { ok: false; error: string };
 type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
 type BasicMaterialCounts = Pick<Materials, "fuel" | "ammo" | "steel" | "bauxite">;
 type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; error: string };
@@ -170,7 +173,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 12;
+const SCHEMA_VERSION = 13;
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -178,6 +181,7 @@ const OFFICIAL_MAX_SLOT_ITEM_COUNT = DEFAULT_MAX_SLOT_ITEM_COUNT
   + ((OFFICIAL_MAX_SHIP_COUNT - DEFAULT_MAX_SHIP_COUNT) / 10) * 40;
 const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
+const MARRIAGE_RING_ITEM_ID = 55;
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
@@ -406,6 +410,8 @@ export function createStateStore(options: StateStoreOptions) {
     },
     setShipLevel: (shipId: number, level: number): ShipLevelSetResult =>
       setShipLevel(db, shipId, level),
+    marryShip: (shipId: number, random: () => number = Math.random): ShipMarriageResult =>
+      marryShip(db, shipId, random),
     setUseItemCount: (itemId: number, count: number): UseItemSetResult =>
       setUseItemCount(db, itemId, count),
     useItem: (itemId: number, exchangeType = 0, force = false): UseItemUseResult =>
@@ -437,8 +443,8 @@ export function createStateStore(options: StateStoreOptions) {
           const targetOnSlot = options.refillAircraft
             ? onSlotForShip(master, save.slotItems, ship.slotIds)
             : normalizeFixed(ship.onSlot, 5, 0);
-          fuel += Math.max(0, targetFuel - ship.fuel);
-          ammo += Math.max(0, targetAmmo - ship.ammo);
+          fuel += marriageSupplyCost(Math.max(0, targetFuel - ship.fuel), ship);
+          ammo += marriageSupplyCost(Math.max(0, targetAmmo - ship.ammo), ship);
           bauxite += aircraftRefillCount(ship.onSlot, targetOnSlot) * 5;
           update.run(targetFuel, targetAmmo, maxFuel, maxAmmo, JSON.stringify(targetOnSlot), ship.id);
         }
@@ -577,7 +583,9 @@ export function createStateStore(options: StateStoreOptions) {
 
       const kyouka = normalizeKyouka(ship.stats);
       const nextKyouka = [0, 0, 0, 0, kyouka[4], kyouka[5], kyouka[6]];
-      const maxHp = shipInitialMaxHp(master) + nextKyouka[5];
+      const baseMaxHp = shipInitialMaxHp(master) + nextKyouka[5];
+      const nextMarriageHpBonus = ship.marriedAt > 0 ? marriageHpBonus(baseMaxHp) : 0;
+      const maxHp = baseMaxHp + nextMarriageHpBonus;
       const maxFuel = master.api_fuel_max ?? ship.maxFuel;
       const maxAmmo = master.api_bull_max ?? ship.maxAmmo;
       const nextStats = { ...ship.stats, api_kyouka: nextKyouka, modernized: false };
@@ -590,7 +598,7 @@ export function createStateStore(options: StateStoreOptions) {
         const slotItems = (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem);
         const onSlot = onSlotForShip(master, slotItems, normalizedSlotIds, EMPTY_ONSLOT, true);
         db.prepare(
-          "UPDATE ships SET master_id = ?, hp = ?, max_hp = ?, fuel = ?, max_fuel = ?, ammo = ?, max_ammo = ?, slot_ids_json = ?, onslot_json = ?, stats_json = ? WHERE id = ?"
+          "UPDATE ships SET master_id = ?, hp = ?, max_hp = ?, fuel = ?, max_fuel = ?, ammo = ?, max_ammo = ?, slot_ids_json = ?, onslot_json = ?, stats_json = ?, marriage_hp_bonus = ? WHERE id = ?"
         ).run(
           nextMasterId,
           maxHp,
@@ -602,6 +610,7 @@ export function createStateStore(options: StateStoreOptions) {
           JSON.stringify(normalizedSlotIds),
           JSON.stringify(onSlot),
           JSON.stringify(nextStats),
+          nextMarriageHpBonus,
           shipId
         );
         for (const slotItemId of consumedSlotItemIds) {
@@ -1234,13 +1243,14 @@ function applyExpeditionOutcome(
   `);
   snapshot.ships.forEach((ship, index) => {
     const nextExp = ship.exp + (outcome.shipExp[index] ?? 0);
+    const cap = shipLevelCap(ship);
     updateShip.run(
       outcome.fuelCosts[index] ?? 0,
       outcome.ammoCosts[index] ?? 0,
       outcome.conditionCosts[index] ?? 0,
       outcome.shipHps[index] ?? ship.hp,
       nextExp,
-      shipLevelForExp(nextExp),
+      shipLevelForExp(nextExp, cap),
       ship.id
     );
   });
@@ -2195,13 +2205,14 @@ function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: numb
     const multiplier = (flagship ? 1.5 : 1) * (mvp === index + 1 ? 2 : 1);
     const gainedExp = Math.max(1, Math.floor(baseExp * multiplier));
     const afterExp = ship.exp + gainedExp;
+    const cap = shipLevelCap(ship);
     return {
       shipId,
       gainedExp,
       beforeExp: ship.exp,
       afterExp,
-      afterLevel: shipLevelForExp(afterExp),
-      levelup: shipLevelupInfo(ship.exp, gainedExp)
+      afterLevel: shipLevelForExp(afterExp, cap),
+      levelup: shipLevelupInfo(ship.exp, gainedExp, cap)
     };
   });
 }
@@ -2260,6 +2271,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 10) migrateToV10(db);
   if (currentVersion < 11) migrateToV11(db);
   if (currentVersion < 12) migrateToV12(db);
+  if (currentVersion < 13) migrateToV13(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2312,6 +2324,18 @@ function migrateToV12(db: Database.Database) {
     db.prepare("ALTER TABLE players ADD COLUMN max_slotitem INTEGER NOT NULL DEFAULT 500").run();
   }
   ensurePendingPayItems(db);
+}
+
+function migrateToV13(db: Database.Database) {
+  if (!columnExists(db, "ships", "married_at")) {
+    db.prepare("ALTER TABLE ships ADD COLUMN married_at INTEGER NOT NULL DEFAULT 0").run();
+  }
+  if (!columnExists(db, "ships", "marriage_hp_bonus")) {
+    db.prepare("ALTER TABLE ships ADD COLUMN marriage_hp_bonus INTEGER NOT NULL DEFAULT 0").run();
+  }
+  if (!columnExists(db, "ships", "marriage_luck_bonus")) {
+    db.prepare("ALTER TABLE ships ADD COLUMN marriage_luck_bonus INTEGER NOT NULL DEFAULT 0").run();
+  }
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2376,7 +2400,7 @@ function columnExists(db: Database.Database, table: string, column: string) {
 }
 
 function repairShipMaxValues(db: Database.Database) {
-  const ships = db.prepare("SELECT id, master_id, hp, max_hp, max_fuel, max_ammo FROM ships").all() as Row[];
+  const ships = db.prepare("SELECT id, master_id, hp, max_hp, max_fuel, max_ammo, marriage_hp_bonus FROM ships").all() as Row[];
   const update = db.prepare("UPDATE ships SET hp = ?, max_hp = ?, max_fuel = ?, max_ammo = ? WHERE id = ?");
   for (const row of ships) {
     const masterId = Number(row.master_id);
@@ -2384,7 +2408,8 @@ function repairShipMaxValues(db: Database.Database) {
     if (!master) continue;
     const currentHp = safeNum(row.hp, 1);
     const currentMaxHp = safeNum(row.max_hp, 1);
-    const expectedMaxHp = shipInitialMaxHp(master, currentMaxHp);
+    const marriageHpBonus = Math.max(0, Math.trunc(safeNum(row.marriage_hp_bonus)));
+    const expectedMaxHp = shipInitialMaxHp(master, Math.max(1, currentMaxHp - marriageHpBonus)) + marriageHpBonus;
     const expectedHp = currentMaxHp !== expectedMaxHp
       ? currentHp >= currentMaxHp
         ? expectedMaxHp
@@ -2552,7 +2577,10 @@ function createSchema(db: Database.Database) {
       slot_ids_json TEXT NOT NULL,
       onslot_json TEXT NOT NULL,
       ex_slot_id INTEGER NOT NULL,
-      stats_json TEXT NOT NULL
+      stats_json TEXT NOT NULL,
+      married_at INTEGER NOT NULL DEFAULT 0,
+      marriage_hp_bonus INTEGER NOT NULL DEFAULT 0,
+      marriage_luck_bonus INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS slot_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2828,7 +2856,10 @@ function mapShip(row: Row): Ship {
     slotIds: parseJson<number[]>(row.slot_ids_json, [-1, -1, -1, -1, -1]),
     onSlot: normalizeFixed(parseJson<number[]>(row.onslot_json, EMPTY_ONSLOT), 5, 0),
     exSlotId: Number(row.ex_slot_id),
-    stats: parseJson<JsonObject>(row.stats_json, {})
+    stats: parseJson<JsonObject>(row.stats_json, {}),
+    marriedAt: Math.max(0, Math.trunc(safeNum(row.married_at))),
+    marriageHpBonus: Math.max(0, Math.trunc(safeNum(row.marriage_hp_bonus))),
+    marriageLuckBonus: Math.max(0, Math.trunc(safeNum(row.marriage_luck_bonus)))
   };
 }
 
@@ -2984,7 +3015,7 @@ function parseJson<T>(value: unknown, fallback: T): T {
 function setShipLevel(db: Database.Database, shipId: number, level: number): ShipLevelSetResult {
   const id = Math.trunc(Number(shipId));
   const nextLevel = Number(level);
-  if (!Number.isInteger(nextLevel) || nextLevel < 1 || nextLevel > 99) {
+  if (!Number.isInteger(nextLevel) || nextLevel < 1) {
     return { ok: false, error: "Level must be an integer from 1 to 99" };
   }
 
@@ -2992,9 +3023,52 @@ function setShipLevel(db: Database.Database, shipId: number, level: number): Shi
   const ship = save.ships.find((item) => item.id === id);
   if (!ship) return { ok: false, error: "Unknown ship" };
   if (activeExpeditionShipIds(db).has(id)) return { ok: false, error: "Ship is away on expedition" };
+  const cap = shipLevelCap(ship);
+  if (nextLevel > cap) {
+    return { ok: false, error: `Level must be an integer from 1 to ${cap}` };
+  }
 
-  const exp = shipTotalExpForLevel(nextLevel);
+  const exp = shipTotalExpForLevel(nextLevel, cap);
   db.prepare("UPDATE ships SET level = ?, exp = ? WHERE id = ?").run(nextLevel, exp, id);
+  const updated = db.prepare("SELECT * FROM ships WHERE id = ?").get(id) as Row | undefined;
+  return updated ? { ok: true, ship: mapShip(updated) } : { ok: false, error: "Unknown ship" };
+}
+
+function marryShip(db: Database.Database, shipId: number, random: () => number): ShipMarriageResult {
+  const id = Math.trunc(Number(shipId));
+  const save = getSave(db);
+  const ship = save.ships.find((item) => item.id === id);
+  if (!ship) return { ok: false, error: "Unknown ship" };
+  if (activeExpeditionShipIds(db).has(id)) return { ok: false, error: "Ship is away on expedition" };
+  if (ship.marriedAt > 0 || ship.level >= 100) return { ok: false, error: "Ship is already married" };
+  if (ship.level < 99) return { ok: false, error: "Ship level must be at least 99" };
+  if ((save.useItems.find((item) => item.id === MARRIAGE_RING_ITEM_ID)?.count ?? 0) < 1) {
+    return { ok: false, error: "Insufficient ring item count" };
+  }
+
+  const hpBonus = marriageHpBonus(ship.maxHp);
+  const luckBonus = 3 + Math.floor(Math.max(0, Math.min(0.999999, random())) * 4);
+  const maxHp = ship.maxHp + hpBonus;
+  const hp = Math.min(maxHp, ship.hp + hpBonus);
+  const exp = Math.max(ship.exp, shipTotalExpForLevel(100, MARRIED_SHIP_LEVEL_CAP));
+  const marriedAt = Date.now();
+
+  const tx = db.transaction(() => {
+    consumeUseItem(db, MARRIAGE_RING_ITEM_ID, 1);
+    db.prepare(`
+      UPDATE ships
+      SET level = 100,
+          exp = ?,
+          hp = ?,
+          max_hp = ?,
+          married_at = ?,
+          marriage_hp_bonus = ?,
+          marriage_luck_bonus = ?
+      WHERE id = ?
+    `).run(exp, hp, maxHp, marriedAt, hpBonus, luckBonus, id);
+  });
+  tx();
+
   const updated = db.prepare("SELECT * FROM ships WHERE id = ?").get(id) as Row | undefined;
   return updated ? { ok: true, ship: mapShip(updated) } : { ok: false, error: "Unknown ship" };
 }
@@ -3511,10 +3585,30 @@ function aircraftRefillCount(current: number[], target: number[]) {
   return fixedTarget.reduce((sum, targetCount, index) => sum + Math.max(0, targetCount - fixedCurrent[index]), 0);
 }
 
+function marriageSupplyCost(missing: number, ship: Pick<Ship, "marriedAt">) {
+  const amount = Math.max(0, Math.trunc(safeNum(missing)));
+  if (amount <= 0 || ship.marriedAt <= 0) return amount;
+  return Math.max(1, Math.floor(amount * 0.85));
+}
+
 function shipInitialMaxHp(master: (typeof masterData.api_mst_ship)[number] | undefined, fallback = 15) {
   const value = Array.isArray(master?.api_taik) ? master.api_taik[0] : master?.api_taik;
   const hp = Number(value);
   return Number.isFinite(hp) && hp > 0 ? Math.trunc(hp) : fallback;
+}
+
+function shipLevelCap(ship: Pick<Ship, "marriedAt">) {
+  return ship.marriedAt > 0 ? MARRIED_SHIP_LEVEL_CAP : SHIP_LEVEL_CAP;
+}
+
+function marriageHpBonus(maxHp: number) {
+  const hp = Math.max(1, Math.trunc(safeNum(maxHp, 1)));
+  if (hp <= 29) return 4;
+  if (hp <= 39) return 5;
+  if (hp <= 49) return 6;
+  if (hp <= 69) return 7;
+  if (hp <= 89) return 8;
+  return 9;
 }
 
 function consumeMaterials(db: Database.Database, delta: MaterialDelta) {

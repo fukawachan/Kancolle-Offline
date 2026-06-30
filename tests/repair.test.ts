@@ -22,7 +22,10 @@ describe("repair calculations", () => {
       slotIds: [-1, -1, -1, -1, -1],
       onSlot: [0, 0, 0, 0, 0],
       exSlotId: -1,
-      stats: {}
+      stats: {},
+      marriedAt: 0,
+      marriageHpBonus: 0,
+      marriageLuckBonus: 0
     };
 
     expect(repairCost(damagedFubuki, fubukiMaster)).toEqual({

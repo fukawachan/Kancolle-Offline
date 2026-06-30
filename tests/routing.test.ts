@@ -408,7 +408,10 @@ function saveWithLos(): SaveState {
         slotIds: [1, -1, -1, -1, -1],
         onSlot: [0, 0, 0, 0, 0],
         exSlotId: -1,
-        stats: { baseLos: 5 }
+        stats: { baseLos: 5 },
+        marriedAt: 0,
+        marriageHpBonus: 0,
+        marriageLuckBonus: 0
       }
     ],
     slotItems: [{ id: 1, masterId: 25, level: 0, proficiency: 0, locked: 0 }],

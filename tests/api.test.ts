@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MARRIED_SHIP_LEVEL_CAP, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createResourceManifest } from "../src/resources/manifest.js";
 import { buildApp } from "../src/server/app.js";
@@ -466,6 +467,21 @@ describe("local kcsapi endpoints", () => {
     expect(laterSlotBlock.api_list).toHaveLength(70);
     expect(laterSlotBlock.api_list[0].api_index_no).toBe(71);
     expect(laterSlotBlock.api_list[20].api_index_no).toBe(91);
+  });
+
+  it("marks married ship variants in the picture book state", async () => {
+    store.setShipLevel(1, 99);
+    seedUseItem(55, 1);
+    arsenalRolls.push(0);
+    const married = await post("api_req_kaisou/marriage", { api_id: 1 });
+    expect(married.statusCode).toBe(200);
+
+    const masterId = store.getSave().ships.find((ship) => ship.id === 1)!.masterId;
+    const pictureBook = (await post("api_get_member/picture_book", { api_type: 1, api_no: 1 })).json().api_data;
+    const entry = pictureBook.api_list.find((item: any) => item.api_table_id.includes(masterId));
+
+    expect(entry).toBeDefined();
+    expect(entry.api_state[0]).toEqual([1, 1, 1]);
   });
 
   it("provides use item masters needed for the client material counters", async () => {
@@ -1343,6 +1359,68 @@ describe("local kcsapi endpoints", () => {
         save.materials.screw
       ]);
     }
+  });
+
+  it("charges married ships 85 percent of missing fuel and ammo while still filling them", async () => {
+    store.setShipLevel(1, 99);
+    seedUseItem(55, 1);
+    arsenalRolls.push(0);
+    expect((await post("api_req_kaisou/marriage", { api_id: 1 })).statusCode).toBe(200);
+    const marriedShip = store.getSave().ships.find((ship) => ship.id === 1)!;
+
+    store.db.prepare("UPDATE ships SET fuel = ?, ammo = ? WHERE id = ?")
+      .run(marriedShip.maxFuel - 3, marriedShip.maxAmmo - 4, marriedShip.id);
+    store.db.prepare("UPDATE materials SET fuel = 1000, ammo = 1000, bauxite = 1000 WHERE player_id = 1").run();
+
+    const charge = await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3, api_onslot: 0 });
+    const data = charge.json().api_data;
+    const chargedShip = data.api_ship.find((ship: any) => ship.api_id === 1);
+
+    expect(chargedShip.api_fuel).toBe(marriedShip.maxFuel);
+    expect(chargedShip.api_bull).toBe(marriedShip.maxAmmo);
+    expect(store.getSave().materials).toMatchObject({
+      fuel: 998,
+      ammo: 997,
+      bauxite: 1000
+    });
+  });
+
+  it("marries a level 99 ship through the remodel API and rejects invalid attempts", async () => {
+    const beforeShip = store.getSave().ships.find((ship) => ship.id === 1)!;
+    const beforeApiShip = (await post("api_get_member/ship2")).json().api_data.find((ship: any) => ship.api_id === 1);
+    store.setShipLevel(1, 99);
+    seedUseItem(55, 1);
+    arsenalRolls.push(0.5);
+
+    const response = await post("api_req_kaisou/marriage", { api_id: 1 });
+    const data = response.json().api_data;
+
+    expect(response.statusCode).toBe(200);
+    expect(data).toMatchObject({
+      api_id: 1,
+      api_lv: 100,
+      api_nowhp: beforeShip.maxHp + 4,
+      api_maxhp: beforeShip.maxHp + 4
+    });
+    expect(data.api_exp[0]).toBe(shipTotalExpForLevel(100, MARRIED_SHIP_LEVEL_CAP));
+    expect(data.api_lucky[0]).toBe(beforeApiShip.api_lucky[0] + 5);
+    expect(useItemCount(55)).toBe(0);
+
+    const persisted = (await post("api_get_member/ship2")).json().api_data.find((ship: any) => ship.api_id === 1);
+    expect(persisted.api_lv).toBe(100);
+
+    const duplicate = await post("api_req_kaisou/marriage", { api_id: 1 });
+    expect(duplicate.statusCode).toBe(400);
+
+    const underleveled = store.createShip(9);
+    seedUseItem(55, 1);
+    const underleveledResponse = await post("api_req_kaisou/marriage", { api_id: underleveled.id });
+    expect(underleveledResponse.statusCode).toBe(400);
+
+    store.setShipLevel(underleveled.id, 99);
+    seedUseItem(55, 0);
+    const missingRing = await post("api_req_kaisou/marriage", { api_id: underleveled.id });
+    expect(missingRing.statusCode).toBe(400);
   });
 
   it("exposes repair cost and time on damaged ships", async () => {
@@ -3209,6 +3287,7 @@ describe("local kcsapi endpoints", () => {
       "api_req_kaisou/slot_exchange_index",
       "api_req_kaisou/slot_deprive",
       "api_req_kaisou/lock",
+      "api_req_kaisou/marriage",
       "api_req_kaisou/powerup",
       "api_req_kaisou/remodeling",
       "api_req_quest/stop",

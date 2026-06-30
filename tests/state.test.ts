@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPracticeBattle } from "../src/kcsapi/battle.js";
-import { shipTotalExpForLevel } from "../src/kcsapi/experience.js";
+import { MARRIED_SHIP_LEVEL_CAP, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
 import { masterData } from "../src/master/data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
@@ -77,10 +77,73 @@ describe("SQLite state store", () => {
     expect(saved.exp).toBe(shipTotalExpForLevel(20));
   });
 
+  it("marries a level 99 ship, consumes the ring item, and unlocks post-99 leveling", () => {
+    store.registerAccount(15);
+    const before = store.getSave().ships.find((ship) => ship.id === 1)!;
+    store.setUseItemCount(55, 1);
+    store.setShipLevel(1, 99);
+
+    const result = store.marryShip(1, () => 0.5);
+
+    expect(result).toMatchObject({
+      ok: true,
+      ship: {
+        id: 1,
+        level: 100,
+        exp: shipTotalExpForLevel(100, MARRIED_SHIP_LEVEL_CAP),
+        maxHp: before.maxHp + 4,
+        hp: before.maxHp + 4,
+        marriageHpBonus: 4,
+        marriageLuckBonus: 5
+      }
+    });
+    expect(result.ok && result.ship.marriedAt).toBeGreaterThan(0);
+    expect(store.getSave().useItems.find((item) => item.id === 55)?.count).toBe(0);
+
+    const level120 = store.setShipLevel(1, 120);
+    expect(level120).toMatchObject({
+      ok: true,
+      ship: {
+        level: 120,
+        exp: shipTotalExpForLevel(120, MARRIED_SHIP_LEVEL_CAP)
+      }
+    });
+  });
+
+  it("rejects invalid marriage attempts without consuming the ring item", () => {
+    store.registerAccount(15);
+    store.setUseItemCount(55, 2);
+
+    expect(store.marryShip(1, () => 0)).toEqual({
+      ok: false,
+      error: "Ship level must be at least 99"
+    });
+
+    store.setShipLevel(1, 99);
+    expect(store.marryShip(1, () => 0)).toMatchObject({ ok: true });
+    expect(store.marryShip(1, () => 0)).toEqual({
+      ok: false,
+      error: "Ship is already married"
+    });
+    expect(store.getSave().useItems.find((item) => item.id === 55)?.count).toBe(1);
+
+    const another = store.createShip(9);
+    store.setShipLevel(another.id, 99);
+    store.setUseItemCount(55, 0);
+    expect(store.marryShip(another.id, () => 0)).toEqual({
+      ok: false,
+      error: "Insufficient ring item count"
+    });
+  });
+
   it("rejects invalid, unknown, and expedition-away ship level edits", () => {
     store.registerAccount(15);
 
     expect(store.setShipLevel(1, 0)).toEqual({
+      ok: false,
+      error: "Level must be an integer from 1 to 99"
+    });
+    expect(store.setShipLevel(1, 100)).toEqual({
       ok: false,
       error: "Level must be an integer from 1 to 99"
     });

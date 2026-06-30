@@ -163,7 +163,9 @@ register("api_get_member/payitem", (_input, context) => apiOk(
 ));
 register("api_get_member/record", (_input, context) => apiOk(recordPayload(context.stateStore.getSave())));
 register("api_req_ranking/mxltvkpyuklh", (input, context) => apiOk(rankingPayload(input, context.stateStore.getSave())));
-register("api_get_member/picture_book", (input, context) => apiOk({ api_list: pictureBookList(input, context.resourceManifest) }));
+register("api_get_member/picture_book", (input, context) =>
+  apiOk({ api_list: pictureBookList(input, context.resourceManifest, context.stateStore.getSave()) })
+);
 register("api_get_member/practice", (_input, context) => {
   const batch = context.stateStore.practiceBatch(practiceBatchOptions(context));
   return apiOk(practiceListPayload(batch.rivals, batch.states));
@@ -333,6 +335,12 @@ register("api_req_kaisou/slot_deprive", (input, context) => {
   return apiOk({ api_unset_ship: unset ? toShip(unset, save.slotItems) : null, api_set_ship: set ? toShip(set, save.slotItems) : null });
 });
 register("api_req_kaisou/lock", (input, context) => apiOk({ api_locked: context.stateStore.lockSlotItem(num(input.body.api_slotitem_id ?? input.body.api_item_id, 1)) }));
+register("api_req_kaisou/marriage", (input, context) => {
+  const result = context.stateStore.marryShip(num(input.body.api_id, 1), context.arsenalRandom);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  const save = context.stateStore.getSave();
+  return apiOk(toShip(result.ship, save.slotItems));
+});
 register("api_req_kaisou/powerup", (input, context) => {
   const destroyConsumedEquipment = num(input.body.api_slot_dest_flag, 0) === 1;
   const result = context.stateStore.modernizeShip(
@@ -846,11 +854,14 @@ function shipGraph(resourceManifest: ResourceManifest, ships: ShipMaster[]) {
   });
 }
 
-function pictureBookList(input: HandlerInput, resourceManifest: ResourceManifest) {
+function pictureBookList(input: HandlerInput, resourceManifest: ResourceManifest, save: SaveState) {
   const type = num(input.body.api_type ?? input.query.api_type, 1);
   const startNo = num(input.body.api_no ?? input.query.api_no, 1);
 
-  if (type === 1) return shipPictureBookPage(resourceManifest, startNo);
+  if (type === 1) {
+    const marriedMasterIds = new Set(save.ships.filter((ship) => ship.marriedAt > 0).map((ship) => ship.masterId));
+    return shipPictureBookPage(resourceManifest, startNo, marriedMasterIds);
+  }
   if (type === 2) return slotPictureBookPage(resourceManifest, startNo);
   return [];
 }

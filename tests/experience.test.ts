@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { shipApiExp, shipLevelForExp, shipLevelupInfo, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
+import {
+  MARRIED_SHIP_LEVEL_CAP,
+  shipApiExp,
+  shipLevelForExp,
+  shipLevelupInfo,
+  shipTotalExpForLevel
+} from "../src/kcsapi/experience.js";
 import { practiceBaseShipExp, practiceMemberExp, shipTotalExpForPracticeLevel } from "../src/kcsapi/practice.js";
 
 describe("battle experience helpers", () => {
@@ -25,6 +31,19 @@ describe("battle experience helpers", () => {
     expect(shipApiExp(100, 2)).toEqual([100, 200, 0]);
   });
 
+  it("uses the official post-marriage ship level cap and cumulative experience", () => {
+    expect(MARRIED_SHIP_LEVEL_CAP).toBe(185);
+    expect(shipTotalExpForLevel(99)).toBe(1_000_000);
+    expect(shipTotalExpForLevel(100, MARRIED_SHIP_LEVEL_CAP)).toBe(1_000_000);
+    expect(shipTotalExpForLevel(120, MARRIED_SHIP_LEVEL_CAP)).toBe(1_255_000);
+    expect(shipTotalExpForLevel(185, MARRIED_SHIP_LEVEL_CAP)).toBe(16_000_000);
+    expect(shipTotalExpForLevel(186, MARRIED_SHIP_LEVEL_CAP)).toBe(16_000_000);
+    expect(shipLevelForExp(1_254_999, MARRIED_SHIP_LEVEL_CAP)).toBe(119);
+    expect(shipLevelForExp(1_255_000, MARRIED_SHIP_LEVEL_CAP)).toBe(120);
+    expect(shipLevelForExp(99_999_999, MARRIED_SHIP_LEVEL_CAP)).toBe(185);
+    expect(shipApiExp(16_000_000, 185, MARRIED_SHIP_LEVEL_CAP)).toEqual([16_000_000, 0, 100]);
+  });
+
   it("calculates practice ship experience from the enemy flagship and second ship levels", () => {
     expect(practiceBaseShipExp([80, 1], "A", 0)).toBe(557);
     expect(practiceBaseShipExp([80, 80], "A", 0)).toBe(567);
@@ -41,7 +60,8 @@ describe("battle experience helpers", () => {
     expect(shipTotalExpForPracticeLevel(99)).toBe(1_000_000);
     expect(shipTotalExpForPracticeLevel(100)).toBe(1_000_000);
     expect(shipTotalExpForPracticeLevel(120)).toBe(1_255_000);
-    expect(shipTotalExpForPracticeLevel(188)).toBe(20_200_000);
+    expect(shipTotalExpForPracticeLevel(185)).toBe(16_000_000);
+    expect(shipTotalExpForPracticeLevel(188)).toBe(16_000_000);
   });
 
   it("calculates practice member experience from commander level difference and rank", () => {

@@ -21,6 +21,7 @@ export type ExpeditionShipSnapshot = {
   maxFuel: number;
   ammo: number;
   maxAmmo: number;
+  marriedAt: number;
   slotItemMasterIds: number[];
   firepower: number;
   antiAir: number;
@@ -232,6 +233,7 @@ function snapshotShip(save: SaveState, ship: Ship): ExpeditionShipSnapshot {
     maxFuel: ship.maxFuel,
     ammo: ship.ammo,
     maxAmmo: ship.maxAmmo,
+    marriedAt: ship.marriedAt,
     slotItemMasterIds,
     firepower: serialized.api_karyoku[0],
     antiAir: serialized.api_taiku[0],

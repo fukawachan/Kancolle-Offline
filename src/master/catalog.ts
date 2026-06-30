@@ -69,10 +69,10 @@ export function buildShipTypes(slotItems: SlotMaster[]): ShipTypeMaster[] {
   return masterData.api_mst_stype.map((shipType) => ({ ...shipType, api_equip_type: { ...shipType.api_equip_type } }));
 }
 
-export function shipPictureBookPage(resourceManifest: ResourceManifest, pageNo: number) {
+export function shipPictureBookPage(resourceManifest: ResourceManifest, pageNo: number, marriedMasterIds = new Set<number>()) {
   const firstIndexNo = blockFirstIndexNo(pageNo);
   return block(buildShipMasters(resourceManifest), pageNo).map((ship, offset) =>
-    shipPictureBookEntry(ship, firstIndexNo + offset)
+    shipPictureBookEntry(ship, firstIndexNo + offset, marriedMasterIds)
   );
 }
 
@@ -88,7 +88,7 @@ function block<T>(items: T[], blockNo: number) {
   return items.slice(startIndex, startIndex + ITEMS_PER_BLOCK);
 }
 
-function shipPictureBookEntry(ship: ShipMaster, indexNo: number) {
+function shipPictureBookEntry(ship: ShipMaster, indexNo: number, marriedMasterIds: Set<number>) {
   return {
     api_index_no: indexNo,
     api_table_id: [ship.api_id],
@@ -99,7 +99,7 @@ function shipPictureBookEntry(ship: ShipMaster, indexNo: number) {
     api_tyku: statValue(ship.api_tyku),
     api_kaih: 0,
     api_taik: statValue(ship.api_taik),
-    api_state: [[1, 1, 0]],
+    api_state: [[1, 1, marriedMasterIds.has(ship.api_id) ? 1 : 0]],
     api_q_voice_info: []
   };
 }

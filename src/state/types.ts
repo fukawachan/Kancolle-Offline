@@ -53,6 +53,9 @@ export type Ship = {
   onSlot: number[];
   exSlotId: number;
   stats: JsonObject;
+  marriedAt: number;
+  marriageHpBonus: number;
+  marriageLuckBonus: number;
 };
 
 export type SlotItem = {
