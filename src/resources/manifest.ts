@@ -52,9 +52,16 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return resource;
   }
 
-  const spRemodelShipArt = pathname.match(/^\/kcs2\/resources\/ship\/sp_remodel\/(silhouette|full_x2)\/(\d{4})_(\d{4})\.png$/i);
-  if (spRemodelShipArt) {
-    return shipArtFallback(manifest, Number(spRemodelShipArt[2]));
+  const spRemodelPng = pathname.match(
+    /^\/kcs2\/resources\/ship\/sp_remodel\/(silhouette|full_x2|text_remodel_mes|text_class|text_name)\/(\d{4})_(\d{4})\.png$/i
+  );
+  if (spRemodelPng) {
+    return spRemodelCollection(manifest, spRemodelPng[1])?.get(Number(spRemodelPng[2]));
+  }
+
+  const spRemodelAnimation = pathname.match(/^\/kcs2\/resources\/ship\/sp_remodel\/animation_key\/(\d{4})_remodel\.json$/i);
+  if (spRemodelAnimation) {
+    return manifest.ship.spRemodel.animationKey.get(Number(spRemodelAnimation[1]));
   }
 
   const shipImage = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card|character_up|character_up_dmg|power_up|power_up_dmg)\/(\d{4})_(\d{4})\.png$/i);
@@ -115,7 +122,15 @@ function emptyManifest(): ResourceManifest {
       card: new Map(),
       characterUp: new Map(),
       characterUpDamaged: new Map(),
-      full: new Map()
+      full: new Map(),
+      spRemodel: {
+        silhouette: new Map(),
+        fullX2: new Map(),
+        textRemodelMessage: new Map(),
+        textClass: new Map(),
+        textName: new Map(),
+        animationKey: new Map()
+      }
     },
     slot: {
       card: new Map(),
@@ -175,6 +190,34 @@ async function listFiles(cacheDir: string, dir = cacheDir): Promise<string[]> {
 }
 
 function addShipResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
+  const spRemodelPng = pathname.match(
+    /^\/kcs2\/resources\/ship\/sp_remodel\/(silhouette|full_x2|text_remodel_mes|text_class|text_name)\/(\d{4})_(\d{4})\.png$/i
+  );
+  if (spRemodelPng) {
+    spRemodelCollection(manifest, spRemodelPng[1])?.set(
+      Number(spRemodelPng[2]),
+      resource(cacheDir, pathname, meta, {
+        id: Number(spRemodelPng[2]),
+        frame: spRemodelPng[3],
+        extension: "png"
+      })
+    );
+    return;
+  }
+
+  const spRemodelAnimation = pathname.match(/^\/kcs2\/resources\/ship\/sp_remodel\/animation_key\/(\d{4})_remodel\.json$/i);
+  if (spRemodelAnimation) {
+    manifest.ship.spRemodel.animationKey.set(
+      Number(spRemodelAnimation[1]),
+      resource(cacheDir, pathname, meta, {
+        id: Number(spRemodelAnimation[1]),
+        frame: "remodel",
+        extension: "json"
+      })
+    );
+    return;
+  }
+
   const full = pathname.match(/^\/kcs2\/resources\/ship\/full\/(\d{4})_(\d{4})_([a-z]+)\.png$/i);
   if (full) {
     manifest.ship.full.set(
@@ -237,6 +280,23 @@ function shipCollection(manifest: ResourceManifest, rawKind: string) {
   }
 }
 
+function spRemodelCollection(manifest: ResourceManifest, rawKind: string) {
+  switch (rawKind.toLowerCase()) {
+    case "silhouette":
+      return manifest.ship.spRemodel.silhouette;
+    case "full_x2":
+      return manifest.ship.spRemodel.fullX2;
+    case "text_remodel_mes":
+      return manifest.ship.spRemodel.textRemodelMessage;
+    case "text_class":
+      return manifest.ship.spRemodel.textClass;
+    case "text_name":
+      return manifest.ship.spRemodel.textName;
+    default:
+      return undefined;
+  }
+}
+
 function slotCollection(manifest: ResourceManifest, rawKind: string) {
   switch (rawKind.toLowerCase()) {
     case "card":
@@ -252,17 +312,6 @@ function slotCollection(manifest: ResourceManifest, rawKind: string) {
     default:
       return undefined;
   }
-}
-
-function shipArtFallback(manifest: ResourceManifest, id: number) {
-  return (
-    manifest.ship.full.get(id) ||
-    manifest.ship.card.get(id) ||
-    manifest.ship.albumStatus.get(id) ||
-    manifest.ship.banner.get(id) ||
-    manifest.ship.characterUp.get(id) ||
-    manifest.ship.characterUpDamaged.get(id)
-  );
 }
 
 function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {

@@ -1,3 +1,5 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { normalRoutingMaps } from "../src/master/routing-data.js";
@@ -42,14 +44,8 @@ describe("cached resource manifest", () => {
       frame: "3346",
       pathname: "/kcs2/resources/ship/character_up_dmg/0131_3346.png"
     });
-    expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/silhouette/0698_4471.png", manifest)).toMatchObject({
-      id: 698,
-      pathname: manifest.ship.full.get(698)?.pathname
-    });
-    expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/full_x2/0698_0000.png", manifest)).toMatchObject({
-      id: 698,
-      pathname: manifest.ship.full.get(698)?.pathname
-    });
+    expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/silhouette/0698_4471.png", manifest)).toBeUndefined();
+    expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/full_x2/0698_0000.png", manifest)).toBeUndefined();
     expect(manifest.slot.card.get(1)).toMatchObject({
       id: 1,
       pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/card\/0001_\d{4}\.png$/)
@@ -182,6 +178,59 @@ describe("cached resource manifest", () => {
     expect(ship179?.availableVoiceNos.has(18)).toBe(true);
     expect(ship179?.availableVoiceNos.has(29)).toBe(true);
     expect(ship179?.files.has("105230")).toBe(true);
+  });
+
+  it("derives official special-remodel resources when they are present in the cache index", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-sp-remodel-manifest-"));
+    try {
+      await writeFile(path.join(tempDir, "cached.json"), JSON.stringify({
+        "/kcs2/resources/ship/sp_remodel/silhouette/0698_4471.png": { version: "?version=62" },
+        "/kcs2/resources/ship/sp_remodel/full_x2/0698_3344.png": { version: "?version=62" },
+        "/kcs2/resources/ship/sp_remodel/text_remodel_mes/0278_1783.png": { version: "?version=62" },
+        "/kcs2/resources/ship/sp_remodel/text_class/0698_1234.png": { version: "?version=62" },
+        "/kcs2/resources/ship/sp_remodel/text_name/0698_5678.png": { version: "?version=62" },
+        "/kcs2/resources/ship/sp_remodel/animation_key/0698_remodel.json": { version: "?version=62" }
+      }));
+
+      const manifest = await createResourceManifest(tempDir);
+
+      expect(manifest.ship.spRemodel.silhouette.get(698)).toMatchObject({
+        id: 698,
+        frame: "4471",
+        pathname: "/kcs2/resources/ship/sp_remodel/silhouette/0698_4471.png"
+      });
+      expect(manifest.ship.spRemodel.fullX2.get(698)).toMatchObject({
+        id: 698,
+        frame: "3344"
+      });
+      expect(manifest.ship.spRemodel.textRemodelMessage.get(278)).toMatchObject({
+        id: 278,
+        frame: "1783"
+      });
+      expect(manifest.ship.spRemodel.textClass.get(698)).toMatchObject({
+        id: 698,
+        frame: "1234"
+      });
+      expect(manifest.ship.spRemodel.textName.get(698)).toMatchObject({
+        id: 698,
+        frame: "5678"
+      });
+      expect(manifest.ship.spRemodel.animationKey.get(698)).toMatchObject({
+        id: 698,
+        frame: "remodel",
+        extension: "json"
+      });
+      expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/silhouette/0698_0000.png", manifest)).toMatchObject({
+        id: 698,
+        frame: "4471"
+      });
+      expect(resolveMappedResource("/kcs2/resources/ship/sp_remodel/animation_key/0698_remodel.json", manifest)).toMatchObject({
+        id: 698,
+        extension: "json"
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("merges normal-map info variants for multi-stage maps", async () => {
