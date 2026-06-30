@@ -53,8 +53,8 @@ const equipTypeNameMap: Map<number, string> = new Map(
 );
 
 // Build lookup maps for fast master validation
-const shipMasterIds: Set<number> = new Set(SHIPS.map((s) => s.api_id));
-const slotMasterIds: Set<number> = new Set(SLOT_ITEMS.map((s) => s.api_id));
+const shipMasterById = new Map(SHIPS.map((s) => [s.api_id, s] as const));
+const slotItemMasterById = new Map(SLOT_ITEMS.map((s) => [s.api_id, s] as const));
 const resourcePseudoUseItemIds = new Set([31, 32, 33, 34]);
 const commonUseItemIds = [58, 78, 65, 74, 75, 77, 92, 94, 70, 73, 64, 67, 66, 54, 59, 52, 55];
 
@@ -128,12 +128,33 @@ function positiveIntegerFilter(value: unknown): number | null {
 
 export function handleListPlayerShips(stateStore: StateStore) {
   const save = stateStore.getSave();
-  return apiOk(save.ships.map((s) => toShip(s, save.slotItems)));
+  return apiOk(save.ships.map((s) => {
+    const ship = toShip(s, save.slotItems);
+    const master = shipMasterById.get(s.masterId);
+    return {
+      ...ship,
+      name: master?.api_name ?? `Unknown ship ${s.masterId}`,
+      yomi: master?.api_yomi ?? "",
+      stype: master?.api_stype ?? 0,
+      stypeName: master ? shipTypeNameMap.get(master.api_stype) ?? `Type ${master.api_stype}` : "Type 0",
+    };
+  }));
 }
 
 export function handleListPlayerSlotItems(stateStore: StateStore) {
   const save = stateStore.getSave();
-  return apiOk(save.slotItems.map(toSlotItem));
+  return apiOk(save.slotItems.map((item) => {
+    const slotItem = toSlotItem(item);
+    const master = slotItemMasterById.get(item.masterId);
+    const type = master?.api_type[2] ?? 0;
+    return {
+      ...slotItem,
+      name: master?.api_name ?? `Unknown equipment ${item.masterId}`,
+      yomi: master?.api_yomi ?? "",
+      type,
+      typeName: equipTypeNameMap.get(type) ?? `Type ${type}`,
+    };
+  }));
 }
 
 export function handleSetShipLevel(

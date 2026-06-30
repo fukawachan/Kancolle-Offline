@@ -59,6 +59,47 @@ describe("debug inventory controls", () => {
     expect(response.body).toContain("/debug/api/materials/set");
   });
 
+  it("renders scroll retention wiring for all debug lists", async () => {
+    const response = await app.inject({ method: "GET", url: "/debug" });
+
+    expect(response.body).toContain("function rememberListScroll(list)");
+    expect(response.body).toContain("requestAnimationFrame");
+    expect(response.body).toContain("Math.max(0, list.scrollHeight - list.clientHeight)");
+    expect(response.body.match(/const restoreScroll = rememberListScroll\(list\);/g) ?? []).toHaveLength(7);
+  });
+
+  it("lists owned ships with master display names", async () => {
+    const response = await app.inject({ method: "GET", url: "/debug/api/player/ships" });
+    const ships = response.json().api_data;
+
+    expect(ships).toContainEqual(
+      expect.objectContaining({
+        api_id: 1,
+        api_ship_id: 9,
+        name: "吹雪",
+        yomi: "Fubuki",
+        stype: 2,
+        stypeName: "駆逐艦"
+      })
+    );
+  });
+
+  it("lists owned equipment with master display names", async () => {
+    const response = await app.inject({ method: "GET", url: "/debug/api/player/equipment" });
+    const items = response.json().api_data;
+
+    expect(items).toContainEqual(
+      expect.objectContaining({
+        api_id: 1,
+        api_slotitem_id: 1,
+        name: "12cm単装砲",
+        yomi: "12cm Single Gun Mount",
+        type: 1,
+        typeName: "小口径主砲"
+      })
+    );
+  });
+
   it("filters ship masters by ship type", async () => {
     const response = await app.inject({
       method: "GET",

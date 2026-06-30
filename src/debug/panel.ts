@@ -324,6 +324,16 @@ export function renderDebugPanel(): string {
         return JSON.parse(body);
       }
 
+      function rememberListScroll(list) {
+        const scrollTop = list.scrollTop;
+        return function restoreListScroll() {
+          requestAnimationFrame(() => {
+            const maxScroll = Math.max(0, list.scrollHeight - list.clientHeight);
+            list.scrollTop = Math.min(scrollTop, maxScroll);
+          });
+        };
+      }
+
       // ---- Init ----
       refreshOwnedShips();
       searchShips();
@@ -361,6 +371,7 @@ export function renderDebugPanel(): string {
       async function loadMoreShips() {
         const list = document.getElementById("ship-master-list");
         const btn = document.getElementById("ship-load-more");
+        const restoreScroll = rememberListScroll(list);
         btn.style.display = "none";
         if (shipOffset === 0) list.innerHTML = '<div class="loading">Loading...</div>';
 
@@ -401,6 +412,8 @@ export function renderDebugPanel(): string {
         } catch (err) {
           if (shipOffset === 0) list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
           showStatus("Failed to load ship masters: " + err.message, "error");
+        } finally {
+          restoreScroll();
         }
       }
 
@@ -427,6 +440,7 @@ export function renderDebugPanel(): string {
       async function refreshOwnedShips() {
         const list = document.getElementById("owned-ship-list");
         const count = document.getElementById("owned-ship-count");
+        const restoreScroll = rememberListScroll(list);
         list.innerHTML = '<div class="loading">Loading...</div>';
         try {
           const resp = await fetch("/debug/api/player/ships", { cache: "no-store" });
@@ -443,8 +457,10 @@ export function renderDebugPanel(): string {
             row.className = "list-row";
             row.innerHTML =
               '<span class="info">' +
-                '<span class="name">#' + ship.api_id + ' [Mst:' + ship.api_ship_id + ']</span> ' +
-                '<span class="meta">Lv.' + ship.api_lv + ' &middot; HP ' + ship.api_nowhp + '/' + ship.api_maxhp + '</span>' +
+                '<span class="name">' + esc(ship.name) + '</span> ' +
+                '<span class="meta">#' + ship.api_id + ' [Mst:' + ship.api_ship_id + '] ' +
+                  esc(ship.stypeName || ("Type " + ship.stype)) +
+                  ' &middot; Lv.' + ship.api_lv + ' &middot; HP ' + ship.api_nowhp + '/' + ship.api_maxhp + '</span>' +
               '</span>' +
               '<span class="actions">' +
                 '<input id="ship-level-' + ship.api_id + '" class="level-input" type="number" min="1" max="99" value="' + ship.api_lv + '" ' +
@@ -457,6 +473,8 @@ export function renderDebugPanel(): string {
         } catch (err) {
           list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
           count.textContent = "";
+        } finally {
+          restoreScroll();
         }
       }
 
@@ -519,6 +537,7 @@ export function renderDebugPanel(): string {
       async function loadMoreEquipment() {
         const list = document.getElementById("equip-master-list");
         const btn = document.getElementById("equip-load-more");
+        const restoreScroll = rememberListScroll(list);
         btn.style.display = "none";
         if (equipOffset === 0) list.innerHTML = '<div class="loading">Loading...</div>';
 
@@ -559,6 +578,8 @@ export function renderDebugPanel(): string {
         } catch (err) {
           if (equipOffset === 0) list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
           showStatus("Failed to load equipment masters: " + err.message, "error");
+        } finally {
+          restoreScroll();
         }
       }
 
@@ -585,6 +606,7 @@ export function renderDebugPanel(): string {
       async function refreshOwnedEquipment() {
         const list = document.getElementById("owned-equip-list");
         const count = document.getElementById("owned-equip-count");
+        const restoreScroll = rememberListScroll(list);
         list.innerHTML = '<div class="loading">Loading...</div>';
         try {
           const resp = await fetch("/debug/api/player/equipment", { cache: "no-store" });
@@ -601,8 +623,10 @@ export function renderDebugPanel(): string {
             row.className = "list-row";
             row.innerHTML =
               '<span class="info">' +
-                '<span class="name">#' + item.api_id + ' [Mst:' + item.api_slotitem_id + ']</span> ' +
-                '<span class="meta">Lv.' + item.api_level + ' &middot; Prof. ' + item.api_alv + '</span>' +
+                '<span class="name">' + esc(item.name) + '</span> ' +
+                '<span class="meta">#' + item.api_id + ' [Mst:' + item.api_slotitem_id + '] ' +
+                  esc(item.typeName || ("Type " + item.type)) +
+                  ' &middot; Lv.' + item.api_level + ' &middot; Prof. ' + item.api_alv + '</span>' +
               '</span>' +
               '<button class="btn-remove" onclick="removeEquipment(' + item.api_id + ')">&times; Remove</button>';
             list.appendChild(row);
@@ -610,6 +634,8 @@ export function renderDebugPanel(): string {
         } catch (err) {
           list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
           count.textContent = "";
+        } finally {
+          restoreScroll();
         }
       }
 
@@ -637,6 +663,7 @@ export function renderDebugPanel(): string {
       // ---- Use items ----
       async function refreshUseItems() {
         const list = document.getElementById("common-useitem-list");
+        const restoreScroll = rememberListScroll(list);
         list.innerHTML = '<div class="loading">Loading...</div>';
         try {
           const resp = await fetch("/debug/api/player/useitems", { cache: "no-store" });
@@ -652,6 +679,8 @@ export function renderDebugPanel(): string {
           }
         } catch (err) {
           list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
+        } finally {
+          restoreScroll();
         }
       }
 
@@ -665,6 +694,7 @@ export function renderDebugPanel(): string {
       async function loadMoreUseItems() {
         const list = document.getElementById("useitem-master-list");
         const btn = document.getElementById("useitem-load-more");
+        const restoreScroll = rememberListScroll(list);
         btn.style.display = "none";
         if (useItemOffset === 0) list.innerHTML = '<div class="loading">Loading...</div>';
 
@@ -695,6 +725,8 @@ export function renderDebugPanel(): string {
         } catch (err) {
           if (useItemOffset === 0) list.innerHTML = '<div class="list-empty">Failed to load: ' + esc(String(err)) + '</div>';
           showStatus("Failed to load item masters: " + err.message, "error");
+        } finally {
+          restoreScroll();
         }
       }
 
@@ -829,6 +861,7 @@ export function renderDebugPanel(): string {
       async function refreshExpeditions() {
         const list = document.getElementById("expedition-list");
         const summary = document.getElementById("expedition-summary");
+        const restoreScroll = rememberListScroll(list);
         try {
           const data = await expeditionRequest("/debug/api/expeditions/status");
           summary.textContent =
@@ -857,6 +890,8 @@ export function renderDebugPanel(): string {
           }
         } catch (err) {
           list.innerHTML = '<div class="list-empty">' + esc(err.message) + '</div>';
+        } finally {
+          restoreScroll();
         }
       }
 
