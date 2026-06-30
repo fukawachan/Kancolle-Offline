@@ -39,6 +39,7 @@ describe("local Fastify server", () => {
     expect(response.body).toContain("/local-vendor/axios.min.js");
     expect(response.body).toContain("/local-vendor/howler.min.js");
     expect(response.body).toContain("/kcs2/js/main.js");
+    expect(response.body).toContain('<link rel="icon" href="/favicon.ico" sizes="64x64">');
     expect(response.body).toContain("window.KCS.init()");
     expect(response.body).toContain("id=\"r_editarea\"");
     expect(response.body).toContain("id=\"r_editbox\"");
@@ -248,11 +249,27 @@ describe("local Fastify server", () => {
     expect(launcher.body).toContain("api_world/get_id");
     expect(launcher.body).toContain("kcs2/world.html");
     expect(launcher.body).toContain("api_root=/kcsapi&voice_root=/kcs/sound&");
+    expect(launcher.body).toContain('<link rel="icon" href="/favicon.ico" sizes="64x64">');
     expect(world.statusCode).toBe(200);
     expect(world.headers["content-type"]).toContain("text/html");
     expect(world.body).toContain("幌筵泊地");
     expect(world.body).toContain("/kcs2/resources/world/15p_ver_com_t.png");
+    expect(world.body).toContain('<link rel="icon" href="/favicon.ico" sizes="64x64">');
     expect(world.body).toContain("api_world/register");
+  });
+
+  it("serves a local favicon icon for browser startup requests", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({ method: "GET", url: "/favicon.ico" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/x-icon");
+    expect(response.body.slice(0, 4)).toBe("\0\0\u0001\0");
   });
 
   it("serves local vendor runtimes before the cached client bundle", async () => {

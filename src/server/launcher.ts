@@ -7,6 +7,7 @@ export function renderLauncher() {
     <meta charset="utf-8">
     <meta name="viewport" content="width=1200, initial-scale=1">
     <title>Kancolle Local Launcher</title>
+    <link rel="icon" href="/favicon.ico" sizes="64x64">
     <style>
       html, body {
         margin: 0;
@@ -88,6 +89,7 @@ export function renderWorldPage(query: Record<string, unknown>) {
     <meta charset="utf-8">
     <meta name="viewport" content="width=1200, initial-scale=1">
     <title>Kancolle Local World</title>
+    <link rel="icon" href="/favicon.ico" sizes="64x64">
     <style>
       html, body {
         margin: 0;

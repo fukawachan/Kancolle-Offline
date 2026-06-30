@@ -20,6 +20,8 @@ const TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=",
   "base64"
 );
+// 64x64 ICO derived from https://zh.wikipedia.org/wiki/File:Kancolle_logo.png for local favicon use.
+const FAVICON_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "assets/favicon.ico");
 const SPECIAL_REMODEL_STAGE_CENTER = { x: 600, y: 360 };
 const SPECIAL_REMODEL_MAX_SHIP_WIDTH = 820;
 const SPECIAL_REMODEL_MAX_SHIP_HEIGHT = 680;
@@ -67,6 +69,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.get("/kcs2/world.html", async (request, reply) => {
     return reply.type("text/html; charset=utf-8").send(renderWorldPage(request.query as Record<string, unknown>));
+  });
+
+  app.get("/favicon.ico", async (_request, reply) => {
+    return reply
+      .type("image/x-icon")
+      .header("cache-control", "public, max-age=3600")
+      .send(await readFile(FAVICON_PATH));
   });
 
   app.get("/local-vendor/pixi.min.js", async (_request, reply) => {
@@ -223,6 +232,8 @@ function contentTypeFor(filePath: string) {
     case ".jpg":
     case ".jpeg":
       return "image/jpeg";
+    case ".ico":
+      return "image/x-icon";
     case ".mp3":
       return "audio/mpeg";
     case ".m4a":
