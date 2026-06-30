@@ -9,6 +9,7 @@ const EQUIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master
 const SHIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/wiki/ship.json";
 const START2_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/api/api_start2.json";
 const CACHE_DIR = path.join(__dirname, "..", ".local", "wiki-cache");
+const NEW_MODEL_HIGH_TEMPERATURE_HIGH_PRESSURE_BOILER_ID = 87;
 
 function getCachePath(url) {
   const filename = url.includes("api_start2") ? "api_start2.json" : url.includes("equipment") ? "equipment.json" : "ship.json";
@@ -69,6 +70,11 @@ function num(val, def = 0) {
 
 function boolNum(val, def = 0) {
   return val ? 1 : def;
+}
+
+function positiveCount(val) {
+  if (val === true) return 1;
+  return Math.max(0, Math.trunc(num(val)));
 }
 
 // ---- Equipment mapping ----
@@ -231,6 +237,98 @@ function applyStart2ShipOverrides(ships, start2Data) {
   });
 }
 
+function buildShipRemodelNameToId(shipData) {
+  function normalize(name) {
+    return String(name).replace(/\//g, " ").trim();
+  }
+
+  const nameToId = new Map();
+  function setFallbackAlias(name, id) {
+    const normalized = normalize(name);
+    if (!nameToId.has(normalized)) nameToId.set(normalized, id);
+  }
+
+  for (const [key, ship] of Object.entries(shipData)) {
+    nameToId.set(normalize(key), ship._api_id || ship._id);
+  }
+  for (const ship of Object.values(shipData)) {
+    const id = ship._api_id || ship._id;
+    if (ship._name) setFallbackAlias(ship._name, id);
+    if (ship._japanese_name) setFallbackAlias(ship._japanese_name, id);
+    if (ship._full_name) setFallbackAlias(ship._full_name, id);
+  }
+  return { nameToId, normalize };
+}
+
+function remodelExtraCostFrom(entry, prefix) {
+  const materials = {};
+  const slotItems = [];
+  const devmat = positiveCount(entry[`${prefix}_development_material`]);
+  const buildKit = positiveCount(entry[`${prefix}_construction_material`]);
+  const boiler = positiveCount(entry[`${prefix}_boiler`]);
+
+  if (devmat > 0) materials.devmat = devmat;
+  if (buildKit > 0) materials.buildKit = buildKit;
+  if (boiler > 0) {
+    slotItems.push({
+      masterId: NEW_MODEL_HIGH_TEMPERATURE_HIGH_PRESSURE_BOILER_ID,
+      count: boiler
+    });
+  }
+
+  return { materials, slotItems };
+}
+
+function hasExtraRemodelCost(cost) {
+  return Object.keys(cost.materials).length > 0 || cost.slotItems.length > 0;
+}
+
+function buildShipRemodelExtraCosts(shipData) {
+  const { nameToId, normalize } = buildShipRemodelNameToId(shipData);
+  const byPair = new Map();
+
+  function addCost(fromMasterId, toMasterId, cost, context) {
+    if (!hasExtraRemodelCost(cost)) return;
+    if (!fromMasterId || !toMasterId) {
+      throw new Error(`Unable to resolve ship remodel extra cost for ${context}`);
+    }
+    const key = `${fromMasterId}->${toMasterId}`;
+    if (byPair.has(key)) {
+      throw new Error(`Duplicate ship remodel extra cost for ${context}`);
+    }
+    byPair.set(key, {
+      fromMasterId,
+      toMasterId,
+      materials: cost.materials,
+      slotItems: cost.slotItems
+    });
+  }
+
+  for (const [key, entry] of Object.entries(shipData)) {
+    const currentMasterId = entry._api_id || entry._id;
+    if (entry._remodel_from) {
+      addCost(
+        nameToId.get(normalize(entry._remodel_from)),
+        currentMasterId,
+        remodelExtraCostFrom(entry, "_remodel"),
+        `${key} _remodel_from=${entry._remodel_from}`
+      );
+    }
+    if (entry._remodel_to) {
+      addCost(
+        currentMasterId,
+        nameToId.get(normalize(entry._remodel_to)),
+        remodelExtraCostFrom(entry, "_remodel_to"),
+        `${key} _remodel_to=${entry._remodel_to}`
+      );
+    }
+  }
+
+  return [...byPair.values()].sort((a, b) =>
+    a.fromMasterId - b.fromMasterId || a.toMasterId - b.toMasterId
+  );
+}
+
 function mapFurniture(entry) {
   return {
     api_id: num(entry.api_id),
@@ -333,6 +431,7 @@ async function main() {
   const shipUpgrades = (start2Data.api_mst_shipupgrade || [])
     .map((upgrade) => ({ ...upgrade }))
     .sort((a, b) => num(a.api_id) - num(b.api_id));
+  const shipRemodelExtraCosts = buildShipRemodelExtraCosts(shipData);
   const furniture = (start2Data.api_mst_furniture || [])
     .map(mapFurniture)
     .sort((a, b) => a.api_id - b.api_id);
@@ -399,6 +498,15 @@ async function main() {
   ts.push("];");
   ts.push("");
 
+  ts.push("// ---- Internal Ship Remodel Extra Costs ----");
+  ts.push("");
+  ts.push("export const SHIP_REMODEL_EXTRA_COSTS = [");
+  for (const cost of shipRemodelExtraCosts) {
+    ts.push(`  ${JSON.stringify(cost)},`);
+  }
+  ts.push("];");
+  ts.push("");
+
   ts.push("// ---- Furniture Master ----");
   ts.push("");
   ts.push("export const FURNITURE = [");
@@ -417,6 +525,7 @@ async function main() {
   console.log(`  Ship Types: ${shipTypes.length}`);
   console.log(`  Equip Types: ${uniqueEquipTypes.length}`);
   console.log(`  Equip Ship Rules: ${Object.keys(equipShip).length}`);
+  console.log(`  Ship Remodel Extra Costs: ${shipRemodelExtraCosts.length}`);
   console.log(`  Furniture: ${furniture.length}`);
 
   // Quick validation
@@ -427,7 +536,13 @@ async function main() {
   console.log(`Sample ships:`, uniqueShips.slice(0, 5).map((s) => `${s.api_id}: ${s.api_name}`));
 }
 
-main().catch((err) => {
-  console.error("Error:", err.message);
-  process.exit(1);
-});
+module.exports = {
+  buildShipRemodelExtraCosts
+};
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error("Error:", err.message);
+    process.exit(1);
+  });
+}

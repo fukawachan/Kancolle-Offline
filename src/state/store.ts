@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import { dirname } from "node:path";
 import { mkdirSync } from "node:fs";
 import { mapMasterId, masterData } from "../master/data.js";
+import { SHIP_REMODEL_EXTRA_COSTS } from "../master/generated-data.js";
 import {
   DEFAULT_FURNITURE_IDS,
   DEFAULT_FURNITURE_SET,
@@ -213,6 +214,12 @@ const SHIP_UPGRADE_USEITEM_FIELDS = [
   ["api_report_count", 78],
   ["api_tech_count", 94]
 ] as const;
+const SHIP_REMODEL_EXTRA_COST_BY_PAIR = new Map(
+  (SHIP_REMODEL_EXTRA_COSTS as Record<string, unknown>[]).map((cost) => [
+    `${safeNum(cost.fromMasterId)}->${safeNum(cost.toMasterId)}`,
+    cost
+  ])
+);
 const MATERIAL_USEITEM_COLUMNS = new Map<number, keyof Materials>([
   [1, "repairKit"],
   [2, "buildKit"],
@@ -552,12 +559,21 @@ export function createStateStore(options: StateStoreOptions) {
         ammo: Math.max(0, Math.trunc(safeNum(currentMaster?.api_afterbull))),
         steel: Math.max(0, Math.trunc(safeNum(currentMaster?.api_afterfuel)))
       };
-      if (!hasMaterials(save.materials, materialCost)) return null;
+      const extraCost = shipRemodelExtraCost(ship.masterId, nextMasterId);
+      const combinedMaterialCost = addMaterialDeltas(materialCost, extraCost.materials);
+      if (!hasMaterials(save.materials, combinedMaterialCost)) return null;
       const useItemCost = shipUpgradeUseItemCost(ship.masterId, nextMasterId);
       if (!hasUseItems(save.useItems, useItemCost)) return null;
+      const consumedSlotItemIds = selectShipRemodelConsumedSlotItems(
+        save,
+        extraCost.slotItems,
+        activeExpeditionSlotItemIds(db)
+      );
+      if (!consumedSlotItemIds) return null;
 
       const loadout = shipInitialEquipment(nextMasterId).slice(0, Math.max(0, Math.trunc(safeNum(master.api_slot_num))));
-      if (save.slotItems.length + loadout.filter((slotItemMasterId) => slotItemMasterId > 0).length > save.player.maxSlotItem) return null;
+      const createdSlotItemCount = loadout.filter((slotItemMasterId) => slotItemMasterId > 0).length;
+      if (save.slotItems.length - consumedSlotItemIds.length + createdSlotItemCount > save.player.maxSlotItem) return null;
 
       const kyouka = normalizeKyouka(ship.stats);
       const nextKyouka = [0, 0, 0, 0, kyouka[4], kyouka[5], kyouka[6]];
@@ -588,7 +604,10 @@ export function createStateStore(options: StateStoreOptions) {
           JSON.stringify(nextStats),
           shipId
         );
-        consumeMaterials(db, materialCost);
+        for (const slotItemId of consumedSlotItemIds) {
+          db.prepare("DELETE FROM slot_items WHERE id = ?").run(slotItemId);
+        }
+        consumeMaterials(db, combinedMaterialCost);
         consumeShipUpgradeUseItems(db, useItemCost);
       });
       tx();
@@ -3335,6 +3354,38 @@ function remodelTargetId(
   return specialTarget ? requested : 0;
 }
 
+function shipRemodelExtraCost(currentMasterId: number, nextMasterId: number) {
+  const raw = SHIP_REMODEL_EXTRA_COST_BY_PAIR.get(`${currentMasterId}->${nextMasterId}`);
+  if (!raw) return { materials: {}, slotItems: [] as Array<{ masterId: number; count: number }> };
+
+  const rawMaterials = isJsonObject(raw.materials) ? raw.materials : {};
+  const materials: MaterialDelta = {};
+  const devmat = Math.max(0, Math.trunc(safeNum(rawMaterials.devmat)));
+  const buildKit = Math.max(0, Math.trunc(safeNum(rawMaterials.buildKit)));
+  if (devmat > 0) materials.devmat = devmat;
+  if (buildKit > 0) materials.buildKit = buildKit;
+
+  const slotItems = (Array.isArray(raw.slotItems) ? raw.slotItems : []).flatMap((item) => {
+    if (!isJsonObject(item)) return [];
+    const masterId = Math.trunc(safeNum(item.masterId));
+    const count = Math.max(0, Math.trunc(safeNum(item.count)));
+    return masterId > 0 && count > 0 ? [{ masterId, count }] : [];
+  });
+
+  return { materials, slotItems };
+}
+
+function addMaterialDeltas(...deltas: MaterialDelta[]): MaterialDelta {
+  const result: MaterialDelta = {};
+  for (const delta of deltas) {
+    for (const [key, value] of Object.entries(delta) as [keyof Materials, number | undefined][]) {
+      const amount = Math.max(0, Math.trunc(safeNum(value)));
+      if (amount > 0) result[key] = (result[key] ?? 0) + amount;
+    }
+  }
+  return result;
+}
+
 function shipUpgradeUseItemCost(currentMasterId: number, nextMasterId: number) {
   const upgrade = shipUpgradeMaster(currentMasterId, nextMasterId);
   const cost = new Map<number, number>();
@@ -3355,6 +3406,40 @@ function shipUpgradeMaster(currentMasterId: number, nextMasterId: number) {
     Math.trunc(safeNum(upgrade.api_current_ship_id)) === 0
     && Math.trunc(safeNum(upgrade.api_id)) === currentMasterId
   );
+}
+
+function selectShipRemodelConsumedSlotItems(
+  save: SaveState,
+  costs: Array<{ masterId: number; count: number }>,
+  awayItems: Set<number>
+) {
+  const equippedIds = equippedSlotItemIds(save);
+  const selected = new Set<number>();
+  const result: number[] = [];
+
+  for (const cost of costs) {
+    const masterId = Math.trunc(safeNum(cost.masterId));
+    const count = Math.max(0, Math.trunc(safeNum(cost.count)));
+    if (masterId <= 0 || count <= 0) continue;
+
+    const candidates = save.slotItems
+      .filter((item) =>
+        item.masterId === masterId
+        && item.locked === 0
+        && !equippedIds.has(item.id)
+        && !awayItems.has(item.id)
+        && !selected.has(item.id)
+      )
+      .sort((a, b) => a.id - b.id);
+
+    if (candidates.length < count) return null;
+    for (const item of candidates.slice(0, count)) {
+      selected.add(item.id);
+      result.push(item.id);
+    }
+  }
+
+  return result;
 }
 
 function hasUseItems(useItems: UseItemInventory[], cost: Map<number, number>) {

@@ -1837,6 +1837,119 @@ describe("local kcsapi endpoints", () => {
     expect(store.getSave().useItems.find((item) => item.id === 58)?.count).toBe(0);
   });
 
+  it("consumes generated extra basic material costs for special ship remodels", async () => {
+    const kagaKai = store.createShip(278);
+    store.db.prepare("UPDATE ships SET level = 99 WHERE id = ?").run(kagaKai.id);
+    store.db.prepare(`
+      UPDATE materials
+      SET ammo = 50000, steel = 50000, build_kit = 200, devmat = 400
+      WHERE player_id = 1
+    `).run();
+    seedUseItem(58, 2);
+    seedUseItem(65, 1);
+    seedUseItem(77, 2);
+    seedUseItem(78, 1);
+
+    const first = await post("api_req_kaisou/remodeling", { api_id: kagaKai.id });
+
+    expect(first.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_after_ship: {
+          api_id: kagaKai.id,
+          api_ship_id: 698
+        }
+      }
+    });
+    expect(store.getSave().materials).toMatchObject({
+      devmat: 280,
+      buildKit: 200
+    });
+
+    const second = await post("api_req_kaisou/remodeling", { api_id: kagaKai.id });
+
+    expect(second.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_after_ship: {
+          api_id: kagaKai.id,
+          api_ship_id: 610
+        }
+      }
+    });
+    expect(store.getSave().materials).toMatchObject({
+      devmat: 192,
+      buildKit: 170
+    });
+
+    const third = await post("api_req_kaisou/remodeling", {
+      api_id: kagaKai.id,
+      api_aftershipid: 646
+    });
+
+    expect(third.json().api_data.api_after_ship.api_ship_id).toBe(646);
+    expect(store.getSave().materials).toMatchObject({
+      devmat: 108,
+      buildKit: 86
+    });
+
+    const reverse = await post("api_req_kaisou/remodeling", {
+      api_id: kagaKai.id,
+      api_aftershipid: 698
+    });
+
+    expect(reverse.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_after_ship: {
+          api_id: kagaKai.id,
+          api_ship_id: 698
+        }
+      }
+    });
+    expect(store.getSave().materials).toMatchObject({
+      devmat: 48,
+      buildKit: 56
+    });
+  });
+
+  it("requires and consumes unequipped unlocked boilers for Yamato Kai Ni remodel", async () => {
+    const yamatoKai = store.createShip(136);
+    store.db.prepare("UPDATE ships SET level = 99 WHERE id = ?").run(yamatoKai.id);
+    store.db.prepare("UPDATE materials SET ammo = 20000, steel = 20000 WHERE player_id = 1").run();
+    seedUseItem(58, 3);
+    seedUseItem(78, 1);
+
+    const blocked = await post("api_req_kaisou/remodeling", { api_id: yamatoKai.id });
+
+    expect(blocked.json()).toMatchObject({
+      api_result: 1,
+      api_data: { api_after_ship: null }
+    });
+    expect(store.getSave().ships.find((ship) => ship.id === yamatoKai.id)?.masterId).toBe(136);
+
+    const lockedBoiler = store.createSlotItem(87);
+    const consumedBoilerA = store.createSlotItem(87);
+    const consumedBoilerB = store.createSlotItem(87);
+    store.db.prepare("UPDATE slot_items SET locked = 1 WHERE id = ?").run(lockedBoiler.id);
+
+    const remodeled = await post("api_req_kaisou/remodeling", { api_id: yamatoKai.id });
+
+    expect(remodeled.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_after_ship: {
+          api_id: yamatoKai.id,
+          api_ship_id: 911
+        }
+      }
+    });
+    const after = store.getSave();
+    expect(after.slotItems.some((item) => item.id === lockedBoiler.id)).toBe(true);
+    expect(after.slotItems.some((item) => item.id === consumedBoilerA.id)).toBe(false);
+    expect(after.slotItems.some((item) => item.id === consumedBoilerB.id)).toBe(false);
+  });
+
   it("preserves HP values at the client damage-state thresholds", async () => {
     for (const hp of [75, 50, 25]) {
       store.db.prepare("UPDATE ships SET hp = ?, max_hp = 100 WHERE id = 1").run(hp);
