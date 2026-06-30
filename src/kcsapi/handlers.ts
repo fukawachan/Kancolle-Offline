@@ -26,7 +26,7 @@ import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
-import type { SaveState } from "../state/types.js";
+import type { PresetSlot, PresetSlotItem, SaveState } from "../state/types.js";
 import {
   battleResultPayload,
   createCombinedBattle,
@@ -157,7 +157,7 @@ register("api_get_member/mission", (_input, context) =>
   apiOk(context.stateStore.getMissionMemberState())
 );
 register("api_get_member/preset_deck", () => apiOk({ api_max_num: 0, api_deck: {} }));
-register("api_get_member/preset_slot", () => apiOk({ api_max_num: 0, api_preset_items: [] }));
+register("api_get_member/preset_slot", (_input, context) => apiOk(presetSlotPayload(context.stateStore.getSave())));
 register("api_get_member/payitem", (_input, context) => apiOk(
   context.stateStore.pendingPayItems().map(pendingPayItemPayload)
 ));
@@ -362,14 +362,58 @@ register("api_req_kaisou/remodeling", (input, context) => {
   const save = context.stateStore.getSave();
   return apiOk({ api_after_ship: ship ? toShip(ship, save.slotItems) : null });
 });
-register("api_req_kaisou/preset_slot_register", () => apiOk({ api_preset_no: 1 }));
-register("api_req_kaisou/preset_slot_select", () => apiOk({ api_ship: [] }));
-register("api_req_kaisou/preset_slot_delete", () => apiOk({}));
-register("api_req_kaisou/preset_slot_expand", () => apiOk({ api_max_num: 1 }));
-register("api_req_kaisou/preset_slot_update_name", () => apiOk({}));
-register("api_req_kaisou/preset_slot_update_lock", () => apiOk({}));
-register("api_req_kaisou/preset_slot_update_exslot_flag", () => apiOk({}));
-register("api_req_kaisou/can_preset_slot_select", () => apiOk({ api_select_flag: 1 }));
+register("api_req_kaisou/preset_slot_register", (input, context) => {
+  const preset = context.stateStore.registerPresetSlot(
+    num(input.body.api_preset_id ?? input.body.api_preset_no, 1),
+    num(input.body.api_ship_id ?? input.body.api_id, 1)
+  );
+  return preset ? apiOk({ api_preset_no: preset.presetNo }) : apiError("Unknown ship or equipment preset slot", 400, {}, 400);
+});
+register("api_req_kaisou/preset_slot_select", (input, context) => {
+  const shipId = num(input.body.api_ship_id ?? input.body.api_id, 1);
+  const save = context.stateStore.getSave();
+  const result = context.stateStore.selectPresetSlot(
+    num(input.body.api_preset_id ?? input.body.api_preset_no, 1),
+    shipId,
+    num(input.body.api_equip_mode, 1),
+    (itemId, slotIndex, targetSlot) =>
+      validateSlotEquip(save, context.resourceManifest, shipId, slotIndex, itemId, targetSlot).ok
+  );
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+
+  const nextSave = context.stateStore.getSave();
+  return apiOk({
+    api_ship: [toShip(result.ship, nextSave.slotItems)],
+    api_bauxite: result.materials.bauxite
+  });
+});
+register("api_req_kaisou/preset_slot_delete", (input, context) => {
+  const deleted = context.stateStore.deletePresetSlot(num(input.body.api_preset_id ?? input.body.api_preset_no, 1));
+  return deleted ? apiOk({}) : apiError("Unknown equipment preset slot", 400, {}, 400);
+});
+register("api_req_kaisou/preset_slot_expand", (_input, context) => {
+  const result = context.stateStore.expandPresetSlots();
+  return result.ok ? apiOk({ api_max_num: result.maxNum }) : apiError(result.error, 400, {}, 400);
+});
+register("api_req_kaisou/preset_slot_update_name", (input, context) => {
+  const preset = context.stateStore.renamePresetSlot(
+    num(input.body.api_preset_id ?? input.body.api_preset_no, 1),
+    str(input.body.api_name, "")
+  );
+  return preset ? apiOk({}) : apiError("Unknown equipment preset slot", 400, {}, 400);
+});
+register("api_req_kaisou/preset_slot_update_lock", (input, context) => {
+  const preset = context.stateStore.togglePresetSlotLock(num(input.body.api_preset_id ?? input.body.api_preset_no, 1));
+  return preset ? apiOk({}) : apiError("Unknown equipment preset slot", 400, {}, 400);
+});
+register("api_req_kaisou/preset_slot_update_exslot_flag", (input, context) => {
+  const preset = context.stateStore.togglePresetSlotExFlag(num(input.body.api_preset_id ?? input.body.api_preset_no, 1));
+  return preset ? apiOk({}) : apiError("Unknown equipment preset slot", 400, {}, 400);
+});
+register("api_req_kaisou/can_preset_slot_select", (_input, context) => {
+  const save = context.stateStore.getSave();
+  return apiOk({ api_flag: save.presetSlots.some(presetHasLoadout) ? 1 : 0 });
+});
 
 register("api_req_quest/start", (input, context) => {
   const started = context.stateStore.startQuest(num(input.body.api_quest_id, 101));
@@ -787,6 +831,36 @@ function toQuestBonus(bonus: { type: number; name: string; count: number; item?:
     api_name: bonus.name,
     api_item: bonus.item ?? {}
   };
+}
+
+function presetSlotPayload(save: SaveState) {
+  return {
+    api_max_num: save.presetSlotSettings.maxNum,
+    api_preset_items: save.presetSlots.map(toPresetSlot)
+  };
+}
+
+function toPresetSlot(preset: PresetSlot) {
+  return {
+    api_preset_no: preset.presetNo,
+    api_name: preset.name,
+    api_slot_item: preset.slotItems.map(toPresetSlotItem),
+    api_slot_item_ex: preset.exSlotItem ? toPresetSlotItem(preset.exSlotItem) : null,
+    api_slot_ex_flag: preset.exSlotFlag,
+    api_lock_flag: preset.locked,
+    api_selected_mode: preset.selectedMode
+  };
+}
+
+function toPresetSlotItem(item: PresetSlotItem) {
+  return {
+    api_id: item.masterId,
+    api_level: item.level
+  };
+}
+
+function presetHasLoadout(preset: PresetSlot) {
+  return preset.slotItems.length > 0 || (preset.exSlotFlag === 0 && preset.exSlotItem != null);
 }
 
 async function recordUnknown(input: HandlerInput, context: HandlerContext) {

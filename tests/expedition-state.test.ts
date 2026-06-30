@@ -23,17 +23,22 @@ describe("persisted expedition lifecycle", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("migrates to schema v13 and seeds only the first expedition unlocked", () => {
+  it("migrates to schema v14 and seeds only the first expedition unlocked", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const state = store.getMissionMemberState();
-    const player = store.getSave().player;
+    const save = store.getSave();
     const pendingTable = store.db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'pending_payitems'")
       .get();
+    const presetSlotTable = store.db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'preset_slots'")
+      .get();
 
-    expect(version.version).toBe(13);
-    expect(player).toMatchObject({ maxChara: 300, maxSlotItem: 500 });
+    expect(version.version).toBe(14);
+    expect(save.player).toMatchObject({ maxChara: 300, maxSlotItem: 500 });
+    expect(save.presetSlotSettings).toEqual({ maxNum: 4 });
     expect(pendingTable).toBeTruthy();
+    expect(presetSlotTable).toBeTruthy();
     expect(state.api_list_items.find((item) => item.api_mission_id === 1)?.api_state).toBe(1);
     expect(state.api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(0);
   });
@@ -51,7 +56,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(13);
+    expect(version.version).toBe(14);
     expect(save.furniture.owned).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
     expect(save.furniture.set).toEqual({
       api_floor: 1,
@@ -94,7 +99,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(13);
+    expect(version.version).toBe(14);
     expect(save.recordStats).toMatchObject({
       battleWin: 0,
       battleLose: 0,

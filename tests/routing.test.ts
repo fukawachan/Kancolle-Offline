@@ -415,6 +415,8 @@ function saveWithLos(): SaveState {
       }
     ],
     slotItems: [{ id: 1, masterId: 25, level: 0, proficiency: 0, locked: 0 }],
+    presetSlots: [],
+    presetSlotSettings: { maxNum: 4 },
     decks: [{ id: 1, name: "Fleet", missionState: { state: 0, missionId: 0, completeTime: 0 }, shipIds: [1, -1, -1, -1, -1, -1] }],
     repairDocks: [],
     buildDocks: [],

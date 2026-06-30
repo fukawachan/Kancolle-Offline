@@ -66,6 +66,25 @@ export type SlotItem = {
   locked: number;
 };
 
+export type PresetSlotItem = {
+  masterId: number;
+  level: number;
+};
+
+export type PresetSlot = {
+  presetNo: number;
+  name: string;
+  slotItems: PresetSlotItem[];
+  exSlotItem: PresetSlotItem | null;
+  exSlotFlag: number;
+  locked: number;
+  selectedMode: number;
+};
+
+export type PresetSlotSettings = {
+  maxNum: number;
+};
+
 export type Deck = {
   id: number;
   name: string;
@@ -184,6 +203,8 @@ export type SaveState = {
   materials: Materials;
   ships: Ship[];
   slotItems: SlotItem[];
+  presetSlots: PresetSlot[];
+  presetSlotSettings: PresetSlotSettings;
   decks: Deck[];
   repairDocks: RepairDock[];
   buildDocks: BuildDock[];

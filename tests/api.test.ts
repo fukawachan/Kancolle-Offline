@@ -2141,6 +2141,96 @@ describe("local kcsapi endpoints", () => {
     expect(updatedShip.api_slot).toEqual([fighters[1].id, fighters[2].id, fighters[3].id, -1, -1]);
   });
 
+  it("returns equipment preset records in the remodel client payload shape", async () => {
+    const presetSlot = (await post("api_get_member/preset_slot")).json().api_data;
+    const canSelect = (await post("api_req_kaisou/can_preset_slot_select")).json().api_data;
+
+    expect(presetSlot).toMatchObject({
+      api_max_num: 4,
+      api_preset_items: []
+    });
+    expect(Array.isArray(presetSlot.api_preset_items)).toBe(true);
+    expect(canSelect).toEqual({ api_flag: 0 });
+  });
+
+  it("saves and updates equipment preset records from the selected ship loadout", async () => {
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: 1 });
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 1, api_item_id: 3 });
+
+    const register = await post("api_req_kaisou/preset_slot_register", { api_preset_id: 1, api_ship_id: 1 });
+    const saved = (await post("api_get_member/preset_slot")).json().api_data;
+    const canSelect = (await post("api_req_kaisou/can_preset_slot_select")).json().api_data;
+
+    expect(register.json()).toMatchObject({ api_result: 1, api_data: { api_preset_no: 1 } });
+    expect(saved.api_preset_items).toHaveLength(1);
+    expect(saved.api_preset_items[0]).toMatchObject({
+      api_preset_no: 1,
+      api_name: "",
+      api_slot_item: [
+        { api_id: 1, api_level: 0 },
+        { api_id: 2, api_level: 0 }
+      ],
+      api_slot_ex_flag: 0,
+      api_lock_flag: 0,
+      api_selected_mode: 1
+    });
+    expect(saved.api_preset_items[0].api_slot_item_ex ?? null).toBeNull();
+    expect(canSelect).toEqual({ api_flag: 1 });
+
+    await post("api_req_kaisou/preset_slot_update_name", { api_preset_id: 1, api_name: "Deck A" });
+    await post("api_req_kaisou/preset_slot_update_lock", { api_preset_id: 1 });
+    await post("api_req_kaisou/preset_slot_update_exslot_flag", { api_preset_id: 1 });
+
+    const updated = (await post("api_get_member/preset_slot")).json().api_data.api_preset_items[0];
+    expect(updated).toMatchObject({
+      api_name: "Deck A",
+      api_lock_flag: 1,
+      api_slot_ex_flag: 1
+    });
+  });
+
+  it("expands equipment preset capacity with the official inventory item and deletes records", async () => {
+    seedUseItem(49, 1);
+
+    const expand = await post("api_req_kaisou/preset_slot_expand");
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: 1 });
+    const register = await post("api_req_kaisou/preset_slot_register", { api_preset_id: 6, api_ship_id: 1 });
+    const withRecord = (await post("api_get_member/preset_slot")).json().api_data;
+    const deleteRecord = await post("api_req_kaisou/preset_slot_delete", { api_preset_id: 6 });
+    const afterDelete = (await post("api_get_member/preset_slot")).json().api_data;
+
+    expect(expand.json()).toMatchObject({ api_result: 1, api_data: { api_max_num: 6 } });
+    expect(useItemCount(49)).toBe(0);
+    expect(register.json()).toMatchObject({ api_result: 1, api_data: { api_preset_no: 6 } });
+    expect(withRecord.api_max_num).toBe(6);
+    expect(withRecord.api_preset_items.map((item: any) => item.api_preset_no)).toEqual([6]);
+    expect(deleteRecord.json()).toMatchObject({ api_result: 1 });
+    expect(afterDelete.api_preset_items).toEqual([]);
+  });
+
+  it("deploys an equipment preset onto another ship using owned unset equipment", async () => {
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: 1 });
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 1, api_item_id: 3 });
+    await post("api_req_kaisou/preset_slot_register", { api_preset_id: 1, api_ship_id: 1 });
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: -1 });
+    await post("api_req_kaisou/slotset", { api_id: 1, api_slot_idx: 0, api_item_id: -1 });
+
+    const response = await post("api_req_kaisou/preset_slot_select", {
+      api_preset_id: 1,
+      api_ship_id: 2,
+      api_equip_mode: 1
+    });
+    const data = response.json().api_data;
+    const ship3 = (await post("api_get_member/ship3", { api_shipid: 2 })).json().api_data;
+    const target = ship3.api_ship_data.find((ship: any) => ship.api_id === 2);
+
+    expect(response.json()).toMatchObject({ api_result: 1 });
+    expect(data.api_bauxite).toBe(1000);
+    expect(data.api_ship[0].api_slot.slice(0, 2)).toEqual([1, 3]);
+    expect(target.api_slot.slice(0, 2)).toEqual([1, 3]);
+    expect(store.getSave().ships.find((ship) => ship.id === 1)?.slotIds).toEqual([-1, -1, -1, -1, -1]);
+  });
+
   it("computes ship stats from master base + equipment bonuses, not hardcoded placeholders", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const shipMasterById = new Map<number, any>(start2.api_mst_ship.map((ship: any) => [ship.api_id, ship]));

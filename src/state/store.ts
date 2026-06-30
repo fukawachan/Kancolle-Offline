@@ -84,6 +84,8 @@ import type {
   Materials,
   Player,
   PlayerOptions,
+  PresetSlot,
+  PresetSlotItem,
   Quest,
   RecordStats,
   RepairDock,
@@ -129,6 +131,12 @@ type ShipMarriageResult = { ok: true; ship: Ship } | { ok: false; error: string 
 type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
 type BasicMaterialCounts = Pick<Materials, "fuel" | "ammo" | "steel" | "bauxite">;
 type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; error: string };
+type PresetSlotEquipTarget = "normal" | "extra";
+type PresetSlotEquipValidator = (itemId: number, slotIndex: number, targetSlot: PresetSlotEquipTarget) => boolean;
+type PresetSlotSelectResult =
+  | { ok: true; ship: Ship; materials: Materials }
+  | { ok: false; error: string };
+type PresetSlotExpandResult = { ok: true; maxNum: number } | { ok: false; error: string };
 type PendingPayItem = { id: number; count: number };
 type PendingPayItemResult = { ok: true; item: PendingPayItem } | { ok: false; error: string };
 type PayItemPickupResult = { ok: true; cautionFlag: 0 | 1 } | { ok: false; error: string };
@@ -173,7 +181,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 13;
+const SCHEMA_VERSION = 14;
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -182,6 +190,12 @@ const OFFICIAL_MAX_SLOT_ITEM_COUNT = DEFAULT_MAX_SLOT_ITEM_COUNT
 const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
 const MARRIAGE_RING_ITEM_ID = 55;
+const DEFAULT_PRESET_SLOT_COUNT = 4;
+const MAX_PRESET_SLOT_COUNT = 18;
+const PRESET_SLOT_EXPAND_STEP = 2;
+const PRESET_SLOT_EXPAND_USEITEM_ID = 49;
+const PRESET_DEPLOY_MODE_A = 1;
+const PRESET_DEPLOY_MODE_B = 2;
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
@@ -504,6 +518,18 @@ export function createStateStore(options: StateStoreOptions) {
       db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(slotIds), JSON.stringify(nextOnSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
+    registerPresetSlot: (presetNo: number, shipId: number) => registerPresetSlot(db, presetNo, shipId),
+    deletePresetSlot: (presetNo: number) => deletePresetSlot(db, presetNo),
+    renamePresetSlot: (presetNo: number, name: string) => renamePresetSlot(db, presetNo, name),
+    togglePresetSlotLock: (presetNo: number) => togglePresetSlotLock(db, presetNo),
+    togglePresetSlotExFlag: (presetNo: number) => togglePresetSlotExFlag(db, presetNo),
+    expandPresetSlots: () => expandPresetSlots(db),
+    selectPresetSlot: (
+      presetNo: number,
+      shipId: number,
+      equipMode: number,
+      canEquip?: PresetSlotEquipValidator
+    ): PresetSlotSelectResult => selectPresetSlot(db, presetNo, shipId, equipMode, canEquip),
     lockSlotItem: (itemId: number, explicit?: number) => {
       const item = getSave(db).slotItems.find((slotItem) => slotItem.id === itemId);
       if (!item) return null;
@@ -2272,6 +2298,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 11) migrateToV11(db);
   if (currentVersion < 12) migrateToV12(db);
   if (currentVersion < 13) migrateToV13(db);
+  if (currentVersion < 14) migrateToV14(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2280,6 +2307,7 @@ function migrate(db: Database.Database) {
   repairDeckShipIds(db);
   ensureQuestStates(db);
   ensureRecordStats(db);
+  ensurePresetSlotSettings(db);
 }
 
 function repairDeckShipIds(db: Database.Database) {
@@ -2336,6 +2364,10 @@ function migrateToV13(db: Database.Database) {
   if (!columnExists(db, "ships", "marriage_luck_bonus")) {
     db.prepare("ALTER TABLE ships ADD COLUMN marriage_luck_bonus INTEGER NOT NULL DEFAULT 0").run();
   }
+}
+
+function migrateToV14(db: Database.Database) {
+  ensurePresetSlotSettings(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2508,6 +2540,8 @@ function resetSchema(db: Database.Database) {
     DROP TABLE IF EXISTS expedition_settings;
     DROP TABLE IF EXISTS pending_payitems;
     DROP TABLE IF EXISTS record_stats;
+    DROP TABLE IF EXISTS preset_slots;
+    DROP TABLE IF EXISTS preset_slot_settings;
     DROP TABLE IF EXISTS use_items;
     DROP TABLE IF EXISTS expedition_runs;
     DROP TABLE IF EXISTS expedition_progress;
@@ -2588,6 +2622,19 @@ function createSchema(db: Database.Database) {
       level INTEGER NOT NULL,
       proficiency INTEGER NOT NULL,
       locked INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS preset_slot_settings (
+      id INTEGER PRIMARY KEY,
+      max_num INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS preset_slots (
+      preset_no INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      slot_items_json TEXT NOT NULL,
+      ex_slot_item_json TEXT,
+      ex_slot_flag INTEGER NOT NULL,
+      locked INTEGER NOT NULL,
+      selected_mode INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS decks (
       id INTEGER PRIMARY KEY,
@@ -2737,6 +2784,8 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       db.prepare("INSERT INTO slot_items (master_id, level, proficiency, locked) VALUES (?, 0, 0, 0)").run(masterId);
     }
 
+    ensurePresetSlotSettings(db);
+
     const deckShips = [
       [1, 2, -1, -1, -1, -1],
       [-1, -1, -1, -1, -1, -1],
@@ -2785,12 +2834,17 @@ function getSave(db: Database.Database): SaveState {
   ensureQuestStates(db);
   refreshQuestPeriods(db);
   ensureRecordStats(db);
+  ensurePresetSlotSettings(db);
 
   return {
     player: mapPlayer(player),
     materials: mapMaterials(db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row),
     ships: (db.prepare("SELECT * FROM ships ORDER BY id").all() as Row[]).map(mapShip),
     slotItems: (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem),
+    presetSlots: (db.prepare("SELECT * FROM preset_slots ORDER BY preset_no").all() as Row[]).map(mapPresetSlot),
+    presetSlotSettings: mapPresetSlotSettings(
+      db.prepare("SELECT * FROM preset_slot_settings WHERE id = 1").get() as Row
+    ),
     decks: (db.prepare("SELECT * FROM decks ORDER BY id").all() as Row[]).map(mapDeck),
     repairDocks: (db.prepare("SELECT * FROM repair_docks ORDER BY id").all() as Row[]).map(mapRepairDock),
     buildDocks: (db.prepare("SELECT * FROM build_docks ORDER BY id").all() as Row[]).map(mapBuildDock),
@@ -2870,6 +2924,24 @@ function mapSlotItem(row: Row): SlotItem {
     level: Number(row.level),
     proficiency: Number(row.proficiency),
     locked: Number(row.locked)
+  };
+}
+
+function mapPresetSlot(row: Row): PresetSlot {
+  return {
+    presetNo: Number(row.preset_no),
+    name: String(row.name ?? ""),
+    slotItems: normalizePresetSlotItems(parseJson<unknown[]>(row.slot_items_json, [])),
+    exSlotItem: normalizePresetSlotItem(parseJson<unknown>(row.ex_slot_item_json, null)),
+    exSlotFlag: normalizeBinaryFlag(row.ex_slot_flag),
+    locked: normalizeBinaryFlag(row.locked),
+    selectedMode: normalizePresetDeployMode(row.selected_mode)
+  };
+}
+
+function mapPresetSlotSettings(row: Row): { maxNum: number } {
+  return {
+    maxNum: normalizePresetSlotMaxNum(row.max_num)
   };
 }
 
@@ -3010,6 +3082,297 @@ function parseJson<T>(value: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function ensurePresetSlotSettings(db: Database.Database) {
+  const row = db.prepare("SELECT max_num FROM preset_slot_settings WHERE id = 1").get() as Row | undefined;
+  if (!row) {
+    db.prepare("INSERT INTO preset_slot_settings (id, max_num) VALUES (1, ?)").run(DEFAULT_PRESET_SLOT_COUNT);
+    return;
+  }
+
+  const maxNum = normalizePresetSlotMaxNum(row.max_num);
+  if (maxNum !== Number(row.max_num)) {
+    db.prepare("UPDATE preset_slot_settings SET max_num = ? WHERE id = 1").run(maxNum);
+  }
+}
+
+function normalizePresetSlotMaxNum(value: unknown) {
+  const maxNum = Math.trunc(safeNum(value, DEFAULT_PRESET_SLOT_COUNT));
+  return Math.max(1, Math.min(MAX_PRESET_SLOT_COUNT, maxNum));
+}
+
+function normalizePresetNo(value: unknown, maxNum: number) {
+  const presetNo = Math.trunc(safeNum(value, 0));
+  return presetNo >= 1 && presetNo <= maxNum ? presetNo : null;
+}
+
+function normalizeBinaryFlag(value: unknown) {
+  return Math.trunc(safeNum(value, 0)) === 1 ? 1 : 0;
+}
+
+function normalizePresetDeployMode(value: unknown) {
+  return Math.trunc(safeNum(value, PRESET_DEPLOY_MODE_A)) === PRESET_DEPLOY_MODE_B
+    ? PRESET_DEPLOY_MODE_B
+    : PRESET_DEPLOY_MODE_A;
+}
+
+function normalizePresetSlotItem(value: unknown): PresetSlotItem | null {
+  if (!isJsonObject(value)) return null;
+  const masterId = Math.trunc(safeNum(value.masterId ?? value.api_id, 0));
+  if (masterId <= 0) return null;
+  return {
+    masterId,
+    level: Math.max(0, Math.trunc(safeNum(value.level ?? value.api_level, 0)))
+  };
+}
+
+function normalizePresetSlotItems(value: unknown): PresetSlotItem[] {
+  const values = Array.isArray(value) ? value : [];
+  return values
+    .map((item) => normalizePresetSlotItem(item))
+    .filter((item): item is PresetSlotItem => item != null);
+}
+
+function registerPresetSlot(db: Database.Database, requestedPresetNo: number, shipId: number): PresetSlot | null {
+  const save = getSave(db);
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetSlotSettings.maxNum);
+  const ship = save.ships.find((item) => item.id === shipId);
+  if (presetNo == null || !ship) return null;
+
+  const current = save.presetSlots.find((item) => item.presetNo === presetNo);
+  const slotItemsById = new Map(save.slotItems.map((item) => [item.id, item]));
+  const slotItems = normalizeFixed(ship.slotIds, 5, -1)
+    .map((slotItemId) => slotItemsById.get(slotItemId))
+    .filter((item): item is SlotItem => item != null)
+    .map((item) => ({ masterId: item.masterId, level: item.level }));
+  const exSlot = slotItemsById.get(ship.exSlotId);
+  const exSlotItem = exSlot ? { masterId: exSlot.masterId, level: exSlot.level } : null;
+
+  upsertPresetSlot(db, {
+    presetNo,
+    name: current?.name ?? "",
+    slotItems,
+    exSlotItem,
+    exSlotFlag: current?.exSlotFlag ?? 0,
+    locked: current?.locked ?? 0,
+    selectedMode: current?.selectedMode ?? PRESET_DEPLOY_MODE_A
+  });
+
+  return getSave(db).presetSlots.find((item) => item.presetNo === presetNo) ?? null;
+}
+
+function deletePresetSlot(db: Database.Database, requestedPresetNo: number) {
+  const save = getSave(db);
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetSlotSettings.maxNum);
+  if (presetNo == null) return false;
+  db.prepare("DELETE FROM preset_slots WHERE preset_no = ?").run(presetNo);
+  return true;
+}
+
+function renamePresetSlot(db: Database.Database, requestedPresetNo: number, name: string): PresetSlot | null {
+  const save = getSave(db);
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetSlotSettings.maxNum);
+  if (presetNo == null || !save.presetSlots.some((item) => item.presetNo === presetNo)) return null;
+  db.prepare("UPDATE preset_slots SET name = ? WHERE preset_no = ?").run(name, presetNo);
+  return getSave(db).presetSlots.find((item) => item.presetNo === presetNo) ?? null;
+}
+
+function togglePresetSlotLock(db: Database.Database, requestedPresetNo: number): PresetSlot | null {
+  const save = getSave(db);
+  const preset = presetSlotFromSave(save, requestedPresetNo);
+  if (!preset) return null;
+  const next = preset.locked ? 0 : 1;
+  db.prepare("UPDATE preset_slots SET locked = ? WHERE preset_no = ?").run(next, preset.presetNo);
+  return getSave(db).presetSlots.find((item) => item.presetNo === preset.presetNo) ?? null;
+}
+
+function togglePresetSlotExFlag(db: Database.Database, requestedPresetNo: number): PresetSlot | null {
+  const save = getSave(db);
+  const preset = presetSlotFromSave(save, requestedPresetNo);
+  if (!preset) return null;
+  const next = preset.exSlotFlag ? 0 : 1;
+  db.prepare("UPDATE preset_slots SET ex_slot_flag = ? WHERE preset_no = ?").run(next, preset.presetNo);
+  return getSave(db).presetSlots.find((item) => item.presetNo === preset.presetNo) ?? null;
+}
+
+function expandPresetSlots(db: Database.Database): PresetSlotExpandResult {
+  const save = getSave(db);
+  const currentMax = save.presetSlotSettings.maxNum;
+  if (currentMax >= MAX_PRESET_SLOT_COUNT) return { ok: true, maxNum: currentMax };
+
+  const cost = new Map([[PRESET_SLOT_EXPAND_USEITEM_ID, 1]]);
+  if (!hasUseItems(save.useItems, cost)) return { ok: false, error: "Insufficient preset slot expansion item" };
+
+  const nextMax = Math.min(MAX_PRESET_SLOT_COUNT, currentMax + PRESET_SLOT_EXPAND_STEP);
+  const tx = db.transaction(() => {
+    consumeUseItem(db, PRESET_SLOT_EXPAND_USEITEM_ID, 1);
+    db.prepare("UPDATE preset_slot_settings SET max_num = ? WHERE id = 1").run(nextMax);
+  });
+  tx();
+  return { ok: true, maxNum: nextMax };
+}
+
+function selectPresetSlot(
+  db: Database.Database,
+  requestedPresetNo: number,
+  shipId: number,
+  equipMode: number,
+  canEquip: PresetSlotEquipValidator = () => true
+): PresetSlotSelectResult {
+  const save = getSave(db);
+  const preset = presetSlotFromSave(save, requestedPresetNo);
+  const ship = save.ships.find((item) => item.id === shipId);
+  if (!preset) return { ok: false, error: "Unknown equipment preset" };
+  if (!ship) return { ok: false, error: "Unknown ship" };
+  if (activeExpeditionShipIds(db).has(shipId)) return { ok: false, error: "Ship is away on expedition" };
+  if (!presetHasLoadout(preset)) return { ok: false, error: "Equipment preset is empty" };
+
+  const shipMaster = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
+  const normalSlotCount = Math.max(0, Math.trunc(safeNum(shipMaster?.api_slot_num, 0)));
+  if (preset.slotItems.length > normalSlotCount) return { ok: false, error: "Not enough ship slots" };
+
+  const mode = normalizePresetDeployMode(equipMode);
+  const selectedIds = new Set<number>();
+  const otherEquipped = equippedSlotItemIdsByOtherShips(save, shipId);
+  const awaySlotItemIds = activeExpeditionSlotItemIds(db);
+  const protectedTargetSlotItemIds = new Set<number>();
+  if (preset.exSlotFlag === 1 && ship.exSlotId > 0) protectedTargetSlotItemIds.add(ship.exSlotId);
+  const choose = (item: PresetSlotItem, slotIndex: number, targetSlot: PresetSlotEquipTarget) =>
+    choosePresetSlotItem(save.slotItems, item, {
+      mode,
+      slotIndex,
+      targetSlot,
+      selectedIds,
+      unavailableIds: new Set([...otherEquipped, ...awaySlotItemIds, ...protectedTargetSlotItemIds]),
+      canEquip
+    });
+
+  const nextSlotIds = normalizeFixed<number>([], 5, -1);
+  for (const [index, presetItem] of preset.slotItems.entries()) {
+    const slotItemId = choose(presetItem, index, "normal");
+    if (slotItemId == null) {
+      return {
+        ok: false,
+        error: mode === PRESET_DEPLOY_MODE_B ? "Missing matching improved equipment" : "Missing matching equipment"
+      };
+    }
+    nextSlotIds[index] = slotItemId;
+    selectedIds.add(slotItemId);
+  }
+
+  let nextExSlotId = ship.exSlotId;
+  if (preset.exSlotFlag === 0) {
+    if (preset.exSlotItem) {
+      const slotItemId = choose(preset.exSlotItem, 0, "extra");
+      if (slotItemId == null) return { ok: false, error: "Missing matching extra-slot equipment" };
+      nextExSlotId = slotItemId;
+      selectedIds.add(slotItemId);
+    } else {
+      nextExSlotId = -1;
+    }
+  }
+
+  const currentOnSlot = normalizeFixed(ship.onSlot, 5, 0);
+  const nextOnSlot = onSlotForShip(shipMaster, save.slotItems, nextSlotIds, currentOnSlot, true);
+  const bauxiteCost = aircraftRefillCount(currentOnSlot, nextOnSlot) * 5;
+
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = ? WHERE id = ?").run(
+      JSON.stringify(nextSlotIds),
+      JSON.stringify(nextOnSlot),
+      nextExSlotId,
+      shipId
+    );
+    db.prepare("UPDATE preset_slots SET selected_mode = ? WHERE preset_no = ?").run(mode, preset.presetNo);
+    if (bauxiteCost > 0) consumeMaterials(db, { bauxite: bauxiteCost });
+  });
+  tx();
+
+  const nextSave = getSave(db);
+  const updatedShip = nextSave.ships.find((item) => item.id === shipId);
+  return updatedShip
+    ? { ok: true, ship: updatedShip, materials: nextSave.materials }
+    : { ok: false, error: "Unknown ship" };
+}
+
+function upsertPresetSlot(db: Database.Database, preset: PresetSlot) {
+  db.prepare(`
+    INSERT INTO preset_slots (
+      preset_no,
+      name,
+      slot_items_json,
+      ex_slot_item_json,
+      ex_slot_flag,
+      locked,
+      selected_mode
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(preset_no) DO UPDATE SET
+      name = excluded.name,
+      slot_items_json = excluded.slot_items_json,
+      ex_slot_item_json = excluded.ex_slot_item_json,
+      ex_slot_flag = excluded.ex_slot_flag,
+      locked = excluded.locked,
+      selected_mode = excluded.selected_mode
+  `).run(
+    preset.presetNo,
+    preset.name,
+    JSON.stringify(preset.slotItems),
+    preset.exSlotItem ? JSON.stringify(preset.exSlotItem) : null,
+    normalizeBinaryFlag(preset.exSlotFlag),
+    normalizeBinaryFlag(preset.locked),
+    normalizePresetDeployMode(preset.selectedMode)
+  );
+}
+
+function presetSlotFromSave(save: SaveState, requestedPresetNo: number) {
+  const presetNo = normalizePresetNo(requestedPresetNo, save.presetSlotSettings.maxNum);
+  return presetNo == null ? null : save.presetSlots.find((item) => item.presetNo === presetNo) ?? null;
+}
+
+function presetHasLoadout(preset: PresetSlot) {
+  return preset.slotItems.length > 0 || (preset.exSlotFlag === 0 && preset.exSlotItem != null);
+}
+
+function equippedSlotItemIdsByOtherShips(save: SaveState, shipId: number) {
+  const ids = new Set<number>();
+  for (const ship of save.ships) {
+    if (ship.id === shipId) continue;
+    for (const slotItemId of [...ship.slotIds, ship.exSlotId]) {
+      if (slotItemId > 0) ids.add(slotItemId);
+    }
+  }
+  return ids;
+}
+
+function choosePresetSlotItem(
+  slotItems: SlotItem[],
+  presetItem: PresetSlotItem,
+  options: {
+    mode: number;
+    slotIndex: number;
+    targetSlot: PresetSlotEquipTarget;
+    selectedIds: Set<number>;
+    unavailableIds: Set<number>;
+    canEquip: PresetSlotEquipValidator;
+  }
+) {
+  const candidates = slotItems.filter((item) =>
+    item.masterId === presetItem.masterId &&
+    !options.selectedIds.has(item.id) &&
+    !options.unavailableIds.has(item.id) &&
+    options.canEquip(item.id, options.slotIndex, options.targetSlot)
+  );
+  const matchingLevel = options.mode === PRESET_DEPLOY_MODE_B
+    ? candidates.filter((item) => item.level === presetItem.level)
+    : candidates;
+  if (matchingLevel.length === 0) return null;
+
+  const sorted = [...matchingLevel].sort((a, b) => {
+    if (options.mode === PRESET_DEPLOY_MODE_B) return a.id - b.id;
+    return b.level - a.level || a.id - b.id;
+  });
+  return sorted[0]?.id ?? null;
 }
 
 function setShipLevel(db: Database.Database, shipId: number, level: number): ShipLevelSetResult {
