@@ -45,6 +45,7 @@ export type SlotResourceManifest = {
   btxtFlat: Map<number, FileResource>;
   itemOn: Map<number, FileResource>;
   itemUp: Map<number, FileResource>;
+  remodel: Map<number, FileResource>;
 };
 
 export type FurnitureResourceManifest = {

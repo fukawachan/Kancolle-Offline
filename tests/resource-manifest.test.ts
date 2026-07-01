@@ -2,6 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { buildSlotMasters } from "../src/master/catalog.js";
+import { masterData } from "../src/master/data.js";
 import { normalRoutingMaps } from "../src/master/routing-data.js";
 import { createResourceManifest, resolveMappedResource } from "../src/resources/manifest.js";
 
@@ -53,6 +55,15 @@ describe("cached resource manifest", () => {
     expect(manifest.slot.itemOn.get(1)).toMatchObject({
       id: 1,
       pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/item_on\/0001_\d{4}\.png$/)
+    });
+    expect(manifest.slot.remodel.get(199)).toMatchObject({
+      id: 199,
+      frame: "9077",
+      pathname: "/kcs2/resources/slot/remodel/0199_9077.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/slot/remodel/0199_0000.png", manifest)).toMatchObject({
+      id: 199,
+      frame: "9077"
     });
     expect(manifest.slot.btxtFlat.get(7)).toMatchObject({
       id: 7,
@@ -157,6 +168,40 @@ describe("cached resource manifest", () => {
     });
   });
 
+  it("falls back from missing slot remodel art to a cached image for the equipment type", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    expect(manifest.slot.remodel.has(1990)).toBe(false);
+    const sb2uFallback = resolveMappedResource("/kcs2/resources/slot/remodel/1990_6668.png", manifest);
+    expect(sb2uFallback).toMatchObject({
+      id: 23,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/remodel\/0023_\d{4}\.png$/)
+    });
+    expect(slotIconType(sb2uFallback?.id)).toBe(7);
+
+    expect(manifest.slot.remodel.has(548)).toBe(false);
+    const jetFighterFallback = resolveMappedResource("/kcs2/resources/slot/remodel/0548_0000.png", manifest);
+    expect(jetFighterFallback).toMatchObject({
+      id: 19,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/remodel\/0019_\d{4}\.png$/)
+    });
+    expect(slotIconType(jetFighterFallback?.id)).toBe(6);
+  });
+
+  it("can resolve slot remodel art for every start2 equipment master", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    for (const slot of buildSlotMasters(manifest)) {
+      const id = Number(slot.api_id);
+      const resource = resolveMappedResource(`/kcs2/resources/slot/remodel/${String(id).padStart(4, "0")}_0000.png`, manifest);
+
+      expect(resource, `${id} ${slot.api_name}`).toMatchObject({
+        extension: "png",
+        pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/remodel\/\d{4}_\d{4}\.png$/)
+      });
+    }
+  });
+
   it("derives ship voice availability from cache-backed sound files", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
 
@@ -251,3 +296,7 @@ describe("cached resource manifest", () => {
     }
   });
 });
+
+function slotIconType(slotId: number | undefined) {
+  return masterData.api_mst_slotitem.find((slot) => slot.api_id === slotId)?.api_type[2];
+}

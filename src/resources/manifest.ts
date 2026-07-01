@@ -1,5 +1,6 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { buildSlotMasters } from "../master/catalog.js";
 import {
   DEFAULT_PORT_BGM_ID,
   type CachedResourceMeta,
@@ -10,6 +11,20 @@ import {
 } from "./types.js";
 
 type CacheIndex = Record<string, CachedResourceMeta>;
+type SlotMasterForResourceFallback = {
+  api_id: number;
+  api_type: readonly unknown[];
+};
+
+const SLOT_RESOURCE_KINDS = "card|card_t|btxt_flat|item_on|item_up|remodel";
+const SLOT_REMODEL_TYPE_FALLBACKS = new Map<number, number>([
+  [56, 6],
+  [58, 8],
+  [59, 10]
+]);
+const slotMasterCache = new WeakMap<ResourceManifest, Map<number, SlotMasterForResourceFallback>>();
+const slotRemodelTypeCache = new WeakMap<ResourceManifest, Map<number, FileResource>>();
+const slotRemodelCategoryCache = new WeakMap<ResourceManifest, Map<number, FileResource>>();
 
 const VOICE_FILE_HASHES = [
   2475, 6547, 1471, 8691, 7847, 3595, 1767, 3311, 2507, 9651, 5321, 4473, 7117, 5947, 9489, 2669,
@@ -70,13 +85,16 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return collection?.get(Number(shipImage[2]));
   }
 
-  const slot = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|btxt_flat|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
+  const slot = pathname.match(new RegExp(`^/kcs2/resources/slot/(${SLOT_RESOURCE_KINDS})/(\\d{4})_(\\d{4})\\.png$`, "i"));
   if (slot) {
     const collection = slotCollection(manifest, slot[1]);
     const id = Number(slot[2]);
     const resource = collection?.get(id);
     if (resource) return resource;
-    return slot[1].toLowerCase() === "btxt_flat" && collection ? firstResource(collection) : undefined;
+    const kind = slot[1].toLowerCase();
+    if (kind === "btxt_flat" && collection) return firstResource(collection);
+    if (kind === "remodel") return slotRemodelFallback(manifest, id);
+    return undefined;
   }
 
   const furniture = pathname.match(/^\/kcs2\/resources\/furniture\/(normal|movable|scripts|thumbnail|picture)\/(\d{3})_\d{4}\.(png|json)$/i);
@@ -137,7 +155,8 @@ function emptyManifest(): ResourceManifest {
       cardThumbnail: new Map(),
       btxtFlat: new Map(),
       itemOn: new Map(),
-      itemUp: new Map()
+      itemUp: new Map(),
+      remodel: new Map()
     },
     furniture: {
       normal: new Map(),
@@ -247,7 +266,7 @@ function addShipResource(manifest: ResourceManifest, cacheDir: string, pathname:
 }
 
 function addSlotResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {
-  const match = pathname.match(/^\/kcs2\/resources\/slot\/(card|card_t|btxt_flat|item_on|item_up)\/(\d{4})_(\d{4})\.png$/i);
+  const match = pathname.match(new RegExp(`^/kcs2/resources/slot/(${SLOT_RESOURCE_KINDS})/(\\d{4})_(\\d{4})\\.png$`, "i"));
   if (!match) return;
 
   const collection = slotCollection(manifest, match[1]);
@@ -309,9 +328,74 @@ function slotCollection(manifest: ResourceManifest, rawKind: string) {
       return manifest.slot.itemOn;
     case "item_up":
       return manifest.slot.itemUp;
+    case "remodel":
+      return manifest.slot.remodel;
     default:
       return undefined;
   }
+}
+
+function slotRemodelFallback(manifest: ResourceManifest, id: number) {
+  const requestedSlot = slotMastersById(manifest).get(id);
+  const typeFallback = requestedSlot ? slotRemodelFallbackForSlot(manifest, requestedSlot) : undefined;
+  return typeFallback ?? firstResource(manifest.slot.remodel);
+}
+
+function slotRemodelFallbackForSlot(manifest: ResourceManifest, slot: SlotMasterForResourceFallback) {
+  const byType = slotRemodelResourcesByType(manifest);
+  const typeId = slotTypeId(slot, 2);
+  const typeAlias = typeId ? SLOT_REMODEL_TYPE_FALLBACKS.get(typeId) : undefined;
+  const byExactType = typeId ? byType.get(typeId) : undefined;
+  const byAliasType = typeAlias ? byType.get(typeAlias) : undefined;
+  const categoryId = slotTypeId(slot, 0);
+  const byCategory = categoryId ? slotRemodelResourcesByCategory(manifest).get(categoryId) : undefined;
+  return byExactType ?? byAliasType ?? byCategory;
+}
+
+function slotMastersById(manifest: ResourceManifest) {
+  let cached = slotMasterCache.get(manifest);
+  if (cached) return cached;
+
+  cached = new Map<number, SlotMasterForResourceFallback>(
+    (buildSlotMasters(manifest) as SlotMasterForResourceFallback[]).map((slot) => [Number(slot.api_id), slot])
+  );
+  slotMasterCache.set(manifest, cached);
+  return cached;
+}
+
+function slotRemodelResourcesByType(manifest: ResourceManifest) {
+  let cached = slotRemodelTypeCache.get(manifest);
+  if (cached) return cached;
+
+  cached = new Map<number, FileResource>();
+  for (const slot of slotMastersById(manifest).values()) {
+    const resource = manifest.slot.remodel.get(Number(slot.api_id));
+    const typeId = slotTypeId(slot, 2);
+    if (!resource || !typeId || cached.has(typeId)) continue;
+    cached.set(typeId, resource);
+  }
+  slotRemodelTypeCache.set(manifest, cached);
+  return cached;
+}
+
+function slotRemodelResourcesByCategory(manifest: ResourceManifest) {
+  let cached = slotRemodelCategoryCache.get(manifest);
+  if (cached) return cached;
+
+  cached = new Map<number, FileResource>();
+  for (const slot of slotMastersById(manifest).values()) {
+    const resource = manifest.slot.remodel.get(Number(slot.api_id));
+    const categoryId = slotTypeId(slot, 0);
+    if (!resource || !categoryId || cached.has(categoryId)) continue;
+    cached.set(categoryId, resource);
+  }
+  slotRemodelCategoryCache.set(manifest, cached);
+  return cached;
+}
+
+function slotTypeId(slot: SlotMasterForResourceFallback, index: number) {
+  const value = Number(slot.api_type[index]);
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 }
 
 function addFurnitureResource(manifest: ResourceManifest, cacheDir: string, pathname: string, meta: CachedResourceMeta) {

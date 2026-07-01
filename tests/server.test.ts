@@ -684,6 +684,20 @@ describe("local Fastify server", () => {
     expect(fallbackForSlot1.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
+  it("serves cache-backed remodel slot art by equipment type when the exact equipment art is unavailable", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({ method: "GET", url: "/kcs2/resources/slot/remodel/1990_6668.png" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/png");
+    expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
+  });
+
   it("requires single-account world registration before issuing login tokens", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
