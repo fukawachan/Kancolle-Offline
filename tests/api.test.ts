@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -85,6 +85,10 @@ describe("local kcsapi endpoints", () => {
       resourceManifest.ship.banner.has(shipId) ||
       resourceManifest.ship.albumStatus.has(shipId)
     );
+  }
+
+  function pngWidth(data: Buffer) {
+    return data.readUInt32BE(16);
   }
 
   async function remodelCandidateFor(sourceMasterId: number) {
@@ -408,6 +412,32 @@ describe("local kcsapi endpoints", () => {
         api_vol_voice: 80
       }
     });
+  });
+
+  it("keeps Nevada battle offsets and cached artwork on the same snapshot", async () => {
+    const start2 = await post("api_start2/getData");
+    const manifest = await createResourceManifest(path.resolve("cache"));
+    const cacheMetadata = JSON.parse(await readFile(path.resolve("cache/cached.json"), "utf8"));
+    const shipGraphs = start2.json().api_data.api_mst_shipgraph;
+    const expected = new Map([
+      [924, { offset: [-82, -118], width: 1092, damagedPath: "/kcs2/resources/ship/full_dmg/0924_4303_pxnlfmyssyoi.png" }],
+      [929, { offset: [-82, 123], width: 1092, damagedPath: "/kcs2/resources/ship/full_dmg/0929_1423_zilekooohvfi.png" }],
+      [936, { offset: [-82, 123], width: 1092, damagedPath: "/kcs2/resources/ship/full_dmg/0936_6799_sfpnywswxinh.png" }]
+    ]);
+
+    for (const [shipId, expectation] of expected) {
+      const shipGraph = shipGraphs.find((ship: any) => ship.api_id === shipId);
+      const full = manifest.ship.full.get(shipId);
+
+      expect(shipGraph, `shipgraph ${shipId}`).toBeDefined();
+      expect(full, `cached full ${shipId}`).toBeDefined();
+      expect(full?.version, `cached full ${shipId}`).toBe("68");
+      expect(shipGraph.api_version, `shipgraph ${shipId}`).toEqual(Array(5).fill("68"));
+      expect(shipGraph.api_battle_n, `shipgraph ${shipId}`).toEqual(expectation.offset);
+      expect(pngWidth(await readFile(full!.filePath)), `cached full ${shipId}`).toBe(expectation.width);
+      expect(cacheMetadata[expectation.damagedPath]?.version, `cached full_dmg ${shipId}`).toBe("?version=68");
+      expect(pngWidth(await readFile(path.join("cache", expectation.damagedPath))), `cached full_dmg ${shipId}`).toBe(773);
+    }
   });
 
   it("returns a client-complete record profile and local ranking placeholder", async () => {
