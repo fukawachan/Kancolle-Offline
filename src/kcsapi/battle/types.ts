@@ -240,6 +240,17 @@ export type BattlePayload = Record<string, any> & {
   api_raigeki: RaigekiPayload | null;
 };
 
+export type AirBaseAircraftLossRecord = {
+  areaId: number;
+  baseId: number;
+  squadronId: number;
+  slotItemId: number;
+  slotMasterId: number;
+  previousExp: number;
+  previousCount: number;
+  currentCount: number;
+};
+
 export type BattleRecord = {
   endpoint: BattleEndpointKind;
   mode: BattleMode;
@@ -295,6 +306,7 @@ export type BattleRecord = {
     friendly: Record<number, number>;
     enemy: Record<number, number>;
   };
+  airBaseAircraftLosses?: AirBaseAircraftLossRecord[];
   support?: {
     deckId: number;
     missionId: number;

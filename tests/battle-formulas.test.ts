@@ -16,10 +16,18 @@ import {
   resolveBattleDamage,
   softCap
 } from "../src/kcsapi/battle-formulas.js";
+import { masterData } from "../src/master/data.js";
+
+function slotMaster(masterId: number) {
+  const master = masterData.api_mst_slotitem.find((item) => item.api_id === masterId);
+  if (!master) throw new Error(`missing slot master ${masterId}`);
+  return master;
+}
 
 describe("battle formula helpers", () => {
   it("calculates fighter power and air state from current plane counts", () => {
     expect(fighterPower([{ planeCount: 20, antiAir: 5, proficiency: 0, improvement: 0 }])).toBe(22);
+    expect(fighterPower([{ planeCount: 20, antiAir: 5, proficiency: 100, improvement: 0, slotMaster: slotMaster(20) }])).toBe(47);
 
     expect(airState(150, 40)).toMatchObject({ code: 1, label: "supremacy" });
     expect(airState(60, 40)).toMatchObject({ code: 2, label: "superiority" });

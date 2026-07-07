@@ -27,7 +27,7 @@ import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
-import type { PresetDeck, PresetSlot, PresetSlotItem, SaveState } from "../state/types.js";
+import type { AirBase, Materials, PresetDeck, PresetSlot, PresetSlotItem, SaveState, SlotItem } from "../state/types.js";
 import {
   battleResultPayload,
   createCombinedBattle,
@@ -44,6 +44,8 @@ import { apiError, apiOk, parseApiPayload } from "./envelope.js";
 import { practiceRivalById, type PracticeRival } from "./practice.js";
 import {
   normalizePortBgmId,
+  toAirBase,
+  toAirBaseExpandedInfo,
   toBasic,
   toBuildDock,
   toDeck,
@@ -148,13 +150,14 @@ register("api_get_member/ndock", (_input, context) => {
   return apiOk(save.repairDocks.map((dock) => toRepairDock(dock, save.ships)));
 });
 register("api_get_member/questlist", (input, context) => apiOk(toQuestList(context.stateStore.getSave(), questListOptions(input))));
-register("api_get_member/mapinfo", (_input, context) =>
-  apiOk({
-    api_map_info: toMapInfo(context.stateStore.getSave()),
-    api_air_base: [],
-    api_air_base_expanded_info: []
-  })
-);
+register("api_get_member/mapinfo", (_input, context) => {
+  const save = context.stateStore.getSave();
+  return apiOk({
+    api_map_info: toMapInfo(save),
+    api_air_base: save.airBases.map((base) => toAirBase(base, save.slotItems)),
+    api_air_base_expanded_info: save.airBases.map(toAirBaseExpandedInfo)
+  });
+});
 register("api_get_member/mission", (_input, context) =>
   apiOk(context.stateStore.getMissionMemberState())
 );
@@ -732,7 +735,48 @@ register("api_req_sortie/goback_port", (_input, context) => {
 });
 register("api_req_map/anchorage_repair", () => apiOk({ api_repair_flag: 0 }));
 register("api_req_map/select_eventmap_rank", () => apiOk({ api_select_rank: 0 }));
-register("api_req_map/start_air_base", () => apiOk({ api_result: 0, api_message: "Air base is not implemented in local MVP." }));
+register("api_req_map/start_air_base", (input, context) => {
+  const areaId = num(input.body.api_area_id ?? input.body.api_maparea_id, 1);
+  const airBases = context.stateStore.openAirBaseArea(areaId);
+  const save = context.stateStore.getSave();
+  return apiOk({
+    api_result: 1,
+    api_area_id: Math.max(1, Math.trunc(areaId)),
+    api_air_base: airBases.map((base) => toAirBase(base, save.slotItems))
+  });
+});
+
+register("api_req_air_corps/set_plane", (input, context) => {
+  const areaId = num(input.body.api_area_id, 1);
+  const baseId = num(input.body.api_base_id, 1);
+  const squadronId = num(input.body.api_squadron_id, 1);
+  const itemId = num(input.body.api_item_id, -1);
+  const result = context.stateStore.setAirBasePlane(areaId, baseId, squadronId, itemId);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  return apiOk(airBaseMutationPayload(result.airBase, result.materials, context.stateStore.getSave().slotItems));
+});
+
+register("api_req_air_corps/set_action", (input, context) => {
+  const areaId = num(input.body.api_area_id, 1);
+  const baseId = num(input.body.api_base_id, 1);
+  const actionKind = num(input.body.api_action_kind, 0);
+  const result = context.stateStore.setAirBaseAction(areaId, baseId, actionKind);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  return apiOk({
+    ...airBaseMutationPayload(result.airBase, result.materials, context.stateStore.getSave().slotItems),
+    api_area_id: result.airBase.areaId,
+    api_base_id: result.airBase.baseId,
+    api_action_kind: result.airBase.actionKind
+  });
+});
+
+register("api_req_air_corps/supply", (input, context) => {
+  const areaId = num(input.body.api_area_id, 1);
+  const baseId = num(input.body.api_base_id, 1);
+  const result = context.stateStore.supplyAirBase(areaId, baseId);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  return apiOk(airBaseMutationPayload(result.airBase, result.materials, context.stateStore.getSave().slotItems));
+});
 
 for (const path of [
   "api_req_combined_battle/battle",
@@ -750,9 +794,6 @@ for (const path of [
   "api_req_combined_battle/battleresult",
   "api_req_combined_battle/goback_port",
   "api_req_air_corps/change_name",
-  "api_req_air_corps/set_plane",
-  "api_req_air_corps/set_action",
-  "api_req_air_corps/supply",
   "api_req_air_corps/cond_recovery",
   "api_req_air_corps/change_deployment_base",
   "api_req_air_corps/expand_base",
@@ -1467,6 +1508,16 @@ function recordPayload(save: SaveState) {
       api_area_id: areaId,
       api_maintenance_level: 1
     }))
+  };
+}
+
+function airBaseMutationPayload(airBase: AirBase, materials: Materials, slotItems: SlotItem[]) {
+  const serialized = toAirBase(airBase, slotItems);
+  return {
+    api_after_bauxite: materials.bauxite,
+    api_plane_info: serialized.api_plane_info,
+    api_distance: serialized.api_distance,
+    api_air_base: serialized
   };
 }
 

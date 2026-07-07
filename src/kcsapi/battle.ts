@@ -12,8 +12,10 @@ import { normalizeDeckShipIds } from "../state/decks.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
 import { aaciPattern, selectGenericAaci, type AaciEquipmentSummary } from "./battle/aaci.js";
 import { battleEndpointModeByKind } from "./battle/data/endpoint-modes.js";
+import { proficiencyExpForVisible } from "./aircraft-proficiency.js";
 import type {
   AirSlot,
+  AirBaseAircraftLossRecord,
   BattleEndpointKind,
   BattleInput,
   BattleMode,
@@ -86,9 +88,9 @@ export type {
   Side
 } from "./battle/types.js";
 
-const FIGHTER_COMBAT_TYPES = new Set([6, 7, 8, 11, 45, 56, 57]);
-const OPENING_AIRSTRIKE_TYPES = new Set([7, 8, 11, 57]);
-const TORPEDO_BOMBER_TYPES = new Set([8]);
+const FIGHTER_COMBAT_TYPES = new Set([6, 7, 8, 11, 45, 47, 48, 56, 57, 58, 60]);
+const OPENING_AIRSTRIKE_TYPES = new Set([7, 8, 11, 47, 57]);
+const TORPEDO_BOMBER_TYPES = new Set([8, 47]);
 const CONTACT_TYPES = new Set([8, 9, 10]);
 const CARRIER_TYPES = new Set([7, 11, 18]);
 const BATTLESHIP_TYPES = new Set([8, 9, 10, 12]);
@@ -110,6 +112,7 @@ const AP_SHELL_TYPE = 19;
 const HIGH_ANGLE_GUN_TYPES = new Set([16]);
 const AA_GUN_TYPES = new Set([21]);
 const RADAR_TYPES = new Set([12, 13]);
+const AIR_BASE_ATTACK_ACTIONS = new Set([1, 2]);
 const SLOT_MASTER_BY_ID = new Map<number, (typeof masterData.api_mst_slotitem)[number]>(
   [...masterData.api_mst_slotitem, ...DEEP_SEA_SLOT_MASTERS].map((slot) => [slot.api_id, slot] as const)
 );
@@ -144,7 +147,8 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const beforeE = fixedHp(enemy);
 
   const support = hasBattlePhase(phaseSet, "support") ? supportPhase(save, sortie, enemy) : undefined;
-  const airBaseAttack = hasBattlePhase(phaseSet, "airBase") ? emptyAirBaseAttack() : null;
+  const airBase = hasBattlePhase(phaseSet, "airBase") ? airBaseAttackPhase(save, enemy, rng) : { payload: null, losses: [] };
+  const airBaseAttack = airBase.payload;
   const kouku = hasBattlePhase(phaseSet, "kouku") ? airPhase(friendly, enemy, formation[0], rng) : null;
   const openingTaisen = hasBattlePhase(phaseSet, "openingTaisen") ? openingAswPhase(friendly, enemy, formation[0], rng) : null;
   const openingAtack = hasBattlePhase(phaseSet, "openingAtack") ? openingTorpedoPhase(friendly, enemy, formation[0], rng) : null;
@@ -185,7 +189,8 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
     sortie,
     result,
     aircraftLosses: aircraftLosses(friendly, enemy),
-    support
+    support,
+    airBaseAircraftLosses: airBase.losses
   };
 
   return {
@@ -282,7 +287,8 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const support = hasBattlePhase(phaseSet, "support") ? supportPhase(save, sortie, enemy) : undefined;
   const enemyCombinedActive = isEnemyCombinedActive(endpoint) && enemyCombined.length > 0;
   const escortTargets = enemyCombinedActive ? enemyCombined : enemy;
-  const airBaseAttack = hasBattlePhase(phaseSet, "airBase") ? emptyAirBaseAttack() : null;
+  const airBase = hasBattlePhase(phaseSet, "airBase") ? airBaseAttackPhase(save, enemy, rng) : { payload: null, losses: [] };
+  const airBaseAttack = airBase.payload;
   const kouku = hasBattlePhase(phaseSet, "kouku") ? airPhase([...friendly, ...escort], enemy, formation[0], rng) : null;
   const openingTaisen = hasBattlePhase(phaseSet, "openingTaisen") ? openingAswPhase(escort, escortTargets, formation[0], rng) : null;
   const openingAtack = hasBattlePhase(phaseSet, "openingAtack") ? openingTorpedoPhase(escort, escortTargets, formation[0], rng) : null;
@@ -336,7 +342,8 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
     sortie,
     result,
     aircraftLosses: aircraftLosses([...friendly, ...escort], enemy),
-    support
+    support,
+    airBaseAircraftLosses: airBase.losses
   };
 
   return {
@@ -429,6 +436,118 @@ function emptyAirBaseAttack(): Record<string, unknown> {
     api_stage2: null,
     api_stage3: emptyKoukuStage3Payload()
   };
+}
+
+type AirBaseBattleSlot = AirSlot & {
+  areaId: number;
+  baseId: number;
+  squadronId: number;
+  previousExp: number;
+  previousCount: number;
+};
+
+function airBaseAttackPhase(save: SaveState, enemy: BattleUnit[], rng: BattleRng): {
+  payload: Record<string, unknown>;
+  losses: AirBaseAircraftLossRecord[];
+} {
+  const activeSlots: AirBaseBattleSlot[] = [];
+  const units = save.airBases
+    .filter((base) => AIR_BASE_ATTACK_ACTIONS.has(base.actionKind))
+    .map((base): BattleUnit | null => {
+      const slots = base.squadrons
+        .map((squadron): AirBaseBattleSlot | null => {
+          if (squadron.slotItemId <= 0 || squadron.count <= 0) return null;
+          const item = save.slotItems.find((slotItem) => slotItem.id === squadron.slotItemId);
+          const slotMaster = item ? slotMasterById(item.masterId) : undefined;
+          if (!item || !slotMaster || !isAircraftSlotItem(slotMaster)) return null;
+          return {
+            areaId: base.areaId,
+            baseId: base.baseId,
+            squadronId: squadron.squadronId,
+            previousExp: item.proficiencyExp,
+            previousCount: Math.max(0, Math.trunc(squadron.count)),
+            shipPosition: base.baseId,
+            slotIndex: squadron.squadronId - 1,
+            slotItemId: item.id,
+            slotMasterId: slotMaster.api_id,
+            equipTypeId: safeNum(slotMaster.api_type?.[2]),
+            slotMaster,
+            count: Math.max(0, Math.trunc(squadron.count)),
+            maxCount: Math.max(0, Math.trunc(squadron.maxCount)),
+            improvement: item.level,
+            proficiency: item.proficiencyExp
+          };
+        })
+        .filter((slot): slot is AirBaseBattleSlot => slot != null);
+      if (slots.length === 0) return null;
+      activeSlots.push(...slots);
+      return airBaseBattleUnit(base.baseId, slots);
+    })
+    .filter((unit): unit is BattleUnit => unit != null);
+
+  if (units.length === 0) return { payload: emptyAirBaseAttack(), losses: [] };
+  const kouku = airPhase(units, enemy, 1, rng);
+  if (!kouku) return { payload: emptyAirBaseAttack(), losses: airBaseLossRecords(activeSlots) };
+  const payload = {
+    api_stage_flag: [
+      kouku.api_stage1 ? 1 : 0,
+      kouku.api_stage2 ? 1 : 0,
+      kouku.api_stage3 ? 1 : 0
+    ],
+    api_plane_from: kouku.api_plane_from,
+    api_stage1: kouku.api_stage1,
+    api_stage2: kouku.api_stage2,
+    api_stage3: kouku.api_stage3 ?? emptyKoukuStage3Payload(),
+    ...(kouku.api_air_fire ? { api_air_fire: kouku.api_air_fire } : {})
+  };
+  return { payload, losses: airBaseLossRecords(activeSlots) };
+}
+
+function airBaseBattleUnit(baseId: number, slots: AirBaseBattleSlot[]): BattleUnit {
+  return {
+    side: 0,
+    position: baseId,
+    apiIndex: baseId - 1,
+    shipId: -1000 - baseId,
+    masterId: 0,
+    level: 1,
+    hp: 1,
+    hpFloor: 0,
+    maxHp: 1,
+    firepower: 0,
+    baseTorpedo: 0,
+    torpedo: 0,
+    aa: slots.reduce((sum, slot) => sum + safeNum(slot.slotMaster.api_tyku), 0),
+    baseAsw: 0,
+    asw: 0,
+    armor: 0,
+    luck: 0,
+    accuracy: 0,
+    evasion: 0,
+    range: 0,
+    ammoModifier: 1,
+    shipType: 0,
+    targetKind: "surface",
+    slots: slots.map((slot) => slot.slotMasterId),
+    equippedSlots: [],
+    airSlots: slots,
+    onSlot: slots.map((slot) => slot.count),
+    originalOnSlot: slots.map((slot) => slot.count),
+    damageDealt: 0
+  };
+}
+
+function airBaseLossRecords(slots: AirBaseBattleSlot[]): AirBaseAircraftLossRecord[] {
+  return slots.map((slot) => ({
+    areaId: slot.areaId,
+    baseId: slot.baseId,
+    squadronId: slot.squadronId,
+    slotItemId: slot.slotItemId,
+    slotMasterId: slot.slotMasterId,
+    previousExp: slot.previousExp,
+    previousCount: slot.previousCount,
+    currentCount: Math.max(0, Math.trunc(slot.count))
+  }));
 }
 
 export function battleResultPayload(record: BattleRecord) {
@@ -680,7 +799,8 @@ function airPower(slots: AirSlot[]) {
       planeCount: slot.count,
       antiAir: safeNum(slot.slotMaster.api_tyku),
       proficiency: slot.proficiency,
-      improvement: slot.improvement
+      improvement: slot.improvement,
+      slotMaster: slot.slotMaster
     })));
 }
 
@@ -1491,7 +1611,7 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
         count,
         maxCount,
         improvement: item.level,
-        proficiency: item.proficiency
+        proficiency: item.proficiencyExp
       };
     })
     .filter((item): item is EquippedSlot => Boolean(item));
@@ -1749,7 +1869,7 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
   const rivalSlotMasterIds = Array.isArray(ship.slotMasterIds) ? ship.slotMasterIds : [];
   const onSlot = normalizeFixed(rivalOnSlot, 5, 0).map((count) => Math.max(0, safeNum(count)));
   const equippedSlots: EquippedSlot[] = normalizeFixed(rivalSlotMasterIds, 5, -1)
-    .map((slotMasterId, index) => {
+    .map((slotMasterId, index): EquippedSlot | null => {
       if (slotMasterId <= 0) return null;
       const slotMaster = slotMasterById(slotMasterId);
       if (!slotMaster) return null;
@@ -1761,7 +1881,7 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
         count: isAircraftSlotItem(slotMaster) ? Math.min(maxCount, onSlot[index] ?? maxCount) : 0,
         maxCount,
         improvement: 0,
-        proficiency: 7
+        proficiency: proficiencyExpForVisible(7)
       } satisfies EquippedSlot;
     })
     .filter((slot): slot is EquippedSlot => Boolean(slot));

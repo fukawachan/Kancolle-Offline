@@ -3103,6 +3103,68 @@ describe("local kcsapi endpoints", () => {
     expect(combinedBattle.api_fParam_combined).toHaveLength(6);
   });
 
+  it("opens and settles land-based air squadron aircraft proficiency", async () => {
+    const fighter = store.createSlotItem(20);
+    store.db.prepare("UPDATE slot_items SET proficiency = 7, proficiency_exp = 100 WHERE id = ?").run(fighter.id);
+
+    const opened = (await post("api_req_map/start_air_base", { api_area_id: 1 })).json().api_data;
+    expect(opened).toMatchObject({ api_result: 1, api_area_id: 1 });
+
+    const assigned = (await post("api_req_air_corps/set_plane", {
+      api_area_id: 1,
+      api_base_id: 1,
+      api_squadron_id: 1,
+      api_item_id: fighter.id
+    })).json().api_data;
+    expect(assigned).toMatchObject({
+      api_after_bauxite: expect.any(Number),
+      api_plane_info: expect.arrayContaining([
+        expect.objectContaining({
+          api_squadron_id: 1,
+          api_slotid: fighter.id,
+          api_state: 1,
+          api_count: 18,
+          api_max_count: 18
+        })
+      ]),
+      api_distance: { api_base: expect.any(Number), api_bonus: expect.any(Number) }
+    });
+
+    const action = (await post("api_req_air_corps/set_action", {
+      api_area_id: 1,
+      api_base_id: 1,
+      api_action_kind: 1
+    })).json().api_data;
+    expect(action).toMatchObject({ api_area_id: 1, api_base_id: 1, api_action_kind: 1 });
+
+    const mapInfo = (await post("api_get_member/mapinfo")).json().api_data;
+    expect(mapInfo.api_air_base).toEqual([
+      expect.objectContaining({
+        api_area_id: 1,
+        api_rid: 1,
+        api_action_kind: 1,
+        api_plane_info: expect.arrayContaining([
+          expect.objectContaining({
+            api_slotid: fighter.id,
+            api_squadron_id: 1,
+            api_count: 18,
+            api_max_count: 18
+          })
+        ])
+      })
+    ]);
+
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+    const battle = (await post("api_req_sortie/ld_airbattle", { api_formation: 1 })).json().api_data;
+    expect(battle.api_air_base_attack.api_stage_flag).not.toEqual([0, 0, 0]);
+    expect(battle.api_air_base_attack.api_plane_from[0]).toContain(1);
+
+    await post("api_req_sortie/battleresult");
+    const after = store.getSave().slotItems.find((item) => item.id === fighter.id);
+    expect(after?.proficiencyExp).not.toBe(100);
+  });
+
   it("records distinct endpoint modes for combined battle variants", async () => {
     const escort = store.createShip(119);
     await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort.id });

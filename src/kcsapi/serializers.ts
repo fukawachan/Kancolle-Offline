@@ -14,6 +14,7 @@ import { effectiveShipSpeedValue } from "../master/ship-speed.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { normalizeDeckShipIds } from "../state/decks.js";
 import type {
+  AirBase,
   BuildDock,
   Deck,
   FurnitureState,
@@ -28,7 +29,7 @@ import { MARRIED_SHIP_LEVEL_CAP, SHIP_LEVEL_CAP, shipApiExp } from "./experience
 import { repairCost, repairTimeMs } from "./repair.js";
 import { buildQuestList, type QuestListOptions } from "./quests.js";
 
-export const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57]);
+export const AIRCRAFT_EQUIP_TYPE_IDS = new Set([6, 7, 8, 9, 10, 11, 25, 26, 41, 45, 47, 48, 49, 53, 56, 57, 58, 59, 60, 91, 94]);
 
 const MEDAL_USEITEM_ID = 57;
 
@@ -207,6 +208,19 @@ function arrVal(arr: number | number[] | undefined, index: number): number {
   return 0;
 }
 
+function fixedAirBaseSquadrons(base: AirBase) {
+  return Array.from({ length: 4 }, (_, index) =>
+    base.squadrons.find((squadron) => squadron.squadronId === index + 1) ?? {
+      squadronId: index + 1,
+      slotItemId: -1,
+      state: 0,
+      count: 0,
+      maxCount: 0,
+      condition: 49
+    }
+  );
+}
+
 function safeNum(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -219,6 +233,42 @@ export function toSlotItem(item: SlotItem) {
     api_locked: item.locked,
     api_level: item.level,
     api_alv: item.proficiency
+  };
+}
+
+export function toAirBase(base: AirBase, slotItems: SlotItem[] = []) {
+  const planeInfo = fixedAirBaseSquadrons(base).map((squadron) => {
+    const item = slotItems.find((slotItem) => slotItem.id === squadron.slotItemId);
+    return {
+      api_squadron_id: squadron.squadronId,
+      api_state: item ? Math.max(1, squadron.state) : 0,
+      api_slotid: item ? item.id : -1,
+      api_slotitem_id: item ? item.masterId : -1,
+      api_level: item ? item.level : 0,
+      api_alv: item ? item.proficiency : 0,
+      api_count: item ? squadron.count : 0,
+      api_max_count: item ? squadron.maxCount : 0,
+      api_cond: squadron.condition
+    };
+  });
+  return {
+    api_area_id: base.areaId,
+    api_rid: base.baseId,
+    api_name: base.name,
+    api_action_kind: base.actionKind,
+    api_distance: {
+      api_base: base.distanceBase,
+      api_bonus: base.distanceBonus
+    },
+    api_plane_info: planeInfo
+  };
+}
+
+export function toAirBaseExpandedInfo(base: AirBase) {
+  return {
+    api_area_id: base.areaId,
+    api_rid: base.baseId,
+    api_maintenance_level: base.maintenanceLevel
   };
 }
 

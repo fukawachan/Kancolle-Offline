@@ -26,6 +26,12 @@ import {
 } from "../master/routing.js";
 import type { BattleRecord, BattleSettlementRecord } from "../kcsapi/battle.js";
 import {
+  applyAircraftProficiencyBattleResult,
+  initialAircraftProficiencyExp,
+  proficiencyExpForVisible,
+  visibleProficiency
+} from "../kcsapi/aircraft-proficiency.js";
+import {
   MARRIED_SHIP_LEVEL_CAP,
   SHIP_LEVEL_CAP,
   playerLevelForExp,
@@ -74,6 +80,8 @@ import { normalizeDeckShipIds } from "./decks.js";
 import type {
   BuildDock,
   Deck,
+  AirBase,
+  AirBaseSquadron,
   ExpeditionProgress,
   ExpeditionRun,
   ExpeditionSettings,
@@ -132,6 +140,7 @@ type ShipMarriageResult = { ok: true; ship: Ship } | { ok: false; error: string 
 type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; error: string };
 type BasicMaterialCounts = Pick<Materials, "fuel" | "ammo" | "steel" | "bauxite">;
 type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; error: string };
+type AirBaseResult = { ok: true; airBase: AirBase; materials: Materials } | { ok: false; error: string };
 type PresetSlotEquipTarget = "normal" | "extra";
 type PresetSlotEquipValidator = (itemId: number, slotIndex: number, targetSlot: PresetSlotEquipTarget) => boolean;
 type PresetSlotSelectResult =
@@ -184,7 +193,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION = 17;
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -204,6 +213,9 @@ const PRESET_DECK_EXPAND_USEITEM_ID = 49;
 const PRESET_DEPLOY_MODE_A = 1;
 const PRESET_DEPLOY_MODE_B = 2;
 const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
+const AIR_BASE_SQUADRON_COUNT = 4;
+const AIR_BASE_DEFAULT_SQUADRON_MAX = 18;
+const AIR_BASE_DEFAULT_ACTION = 0;
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
 const MATERIAL_RECOVERY_INTERVAL_MS = 180_000;
@@ -664,6 +676,12 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     createSlotItem: (masterId: number) => createSlotItem(db, masterId),
+    openAirBaseArea: (areaId: number) => openAirBaseArea(db, areaId),
+    setAirBasePlane: (areaId: number, baseId: number, squadronId: number, itemId: number) =>
+      setAirBasePlane(db, areaId, baseId, squadronId, itemId),
+    setAirBaseAction: (areaId: number, baseId: number, actionKind: number) =>
+      setAirBaseAction(db, areaId, baseId, actionKind),
+    supplyAirBase: (areaId: number, baseId?: number) => supplyAirBase(db, areaId, baseId),
     destroySlotItem: (itemIds: number[]) => {
       const awayItems = activeExpeditionSlotItemIds(db);
       const availableIds = itemIds.filter((id) => !awayItems.has(id));
@@ -2017,6 +2035,11 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     }
     applyFleetOnSlot(db, record.after?.fOnSlotByShipId);
     applyFleetOnSlot(db, record.after?.fCombinedOnSlotByShipId);
+    if (mode !== "practice") {
+      applyFleetAircraftProficiency(db, save, record.shipIds, record.after?.fOnSlotByShipId, mode);
+      applyFleetAircraftProficiency(db, save, record.escortShipIds, record.after?.fCombinedOnSlotByShipId, mode);
+      applyAirBaseAircraftBattleResult(db, record, mode);
+    }
     applyFleetExperience(db, settlement.main);
     applyFleetExperience(db, settlement.escort);
     db.prepare("UPDATE players SET exp = ?, level = ? WHERE id = 1").run(settlement.memberExp, settlement.memberLevel);
@@ -2278,6 +2301,171 @@ function applyFleetOnSlot(db: Database.Database, onSlotByShipId: Record<string, 
   }
 }
 
+function applyFleetAircraftProficiency(
+  db: Database.Database,
+  save: SaveState,
+  shipIds: number[] | undefined,
+  onSlotByShipId: Record<string, number[]> | undefined,
+  mode: Exclude<BattleMode, "practice">
+) {
+  if (!onSlotByShipId) return;
+  const fixedShipIds = normalizeFixed((shipIds ?? []).map((id) => Number(id)), 6, -1);
+  const update = db.prepare("UPDATE slot_items SET proficiency = ?, proficiency_exp = ? WHERE id = ?");
+  for (const shipId of fixedShipIds) {
+    if (shipId <= 0) continue;
+    const ship = save.ships.find((item) => item.id === shipId);
+    const currentOnSlot = onSlotByShipId[String(shipId)] ?? onSlotByShipId[shipId];
+    if (!ship || !currentOnSlot) continue;
+    const slotIds = normalizeFixed(ship.slotIds, 5, -1);
+    const beforeOnSlot = normalizeFixed(ship.onSlot, 5, 0);
+    const afterOnSlot = normalizeFixed(currentOnSlot.map((count) => Math.max(0, Math.trunc(Number(count) || 0))), 5, 0);
+    for (let index = 0; index < slotIds.length; index += 1) {
+      const slotItemId = slotIds[index];
+      if (slotItemId <= 0) continue;
+      const item = save.slotItems.find((slotItem) => slotItem.id === slotItemId);
+      const master = item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
+      if (!item || !master || !isAircraftSlotItem(master)) continue;
+      const proficiencyExp = applyAircraftProficiencyBattleResult({
+        master,
+        previousExp: item.proficiencyExp,
+        previousCount: beforeOnSlot[index] ?? 0,
+        currentCount: afterOnSlot[index] ?? 0,
+        mode
+      });
+      if (proficiencyExp !== item.proficiencyExp) {
+        update.run(visibleProficiency(proficiencyExp), proficiencyExp, item.id);
+      }
+    }
+  }
+}
+
+function openAirBaseArea(db: Database.Database, areaId: number): AirBase[] {
+  const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
+  ensureAirBase(db, normalizedAreaId, 1);
+  return getSave(db).airBases.filter((base) => base.areaId === normalizedAreaId);
+}
+
+function setAirBasePlane(
+  db: Database.Database,
+  areaId: number,
+  baseId: number,
+  squadronId: number,
+  itemId: number
+): AirBaseResult {
+  const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
+  const normalizedBaseId = Math.max(1, Math.trunc(safeNum(baseId, 1)));
+  const normalizedSquadronId = Math.max(1, Math.min(AIR_BASE_SQUADRON_COUNT, Math.trunc(safeNum(squadronId, 1))));
+  const normalizedItemId = Math.trunc(safeNum(itemId, -1));
+  const save = getSave(db);
+  const item = normalizedItemId > 0 ? save.slotItems.find((slotItem) => slotItem.id === normalizedItemId) : undefined;
+  const master = item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
+  if (normalizedItemId > 0 && (!item || !master || !isAircraftSlotItem(master))) {
+    return { ok: false, error: "Invalid air base aircraft" };
+  }
+
+  const tx = db.transaction(() => {
+    ensureAirBase(db, normalizedAreaId, normalizedBaseId);
+    if (normalizedItemId > 0) clearAirBaseSlotItem(db, normalizedItemId);
+    const maxCount = normalizedItemId > 0 ? AIR_BASE_DEFAULT_SQUADRON_MAX : 0;
+    db.prepare(`
+      INSERT INTO air_base_squadrons (
+        area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(area_id, base_id, squadron_id) DO UPDATE SET
+        slot_item_id = excluded.slot_item_id,
+        state = excluded.state,
+        count = excluded.count,
+        max_count = excluded.max_count,
+        condition = excluded.condition
+    `).run(
+      normalizedAreaId,
+      normalizedBaseId,
+      normalizedSquadronId,
+      normalizedItemId > 0 ? normalizedItemId : -1,
+      normalizedItemId > 0 ? 1 : 0,
+      maxCount,
+      maxCount,
+      49
+    );
+    repairAirBaseSquadrons(db);
+    updateAirBaseDistance(db, normalizedAreaId, normalizedBaseId);
+  });
+  tx();
+  const airBase = getSave(db).airBases.find((base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId);
+  return airBase ? { ok: true, airBase, materials: getSave(db).materials } : { ok: false, error: "Air base not found" };
+}
+
+function setAirBaseAction(db: Database.Database, areaId: number, baseId: number, actionKind: number): AirBaseResult {
+  const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
+  const normalizedBaseId = Math.max(1, Math.trunc(safeNum(baseId, 1)));
+  const nextActionKind = normalizeAirBaseAction(actionKind);
+  const tx = db.transaction(() => {
+    ensureAirBase(db, normalizedAreaId, normalizedBaseId);
+    db.prepare("UPDATE air_bases SET action_kind = ? WHERE area_id = ? AND base_id = ?")
+      .run(nextActionKind, normalizedAreaId, normalizedBaseId);
+  });
+  tx();
+  const save = getSave(db);
+  const airBase = save.airBases.find((base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId);
+  return airBase ? { ok: true, airBase, materials: save.materials } : { ok: false, error: "Air base not found" };
+}
+
+function supplyAirBase(db: Database.Database, areaId: number, baseId?: number): AirBaseResult {
+  const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
+  const normalizedBaseId = Math.max(1, Math.trunc(safeNum(baseId, 1)));
+  const tx = db.transaction(() => {
+    ensureAirBase(db, normalizedAreaId, normalizedBaseId);
+    const rows = db.prepare("SELECT * FROM air_base_squadrons WHERE area_id = ? AND base_id = ?")
+      .all(normalizedAreaId, normalizedBaseId) as Row[];
+    const missing = rows.reduce((sum, row) =>
+      sum + Math.max(0, Math.trunc(safeNum(row.max_count)) - Math.trunc(safeNum(row.count))), 0);
+    if (missing > 0) consumeMaterials(db, { bauxite: missing * 5 });
+    db.prepare(`
+      UPDATE air_base_squadrons
+      SET count = max_count, state = CASE WHEN slot_item_id > 0 THEN 1 ELSE 0 END
+      WHERE area_id = ? AND base_id = ?
+    `).run(normalizedAreaId, normalizedBaseId);
+  });
+  tx();
+  const save = getSave(db);
+  const airBase = save.airBases.find((base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId);
+  return airBase ? { ok: true, airBase, materials: save.materials } : { ok: false, error: "Air base not found" };
+}
+
+function applyAirBaseAircraftBattleResult(db: Database.Database, record: BattleRecord, mode: BattleMode) {
+  const entries = Array.isArray(record.airBaseAircraftLosses) ? record.airBaseAircraftLosses : [];
+  if (entries.length === 0) return;
+  const slotItemUpdate = db.prepare("UPDATE slot_items SET proficiency = ?, proficiency_exp = ? WHERE id = ?");
+  const squadronUpdate = db.prepare(`
+    UPDATE air_base_squadrons
+    SET count = ?, state = CASE WHEN slot_item_id > 0 THEN 1 ELSE 0 END
+    WHERE area_id = ? AND base_id = ? AND squadron_id = ?
+  `);
+  for (const entry of entries) {
+    const areaId = Math.trunc(safeNum(entry.areaId));
+    const baseId = Math.trunc(safeNum(entry.baseId));
+    const squadronId = Math.trunc(safeNum(entry.squadronId));
+    const slotItemId = Math.trunc(safeNum(entry.slotItemId));
+    const previousCount = Math.max(0, Math.trunc(safeNum(entry.previousCount)));
+    const currentCount = Math.max(0, Math.trunc(safeNum(entry.currentCount)));
+    squadronUpdate.run(currentCount, areaId, baseId, squadronId);
+    const item = (db.prepare("SELECT * FROM slot_items WHERE id = ?").get(slotItemId) as Row | undefined);
+    const mapped = item ? mapSlotItem(item) : undefined;
+    const master = mapped ? masterData.api_mst_slotitem.find((slot) => slot.api_id === mapped.masterId) : undefined;
+    if (!mapped || !master || !isAircraftSlotItem(master)) continue;
+    const proficiencyExp = applyAircraftProficiencyBattleResult({
+      master,
+      previousExp: Math.trunc(safeNum(entry.previousExp, mapped.proficiencyExp)),
+      previousCount,
+      currentCount,
+      mode
+    });
+    if (proficiencyExp !== mapped.proficiencyExp) {
+      slotItemUpdate.run(visibleProficiency(proficiencyExp), proficiencyExp, mapped.id);
+    }
+  }
+}
+
 function applyFleetExperience(db: Database.Database, fleet: BattleSettlementRecord["main"] | undefined) {
   if (!fleet) return;
   for (const ship of fleet) {
@@ -2315,6 +2503,8 @@ function migrate(db: Database.Database) {
   if (currentVersion < 13) migrateToV13(db);
   if (currentVersion < 14) migrateToV14(db);
   if (currentVersion < 15) migrateToV15(db);
+  if (currentVersion < 16) migrateToV16(db);
+  if (currentVersion < 17) migrateToV17(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2325,6 +2515,8 @@ function migrate(db: Database.Database) {
   ensureRecordStats(db);
   ensurePresetSlotSettings(db);
   ensurePresetDeckSettings(db);
+  repairSlotItemProficiency(db);
+  repairAirBaseSquadrons(db);
 }
 
 function repairDeckShipIds(db: Database.Database) {
@@ -2389,6 +2581,23 @@ function migrateToV14(db: Database.Database) {
 
 function migrateToV15(db: Database.Database) {
   ensurePresetDeckSettings(db);
+}
+
+function migrateToV16(db: Database.Database) {
+  if (!columnExists(db, "slot_items", "proficiency_exp")) {
+    db.prepare("ALTER TABLE slot_items ADD COLUMN proficiency_exp INTEGER NOT NULL DEFAULT 0").run();
+  }
+  const rows = db.prepare("SELECT id, proficiency, proficiency_exp FROM slot_items").all() as Row[];
+  const update = db.prepare("UPDATE slot_items SET proficiency_exp = ? WHERE id = ?");
+  for (const row of rows) {
+    if (safeNum(row.proficiency) > 0 && safeNum(row.proficiency_exp) === 0) {
+      update.run(proficiencyExpForVisible(safeNum(row.proficiency)), Number(row.id));
+    }
+  }
+}
+
+function migrateToV17(db: Database.Database) {
+  repairAirBaseSquadrons(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2486,6 +2695,87 @@ function repairShipOnSlotValues(db: Database.Database) {
   backfillShipOnSlotValues(db, false);
 }
 
+function repairSlotItemProficiency(db: Database.Database) {
+  if (!columnExists(db, "slot_items", "proficiency_exp")) return;
+  const rows = db.prepare("SELECT id, proficiency, proficiency_exp FROM slot_items").all() as Row[];
+  const update = db.prepare("UPDATE slot_items SET proficiency = ?, proficiency_exp = ? WHERE id = ?");
+  for (const row of rows) {
+    const exp = Math.max(0, Math.min(120, Math.trunc(safeNum(row.proficiency_exp))));
+    const visible = visibleProficiency(exp);
+    if (Number(row.proficiency) !== visible || Number(row.proficiency_exp) !== exp) {
+      update.run(visible, exp, Number(row.id));
+    }
+  }
+}
+
+function repairAirBaseSquadrons(db: Database.Database) {
+  const bases = db.prepare("SELECT area_id, base_id FROM air_bases").all() as Row[];
+  for (const base of bases) {
+    const areaId = Number(base.area_id);
+    const baseId = Number(base.base_id);
+    for (let squadronId = 1; squadronId <= AIR_BASE_SQUADRON_COUNT; squadronId += 1) {
+      db.prepare(`
+        INSERT OR IGNORE INTO air_base_squadrons (
+          area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition
+        ) VALUES (?, ?, ?, -1, 0, 0, 0, 49)
+      `).run(areaId, baseId, squadronId);
+    }
+    db.prepare(`
+      UPDATE air_base_squadrons
+      SET count = max(0, min(count, max_count)),
+          state = CASE WHEN slot_item_id > 0 THEN state ELSE 0 END,
+          condition = CASE WHEN condition > 0 THEN condition ELSE 49 END
+      WHERE area_id = ? AND base_id = ?
+    `).run(areaId, baseId);
+    updateAirBaseDistance(db, areaId, baseId);
+  }
+}
+
+function ensureAirBase(db: Database.Database, areaId: number, baseId: number) {
+  const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
+  const normalizedBaseId = Math.max(1, Math.trunc(safeNum(baseId, 1)));
+  db.prepare(`
+    INSERT OR IGNORE INTO air_bases (
+      area_id, base_id, name, action_kind, distance_base, distance_bonus, maintenance_level
+    ) VALUES (?, ?, ?, ?, 0, 0, 1)
+  `).run(normalizedAreaId, normalizedBaseId, `Air Base ${normalizedBaseId}`, AIR_BASE_DEFAULT_ACTION);
+  for (let squadronId = 1; squadronId <= AIR_BASE_SQUADRON_COUNT; squadronId += 1) {
+    db.prepare(`
+      INSERT OR IGNORE INTO air_base_squadrons (
+        area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition
+      ) VALUES (?, ?, ?, -1, 0, 0, 0, 49)
+    `).run(normalizedAreaId, normalizedBaseId, squadronId);
+  }
+}
+
+function clearAirBaseSlotItem(db: Database.Database, slotItemId: number) {
+  db.prepare(`
+    UPDATE air_base_squadrons
+    SET slot_item_id = -1, state = 0, count = 0, max_count = 0
+    WHERE slot_item_id = ?
+  `).run(slotItemId);
+}
+
+function updateAirBaseDistance(db: Database.Database, areaId: number, baseId: number) {
+  const rows = db.prepare(`
+    SELECT s.slot_item_id, i.master_id
+    FROM air_base_squadrons s
+    LEFT JOIN slot_items i ON i.id = s.slot_item_id
+    WHERE s.area_id = ? AND s.base_id = ? AND s.slot_item_id > 0
+  `).all(areaId, baseId) as Row[];
+  const distances = rows
+    .map((row) => masterData.api_mst_slotitem.find((slot) => slot.api_id === Number(row.master_id))?.api_distance)
+    .map((distance) => Math.max(0, Math.trunc(safeNum(distance))))
+    .filter((distance) => distance > 0);
+  const distanceBase = distances.length > 0 ? Math.min(...distances) : 0;
+  db.prepare("UPDATE air_bases SET distance_base = ?, distance_bonus = 0 WHERE area_id = ? AND base_id = ?")
+    .run(distanceBase, areaId, baseId);
+}
+
+function normalizeAirBaseAction(value: unknown) {
+  return Math.max(0, Math.min(4, Math.trunc(safeNum(value))));
+}
+
 function backfillShipOnSlotValues(db: Database.Database, refillEmptyAircraft: boolean) {
   const slotItems = (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem);
   const ships = db.prepare("SELECT id, master_id, slot_ids_json, onslot_json FROM ships").all() as Row[];
@@ -2570,6 +2860,8 @@ function resetSchema(db: Database.Database) {
     DROP TABLE IF EXISTS expedition_progress;
     DROP TABLE IF EXISTS battle_sessions;
     DROP TABLE IF EXISTS sortie_sessions;
+    DROP TABLE IF EXISTS air_base_squadrons;
+    DROP TABLE IF EXISTS air_bases;
     DROP TABLE IF EXISTS maps;
     DROP TABLE IF EXISTS furniture;
     DROP TABLE IF EXISTS quests;
@@ -2644,6 +2936,7 @@ function createSchema(db: Database.Database) {
       master_id INTEGER NOT NULL,
       level INTEGER NOT NULL,
       proficiency INTEGER NOT NULL,
+      proficiency_exp INTEGER NOT NULL DEFAULT 0,
       locked INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS preset_slot_settings (
@@ -2711,6 +3004,27 @@ function createSchema(db: Database.Database) {
       gauge INTEGER NOT NULL,
       phase INTEGER NOT NULL DEFAULT 1,
       phase_progress INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS air_bases (
+      area_id INTEGER NOT NULL,
+      base_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      action_kind INTEGER NOT NULL,
+      distance_base INTEGER NOT NULL,
+      distance_bonus INTEGER NOT NULL,
+      maintenance_level INTEGER NOT NULL,
+      PRIMARY KEY (area_id, base_id)
+    );
+    CREATE TABLE IF NOT EXISTS air_base_squadrons (
+      area_id INTEGER NOT NULL,
+      base_id INTEGER NOT NULL,
+      squadron_id INTEGER NOT NULL,
+      slot_item_id INTEGER NOT NULL,
+      state INTEGER NOT NULL,
+      count INTEGER NOT NULL,
+      max_count INTEGER NOT NULL,
+      condition INTEGER NOT NULL,
+      PRIMARY KEY (area_id, base_id, squadron_id)
     );
     CREATE TABLE IF NOT EXISTS sortie_sessions (
       id INTEGER PRIMARY KEY,
@@ -2813,9 +3127,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       ).run(masterId, maxHp, maxHp, maxFuel, maxFuel, maxAmmo, maxAmmo, JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT), JSON.stringify({}));
     }
 
-    for (const masterId of [1, 1, 2, 46]) {
-      db.prepare("INSERT INTO slot_items (master_id, level, proficiency, locked) VALUES (?, 0, 0, 0)").run(masterId);
-    }
+    for (const masterId of [1, 1, 2, 46]) createSlotItem(db, masterId);
 
     ensurePresetSlotSettings(db);
     ensurePresetDeckSettings(db);
@@ -2876,6 +3188,7 @@ function getSave(db: Database.Database): SaveState {
     materials: mapMaterials(db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row),
     ships: (db.prepare("SELECT * FROM ships ORDER BY id").all() as Row[]).map(mapShip),
     slotItems: (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem),
+    airBases: mapAirBases(db),
     presetSlots: (db.prepare("SELECT * FROM preset_slots ORDER BY preset_no").all() as Row[]).map(mapPresetSlot),
     presetSlotSettings: mapPresetSlotSettings(
       db.prepare("SELECT * FROM preset_slot_settings WHERE id = 1").get() as Row
@@ -2957,12 +3270,50 @@ function mapShip(row: Row): Ship {
 }
 
 function mapSlotItem(row: Row): SlotItem {
+  const rawProficiency = Number(row.proficiency);
+  const rawProficiencyExp = Number(row.proficiency_exp ?? 0);
+  const proficiencyExp = row.proficiency_exp == null || (rawProficiency > 0 && rawProficiencyExp === 0)
+    ? proficiencyExpForVisible(Number(row.proficiency))
+    : rawProficiencyExp;
   return {
     id: Number(row.id),
     masterId: Number(row.master_id),
     level: Number(row.level),
-    proficiency: Number(row.proficiency),
+    proficiency: visibleProficiency(proficiencyExp),
+    proficiencyExp,
     locked: Number(row.locked)
+  };
+}
+
+function mapAirBases(db: Database.Database): AirBase[] {
+  const bases = db.prepare("SELECT * FROM air_bases ORDER BY area_id, base_id").all() as Row[];
+  const squadrons = db.prepare("SELECT * FROM air_base_squadrons ORDER BY area_id, base_id, squadron_id").all() as Row[];
+  return bases.map((base) => {
+    const areaId = Number(base.area_id);
+    const baseId = Number(base.base_id);
+    return {
+      areaId,
+      baseId,
+      name: String(base.name ?? `Air Base ${baseId}`),
+      actionKind: normalizeAirBaseAction(base.action_kind),
+      distanceBase: Math.max(0, Math.trunc(safeNum(base.distance_base))),
+      distanceBonus: Math.max(0, Math.trunc(safeNum(base.distance_bonus))),
+      maintenanceLevel: Math.max(1, Math.trunc(safeNum(base.maintenance_level, 1))),
+      squadrons: squadrons
+        .filter((squadron) => Number(squadron.area_id) === areaId && Number(squadron.base_id) === baseId)
+        .map(mapAirBaseSquadron)
+    };
+  });
+}
+
+function mapAirBaseSquadron(row: Row): AirBaseSquadron {
+  return {
+    squadronId: Math.max(1, Math.trunc(safeNum(row.squadron_id, 1))),
+    slotItemId: Math.trunc(safeNum(row.slot_item_id, -1)),
+    state: Math.max(0, Math.trunc(safeNum(row.state))),
+    count: Math.max(0, Math.trunc(safeNum(row.count))),
+    maxCount: Math.max(0, Math.trunc(safeNum(row.max_count))),
+    condition: Math.max(0, Math.trunc(safeNum(row.condition)))
   };
 }
 
@@ -3881,7 +4232,11 @@ function materialColumn(material: keyof Materials) {
 }
 
 function createSlotItem(db: Database.Database, masterId: number): SlotItem {
-  const info = db.prepare("INSERT INTO slot_items (master_id, level, proficiency, locked) VALUES (?, 0, 0, 0)").run(masterId);
+  const master = masterData.api_mst_slotitem.find((item) => item.api_id === masterId);
+  const proficiencyExp = initialAircraftProficiencyExp(master);
+  const proficiency = visibleProficiency(proficiencyExp);
+  const info = db.prepare("INSERT INTO slot_items (master_id, level, proficiency, proficiency_exp, locked) VALUES (?, 0, ?, ?, 0)")
+    .run(masterId, proficiency, proficiencyExp);
   return mapSlotItem(db.prepare("SELECT * FROM slot_items WHERE id = ?").get(Number(info.lastInsertRowid)) as Row);
 }
 

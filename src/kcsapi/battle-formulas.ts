@@ -1,3 +1,6 @@
+import type { masterData } from "../master/data.js";
+import { aircraftAirPowerBonus } from "./aircraft-proficiency.js";
+
 export type AirStateCode = 1 | 2 | 3 | 4 | 5;
 
 // Formula defaults follow the public Kancolle wiki/community reverse-engineered combat pages.
@@ -12,6 +15,7 @@ export type FighterPowerSlot = {
   antiAir: number;
   proficiency?: number;
   improvement?: number;
+  slotMaster?: (typeof masterData.api_mst_slotitem)[number];
 };
 
 export type BattleFormulaPhase = "shelling" | "torpedo" | "antiAir" | "night";
@@ -134,7 +138,9 @@ export function fighterPower(slots: FighterPowerSlot[]) {
     if (count <= 0) return sum;
     const antiAir = Math.max(0, Number(slot.antiAir) || 0);
     const improvement = Math.sqrt(Math.max(0, Number(slot.improvement) || 0));
-    const proficiency = proficiencyAirPowerBonus(slot.proficiency ?? 0);
+    const proficiency = slot.slotMaster
+      ? aircraftAirPowerBonus(slot.slotMaster, slot.proficiency ?? 0)
+      : proficiencyAirPowerBonus(slot.proficiency ?? 0);
     return sum + Math.floor(Math.sqrt(count) * (antiAir + improvement) + proficiency);
   }, 0);
 }

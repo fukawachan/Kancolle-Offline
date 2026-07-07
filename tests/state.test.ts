@@ -2,7 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPracticeBattle } from "../src/kcsapi/battle.js";
+import { createPracticeBattle, createSortieBattle } from "../src/kcsapi/battle.js";
+import { proficiencyExpForVisible, visibleProficiency } from "../src/kcsapi/aircraft-proficiency.js";
 import { MARRIED_SHIP_LEVEL_CAP, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
 import { masterData } from "../src/master/data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
@@ -391,6 +392,31 @@ describe("SQLite state store", () => {
     expect(save.player.exp).toBe(0);
   });
 
+  it("migrates visible aircraft proficiency into internal proficiency exp", () => {
+    store.registerAccount(15);
+    const fighter = store.createSlotItem(20);
+    store.db.prepare("UPDATE slot_items SET proficiency = ? WHERE id = ?").run(4, fighter.id);
+    store.db.prepare("UPDATE schema_meta SET version = 15").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const migrated = store.getSave().slotItems.find((item) => item.id === fighter.id)!;
+
+    expect(migrated.proficiencyExp).toBe(proficiencyExpForVisible(4));
+    expect(migrated.proficiency).toBe(4);
+  });
+
+  it("seeds initial internal proficiency for skilled aircraft", () => {
+    store.registerAccount(15);
+
+    const ordinary = store.createSlotItem(20);
+    const skilled = store.createSlotItem(96);
+
+    expect(ordinary.proficiencyExp).toBe(0);
+    expect(skilled.proficiency).toBe(7);
+    expect(visibleProficiency(skilled.proficiencyExp)).toBe(7);
+  });
+
   it("persists mutations across store instances", () => {
     store.registerAccount(15);
     store.updateComment("persistent local save");
@@ -690,5 +716,61 @@ describe("SQLite state store", () => {
     expect(after.onSlot).toEqual(battle.record.after.fOnSlotByShipId?.[akagi.id]);
     expect(after.onSlot.reduce((sum, count) => sum + count, 0))
       .toBeLessThan(before.onSlot.reduce((sum, count) => sum + count, 0));
+  });
+
+  it("updates aircraft proficiency once when sortie battle results are settled", () => {
+    store.registerAccount(15);
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.startSortie(1, 1, 1);
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fOnSlotByShipId: {
+          [akagi.id]: [20, 0, 0, 0, 0]
+        }
+      }
+    };
+
+    store.recordSortieBattle(record as unknown as Record<string, unknown>);
+    store.applySortieBattleResult();
+    const afterFirst = store.getSave().slotItems.find((item) => item.id === fighter.id)!;
+    store.applySortieBattleResult();
+    const afterSecond = store.getSave().slotItems.find((item) => item.id === fighter.id)!;
+
+    expect(afterFirst.proficiencyExp).toBeGreaterThan(0);
+    expect(afterSecond.proficiencyExp).toBe(afterFirst.proficiencyExp);
+  });
+
+  it("clears aircraft proficiency when a sortie wipes out the equipped squadron", () => {
+    store.registerAccount(15);
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    store.db.prepare("UPDATE slot_items SET proficiency = 7, proficiency_exp = ? WHERE id = ?")
+      .run(proficiencyExpForVisible(7), fighter.id);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.startSortie(1, 1, 1);
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fOnSlotByShipId: {
+          [akagi.id]: [0, 0, 0, 0, 0]
+        }
+      }
+    };
+
+    store.recordSortieBattle(record as unknown as Record<string, unknown>);
+    store.applySortieBattleResult();
+
+    const after = store.getSave().slotItems.find((item) => item.id === fighter.id)!;
+    expect(after.proficiencyExp).toBe(0);
+    expect(after.proficiency).toBe(0);
   });
 });

@@ -108,8 +108,8 @@ describe("normal-map routing evaluator", () => {
   it("uses turbine and boiler equipment for effective fleet speed", () => {
     const save = saveWithLos();
     save.slotItems = [
-      { id: 1, masterId: 33, level: 0, proficiency: 0, locked: 0 },
-      { id: 2, masterId: 34, level: 0, proficiency: 0, locked: 0 }
+      { id: 1, masterId: 33, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 },
+      { id: 2, masterId: 34, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 }
     ];
     save.ships[0].slotIds = [1, 2, -1, -1, -1];
 
@@ -122,10 +122,10 @@ describe("normal-map routing evaluator", () => {
     save.ships[0].slotIds = [2, 3, 4, -1, -1];
     save.ships[0].exSlotId = 1;
     save.slotItems = [
-      { id: 1, masterId: 33, level: 0, proficiency: 0, locked: 0 },
-      { id: 2, masterId: 34, level: 0, proficiency: 0, locked: 0 },
-      { id: 3, masterId: 34, level: 0, proficiency: 0, locked: 0 },
-      { id: 4, masterId: 87, level: 0, proficiency: 0, locked: 0 }
+      { id: 1, masterId: 33, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 },
+      { id: 2, masterId: 34, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 },
+      { id: 3, masterId: 34, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 },
+      { id: 4, masterId: 87, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 }
     ];
 
     expect(buildRoutingFleet(save, 1).speed).toBe("fastest");
@@ -414,7 +414,8 @@ function saveWithLos(): SaveState {
         marriageLuckBonus: 0
       }
     ],
-    slotItems: [{ id: 1, masterId: 25, level: 0, proficiency: 0, locked: 0 }],
+    airBases: [],
+    slotItems: [{ id: 1, masterId: 25, level: 0, proficiency: 0, proficiencyExp: 0, locked: 0 }],
     presetSlots: [],
     presetSlotSettings: { maxNum: 4 },
     presetDecks: [],

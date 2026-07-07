@@ -63,7 +63,28 @@ export type SlotItem = {
   masterId: number;
   level: number;
   proficiency: number;
+  proficiencyExp: number;
   locked: number;
+};
+
+export type AirBaseSquadron = {
+  squadronId: number;
+  slotItemId: number;
+  state: number;
+  count: number;
+  maxCount: number;
+  condition: number;
+};
+
+export type AirBase = {
+  areaId: number;
+  baseId: number;
+  name: string;
+  actionKind: number;
+  distanceBase: number;
+  distanceBonus: number;
+  maintenanceLevel: number;
+  squadrons: AirBaseSquadron[];
 };
 
 export type PresetSlotItem = {
@@ -214,6 +235,7 @@ export type SaveState = {
   materials: Materials;
   ships: Ship[];
   slotItems: SlotItem[];
+  airBases: AirBase[];
   presetSlots: PresetSlot[];
   presetSlotSettings: PresetSlotSettings;
   presetDecks: PresetDeck[];
