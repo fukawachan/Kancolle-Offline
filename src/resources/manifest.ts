@@ -25,6 +25,8 @@ const SLOT_REMODEL_TYPE_FALLBACKS = new Map<number, number>([
 const slotMasterCache = new WeakMap<ResourceManifest, Map<number, SlotMasterForResourceFallback>>();
 const slotRemodelTypeCache = new WeakMap<ResourceManifest, Map<number, FileResource>>();
 const slotRemodelCategoryCache = new WeakMap<ResourceManifest, Map<number, FileResource>>();
+const slotDisplayTypeCache = new WeakMap<ResourceManifest, Map<string, Map<number, FileResource>>>();
+const slotDisplayCategoryCache = new WeakMap<ResourceManifest, Map<string, Map<number, FileResource>>>();
 
 const VOICE_FILE_HASHES = [
   2475, 6547, 1471, 8691, 7847, 3595, 1767, 3311, 2507, 9651, 5321, 4473, 7117, 5947, 9489, 2669,
@@ -94,6 +96,7 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     const kind = slot[1].toLowerCase();
     if (kind === "btxt_flat" && collection) return firstResource(collection);
     if (kind === "remodel") return slotRemodelFallback(manifest, id);
+    if (collection) return slotDisplayFallback(manifest, kind, collection, id);
     return undefined;
   }
 
@@ -391,6 +394,77 @@ function slotRemodelResourcesByCategory(manifest: ResourceManifest) {
   }
   slotRemodelCategoryCache.set(manifest, cached);
   return cached;
+}
+
+function slotDisplayFallback(manifest: ResourceManifest, kind: string, collection: Map<number, FileResource>, id: number) {
+  const requestedSlot = slotMastersById(manifest).get(id);
+  const typeFallback = requestedSlot ? slotDisplayFallbackForSlot(manifest, kind, collection, requestedSlot) : undefined;
+  return typeFallback ?? firstResource(collection);
+}
+
+function slotDisplayFallbackForSlot(
+  manifest: ResourceManifest,
+  kind: string,
+  collection: Map<number, FileResource>,
+  slot: SlotMasterForResourceFallback
+) {
+  const typeId = slotTypeId(slot, 2);
+  const byExactType = typeId ? slotDisplayResourcesByType(manifest, kind, collection).get(typeId) : undefined;
+  const categoryId = slotTypeId(slot, 0);
+  const byCategory = categoryId ? slotDisplayResourcesByCategory(manifest, kind, collection).get(categoryId) : undefined;
+  return byExactType ?? byCategory;
+}
+
+function slotDisplayResourcesByType(manifest: ResourceManifest, kind: string, collection: Map<number, FileResource>) {
+  const cached = slotDisplayCachedMap(slotDisplayTypeCache, manifest, kind);
+  if (cached) return cached;
+
+  const resources = new Map<number, FileResource>();
+  for (const slot of slotMastersById(manifest).values()) {
+    const resource = collection.get(Number(slot.api_id));
+    const typeId = slotTypeId(slot, 2);
+    if (!resource || !typeId || resources.has(typeId)) continue;
+    resources.set(typeId, resource);
+  }
+  slotDisplaySetCachedMap(slotDisplayTypeCache, manifest, kind, resources);
+  return resources;
+}
+
+function slotDisplayResourcesByCategory(manifest: ResourceManifest, kind: string, collection: Map<number, FileResource>) {
+  const cached = slotDisplayCachedMap(slotDisplayCategoryCache, manifest, kind);
+  if (cached) return cached;
+
+  const resources = new Map<number, FileResource>();
+  for (const slot of slotMastersById(manifest).values()) {
+    const resource = collection.get(Number(slot.api_id));
+    const categoryId = slotTypeId(slot, 0);
+    if (!resource || !categoryId || resources.has(categoryId)) continue;
+    resources.set(categoryId, resource);
+  }
+  slotDisplaySetCachedMap(slotDisplayCategoryCache, manifest, kind, resources);
+  return resources;
+}
+
+function slotDisplayCachedMap(
+  cache: WeakMap<ResourceManifest, Map<string, Map<number, FileResource>>>,
+  manifest: ResourceManifest,
+  kind: string
+) {
+  return cache.get(manifest)?.get(kind);
+}
+
+function slotDisplaySetCachedMap(
+  cache: WeakMap<ResourceManifest, Map<string, Map<number, FileResource>>>,
+  manifest: ResourceManifest,
+  kind: string,
+  resources: Map<number, FileResource>
+) {
+  let byKind = cache.get(manifest);
+  if (!byKind) {
+    byKind = new Map<string, Map<number, FileResource>>();
+    cache.set(manifest, byKind);
+  }
+  byKind.set(kind, resources);
 }
 
 function slotTypeId(slot: SlotMasterForResourceFallback, index: number) {

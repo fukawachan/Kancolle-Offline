@@ -188,6 +188,24 @@ describe("cached resource manifest", () => {
     expect(slotIconType(jetFighterFallback?.id)).toBe(6);
   });
 
+  it("falls back from missing slot item-up art to a cached image for the equipment type", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    expect(manifest.slot.itemUp.has(570)).toBe(false);
+    const tomonagaFallback = resolveMappedResource("/kcs2/resources/slot/item_up/0570_1119.png", manifest);
+    expect(tomonagaFallback).toMatchObject({
+      extension: "png",
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/item_up\/\d{4}_\d{4}\.png$/)
+    });
+    expect(tomonagaFallback?.id).not.toBe(570);
+    expect(slotIconType(tomonagaFallback?.id)).toBe(slotIconType(570));
+
+    expect(resolveMappedResource("/kcs2/resources/slot/item_up/0568_0000.png", manifest)).toMatchObject({
+      id: 568,
+      pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/item_up\/0568_\d{4}\.png$/)
+    });
+  });
+
   it("can resolve slot remodel art for every start2 equipment master", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
 
