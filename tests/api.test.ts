@@ -2239,6 +2239,56 @@ describe("local kcsapi endpoints", () => {
     const updatedShip = response.json().api_data;
 
     expect(updatedShip.api_slot).toEqual([fighters[1].id, fighters[2].id, fighters[3].id, -1, -1]);
+    expect(updatedShip.api_onslot).toEqual([20, 20, 10, 0, 0]);
+  });
+
+  it("returns the client slot exchange payload shape and target slot aircraft counts", async () => {
+    const akagi = store.createShip(277);
+    const fighter1 = store.createSlotItem(20);
+    const fighter2 = store.createSlotItem(20);
+
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter1.id });
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: fighter2.id });
+
+    const response = await post("api_req_kaisou/slot_exchange_index", {
+      api_id: akagi.id,
+      api_src_idx: 2,
+      api_dst_idx: 1
+    });
+    const data = response.json().api_data;
+
+    expect(response.statusCode).toBe(200);
+    expect(data.api_ship_data.api_id).toBe(akagi.id);
+    expect(data.api_ship_data.api_slot).toEqual([fighter1.id, fighter2.id, -1, -1, -1]);
+    expect(data.api_ship_data.api_onslot).toEqual([20, 20, 0, 0, 0]);
+    expect(data.api_bauxite).toEqual(expect.any(Number));
+  });
+
+  it("infers the moved item and returns the client slot deprive payload shape", async () => {
+    const source = store.createShip(277);
+    const target = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+
+    await post("api_req_kaisou/slotset", { api_id: source.id, api_slot_idx: 2, api_item_id: fighter.id });
+
+    const response = await post("api_req_kaisou/slot_deprive", {
+      api_unset_ship: source.id,
+      api_unset_idx: 2,
+      api_unset_slot_kind: 0,
+      api_set_ship: target.id,
+      api_set_idx: 1,
+      api_set_slot_kind: 0
+    });
+    const data = response.json().api_data;
+
+    expect(response.statusCode).toBe(200);
+    expect(data.api_ship_data.api_unset_ship.api_id).toBe(source.id);
+    expect(data.api_ship_data.api_unset_ship.api_slot).toEqual([-1, -1, -1, -1, -1]);
+    expect(data.api_ship_data.api_unset_ship.api_onslot).toEqual([0, 0, 0, 0, 0]);
+    expect(data.api_ship_data.api_set_ship.api_id).toBe(target.id);
+    expect(data.api_ship_data.api_set_ship.api_slot).toEqual([-1, fighter.id, -1, -1, -1]);
+    expect(data.api_ship_data.api_set_ship.api_onslot).toEqual([0, 20, 0, 0, 0]);
+    expect(data.api_bauxite).toEqual(expect.any(Number));
   });
 
   it("returns equipment preset records in the remodel client payload shape", async () => {

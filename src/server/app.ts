@@ -11,6 +11,7 @@ import { handleKcsApi, requestToHandlerInput } from "../kcsapi/handlers.js";
 import { createResourceManifest, readMappedResource } from "../resources/manifest.js";
 import type { FileResource, ResourceManifest } from "../resources/types.js";
 import { renderBootstrap } from "./bootstrap.js";
+import { patchKcsMainJs } from "./client-patches.js";
 import { renderLauncher, renderWorldPage } from "./launcher.js";
 import { LOCAL_WORLD_ID } from "../state/store.js";
 import type { StateStore } from "../state/store.js";
@@ -104,6 +105,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       .type("application/javascript; charset=utf-8")
       .header("cache-control", "public, max-age=3600")
       .send(await readFile(localVendorPath("howler/dist/howler.min.js"), "utf8"));
+  });
+
+  app.get("/kcs2/js/main.js", async (_request, reply) => {
+    return reply
+      .type("application/javascript; charset=utf-8")
+      .header("cache-control", "no-store")
+      .send(patchKcsMainJs(await readFile(path.join(options.cacheDir, "kcs2/js/main.js"), "utf8")));
   });
 
   app.get("/kcsapi/api_world/get_id/:viewerId/:server/:timestamp", async (_request, reply) => {

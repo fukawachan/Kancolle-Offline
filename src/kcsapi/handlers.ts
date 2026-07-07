@@ -27,7 +27,7 @@ import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
 import type { StateStore } from "../state/store.js";
-import type { AirBase, Materials, PresetDeck, PresetSlot, PresetSlotItem, SaveState, SlotItem } from "../state/types.js";
+import type { AirBase, Materials, PresetDeck, PresetSlot, PresetSlotItem, SaveState, Ship, SlotItem } from "../state/types.js";
 import {
   battleResultPayload,
   createCombinedBattle,
@@ -338,7 +338,9 @@ register("api_req_kaisou/slotset", (input, context) => {
   const validation = validateSlotEquip(save, context.resourceManifest, shipId, slotIndex, itemId, "normal");
   if (!validation.ok) return apiError(validation.message, 400);
   const ship = context.stateStore.equipSlotItem(shipId, slotIndex, itemId);
-  return ship ? apiOk(toShip(ship, save.slotItems)) : apiError("Unknown ship", 404);
+  if (!ship) return apiError("Unknown ship", 404);
+  const nextSave = context.stateStore.getSave();
+  return apiOk({ ...toShip(ship, nextSave.slotItems), api_bauxite: nextSave.materials.bauxite });
 });
 register("api_req_kaisou/slotset_ex", (input, context) => {
   const save = context.stateStore.getSave();
@@ -354,8 +356,15 @@ register("api_req_kaisou/unsetslot_all", (input, context) => {
   return apiOk(toShip(context.stateStore.unsetAllSlots(num(input.body.api_id ?? input.body.api_ship_id, 1))!, save.slotItems));
 });
 register("api_req_kaisou/slot_exchange_index", (input, context) => {
+  const ship = context.stateStore.exchangeSlotIndex(
+    num(input.body.api_id, 1),
+    Math.trunc(num(input.body.api_src_idx ?? input.body.api_slot_idx, 0)),
+    Math.trunc(num(input.body.api_dst_idx ?? input.body.api_change_idx, 1))
+  );
+  if (!ship) return apiError("Unknown ship", 404);
   const save = context.stateStore.getSave();
-  return apiOk(toShip(context.stateStore.exchangeSlotIndex(num(input.body.api_id, 1), num(input.body.api_slot_idx, 0), num(input.body.api_change_idx, 1))!, save.slotItems));
+  const payload = toShip(ship, save.slotItems);
+  return apiOk({ ...payload, api_ship_data: payload, api_bauxite: save.materials.bauxite });
 });
 register("api_req_kaisou/slot_deprive", (input, context) => {
   const save = context.stateStore.getSave();
@@ -363,12 +372,32 @@ register("api_req_kaisou/slot_deprive", (input, context) => {
   const unsetIndex = Math.trunc(num(input.body.api_unset_idx, 0));
   const setShipId = num(input.body.api_set_ship, 1);
   const setIndex = Math.trunc(num(input.body.api_set_idx, 0));
-  const itemId = num(input.body.api_item_id, 1);
-  const validation = validateSlotEquip(save, context.resourceManifest, setShipId, setIndex, itemId, "normal");
+  const unsetKind = slotKind(input.body.api_unset_slot_kind);
+  const setKind = slotKind(input.body.api_set_slot_kind);
+  const unsetShip = save.ships.find((ship) => ship.id === unsetShipId);
+  const setShip = save.ships.find((ship) => ship.id === setShipId);
+  const inferredItemId = slotItemIdAt(unsetShip, unsetIndex, unsetKind);
+  const itemId = num(input.body.api_item_id, inferredItemId);
+  const displacedItemId = slotItemIdAt(setShip, setIndex, setKind);
+  if (itemId <= 0) return apiError("Unknown slot item", 400);
+  const validation = validateSlotEquip(save, context.resourceManifest, setShipId, setIndex, itemId, setKind);
   if (!validation.ok) return apiError(validation.message, 400);
-  const unset = context.stateStore.equipSlotItem(unsetShipId, unsetIndex, -1);
-  const set = context.stateStore.equipSlotItem(setShipId, setIndex, itemId);
-  return apiOk({ api_unset_ship: unset ? toShip(unset, save.slotItems) : null, api_set_ship: set ? toShip(set, save.slotItems) : null });
+  const unset = unsetKind === "extra"
+    ? context.stateStore.equipExSlotItem(unsetShipId, -1)
+    : context.stateStore.equipSlotItem(unsetShipId, unsetIndex, -1);
+  const set = setKind === "extra"
+    ? context.stateStore.equipExSlotItem(setShipId, itemId)
+    : context.stateStore.equipSlotItem(setShipId, setIndex, itemId);
+  const nextSave = context.stateStore.getSave();
+  const unsetPayload = unset ? toShip(unset, nextSave.slotItems) : null;
+  const setPayload = set ? toShip(set, nextSave.slotItems) : null;
+  return apiOk({
+    api_ship_data: { api_unset_ship: unsetPayload, api_set_ship: setPayload },
+    api_unset_ship: unsetPayload,
+    api_set_ship: setPayload,
+    ...(displacedItemId > 0 ? { api_unset_list: slotDepriveUnsetList(nextSave, displacedItemId) } : {}),
+    api_bauxite: nextSave.materials.bauxite
+  });
 });
 register("api_req_kaisou/lock", (input, context) => apiOk({ api_locked: context.stateStore.lockSlotItem(num(input.body.api_slotitem_id ?? input.body.api_item_id, 1)) }));
 register("api_req_kaisou/marriage", (input, context) => {
@@ -1589,6 +1618,27 @@ function battleFormation(input?: HandlerInput) {
 
 function str(value: unknown, fallback: string) {
   return typeof value === "string" && value.length > 0 ? value : fallback;
+}
+
+function slotKind(value: unknown): "normal" | "extra" {
+  return num(value, 0) === 1 ? "extra" : "normal";
+}
+
+function slotItemIdAt(ship: Ship | undefined, slotIndex: number, kind: "normal" | "extra") {
+  if (!ship) return -1;
+  if (kind === "extra") return ship.exSlotId;
+  const slots = [...ship.slotIds, -1, -1, -1, -1, -1].slice(0, 5);
+  return slotIndex >= 0 && slotIndex < slots.length ? slots[slotIndex] : -1;
+}
+
+function slotDepriveUnsetList(save: SaveState, itemId: number) {
+  const item = save.slotItems.find((slotItem) => slotItem.id === itemId);
+  const master = item ? masterData.api_mst_slotitem.find((slotItem) => slotItem.api_id === item.masterId) : undefined;
+  const type3 = Number(master?.api_type?.[2] ?? 0);
+  return {
+    api_type3No: type3,
+    api_slot_list: toUnsetSlot(save)[`api_slottype${type3}`] ?? []
+  };
 }
 
 function toOptionSetting(options: SaveState["player"]["options"]) {

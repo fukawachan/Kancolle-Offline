@@ -330,6 +330,22 @@ describe("local Fastify server", () => {
     expect(response.json()).toMatchObject({ title: expect.any(String), port: expect.any(String) });
   });
 
+  it("serves the cached client bundle with local compatibility patches", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({ method: "GET", url: "/kcs2/js/main.js" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/javascript");
+    expect(response.headers["cache-control"]).toContain("no-store");
+    expect(response.body).toContain("__KANCOLLE_LOCAL_SLOTSET_PATCH__");
+    expect(response.body).toContain("api_ship_data");
+  });
+
   it("serves missing cached static files from the extra cache directory", async () => {
     const extraCacheDir = path.join(tempDir, "cache-extra");
     const revampDir = path.join(extraCacheDir, "kcs2/img/revamp");
