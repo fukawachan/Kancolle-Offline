@@ -672,6 +672,39 @@ describe("SQLite state store", () => {
     });
   });
 
+  it("migrates version 17 saves by adding monthly EO period state", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-07T00:00:00.000+09:00"));
+    store.registerAccount(15);
+    store.db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = 2, phase_progress = 0 WHERE id = 35").run();
+
+    const mapColumns = (store.db.prepare("PRAGMA table_info(maps)").all() as { name: string }[]).map((row) => row.name);
+    if (mapColumns.includes("period_key")) {
+      store.db.exec(`
+        CREATE TABLE maps_legacy AS
+          SELECT id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress FROM maps;
+        DROP TABLE maps;
+        ALTER TABLE maps_legacy RENAME TO maps;
+      `);
+    }
+    store.db.prepare("UPDATE schema_meta SET version = 17").run();
+    store.close();
+
+    vi.setSystemTime(new Date("2026-08-01T00:00:00.000+09:00"));
+    store = createStateStore({ databasePath });
+
+    const columns = (store.db.prepare("PRAGMA table_info(maps)").all() as { name: string }[]).map((row) => row.name);
+    const map = store.getSave().maps.find((item) => item.id === 35)!;
+    expect(columns).toContain("period_key");
+    expect(map).toMatchObject({
+      cleared: 0,
+      gauge: 4,
+      phase: 1,
+      phaseProgress: 0,
+      periodKey: "2026-08"
+    });
+  });
+
   it("consumes each ship's daytime battle cost after every settled battle", () => {
     store.registerAccount(15);
     const akagi = store.createShip(277);

@@ -11,6 +11,8 @@ import {
 } from "../master/furniture.js";
 import {
   initialMapGauge,
+  isMonthlyExtraOperationMap,
+  mapMedalRewardCount,
   mapPhaseDefinitions,
   terminalMapPhase,
   type MapPhaseCondition
@@ -193,7 +195,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -2124,6 +2126,7 @@ function applyMapProgress(db: Database.Database, record: BattleRecord) {
     const nextGauge = Math.max(0, Number(map.gauge) - 1);
     db.prepare("UPDATE maps SET cleared = ?, gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
       .run(nextGauge === 0 ? 1 : 0, nextGauge, nextGauge === 0 ? 2 : 1, sortie.mapId);
+    if (nextGauge === 0) awardMapClearReward(db, sortie.mapId);
     return;
   }
 
@@ -2142,10 +2145,15 @@ function applyMapProgress(db: Database.Database, record: BattleRecord) {
   if (!nextStage) {
     db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = ?, phase_progress = 0 WHERE id = ?")
       .run(stages.length + 1, sortie.mapId);
+    awardMapClearReward(db, sortie.mapId);
     return;
   }
   db.prepare("UPDATE maps SET gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
     .run(nextStage.required, phase + 1, sortie.mapId);
+}
+
+function awardMapClearReward(db: Database.Database, mapId: number) {
+  addUseItem(db, MEDAL_USEITEM_ID, mapMedalRewardCount(mapId));
 }
 
 function phaseConditionMet(condition: MapPhaseCondition, record: BattleRecord) {
@@ -2505,6 +2513,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 15) migrateToV15(db);
   if (currentVersion < 16) migrateToV16(db);
   if (currentVersion < 17) migrateToV17(db);
+  if (currentVersion < 18) migrateToV18(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2598,6 +2607,13 @@ function migrateToV16(db: Database.Database) {
 
 function migrateToV17(db: Database.Database) {
   repairAirBaseSquadrons(db);
+}
+
+function migrateToV18(db: Database.Database) {
+  if (!columnExists(db, "maps", "period_key")) {
+    db.prepare("ALTER TABLE maps ADD COLUMN period_key TEXT NOT NULL DEFAULT ''").run();
+  }
+  refreshMapPeriods(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2832,7 +2848,46 @@ function repairMaps(db: Database.Database) {
     db.prepare("DELETE FROM maps WHERE id = 1").run();
   }
 
+  const supportedMapIds = new Set(masterData.api_mst_mapinfo.map((map) => map.api_id));
+  const deleteUnsupported = db.prepare("DELETE FROM maps WHERE id = ?");
+  for (const row of db.prepare("SELECT id FROM maps").all() as Row[]) {
+    const mapId = Number(row.id);
+    if (!supportedMapIds.has(mapId)) deleteUnsupported.run(mapId);
+  }
+
   seedMissingMaps(db);
+}
+
+function refreshMapPeriods(db: Database.Database, now = Date.now()) {
+  if (!columnExists(db, "maps", "period_key")) return;
+  repairMaps(db);
+
+  const updatePeriod = db.prepare("UPDATE maps SET period_key = ? WHERE id = ?");
+  const resetPeriod = db.prepare(`
+    UPDATE maps
+    SET cleared = 0, gauge = ?, phase = 1, phase_progress = 0, period_key = ?
+    WHERE id = ?
+  `);
+  const tx = db.transaction(() => {
+    for (const row of db.prepare("SELECT id, period_key FROM maps").all() as Row[]) {
+      const mapId = Number(row.id);
+      const key = currentMapPeriodKey(mapId, now);
+      const stored = String(row.period_key ?? "");
+      if (isMonthlyExtraOperationMap(mapId) && stored !== key) {
+        const master = masterData.api_mst_mapinfo.find((map) => map.api_id === mapId);
+        resetPeriod.run(initialMapGauge(mapId, master?.api_required_defeat_count), key, mapId);
+      } else if (!stored) {
+        updatePeriod.run(key, mapId);
+      }
+    }
+  });
+  tx();
+}
+
+function currentMapPeriodKey(mapId: number, now = Date.now()) {
+  return isMonthlyExtraOperationMap(mapId)
+    ? currentQuestPeriodKey("monthly", now)
+    : "once";
 }
 
 function schemaVersion(db: Database.Database) {
@@ -3003,7 +3058,8 @@ function createSchema(db: Database.Database) {
       cleared INTEGER NOT NULL,
       gauge INTEGER NOT NULL,
       phase INTEGER NOT NULL DEFAULT 1,
-      phase_progress INTEGER NOT NULL DEFAULT 0
+      phase_progress INTEGER NOT NULL DEFAULT 0,
+      period_key TEXT NOT NULL DEFAULT ''
     );
     CREATE TABLE IF NOT EXISTS air_bases (
       area_id INTEGER NOT NULL,
@@ -3179,6 +3235,7 @@ function getSave(db: Database.Database): SaveState {
   settleMaterialRecovery(db);
   ensureQuestStates(db);
   refreshQuestPeriods(db);
+  refreshMapPeriods(db);
   ensureRecordStats(db);
   ensurePresetSlotSettings(db);
   ensurePresetDeckSettings(db);
@@ -3460,7 +3517,8 @@ function mapMap(row: Row): MapState {
     cleared: Number(row.cleared),
     gauge: Number(row.gauge),
     phase: Number(row.phase ?? 1),
-    phaseProgress: Number(row.phase_progress ?? 0)
+    phaseProgress: Number(row.phase_progress ?? 0),
+    periodKey: String(row.period_key ?? currentMapPeriodKey(Number(row.id)))
   };
 }
 
@@ -4780,14 +4838,15 @@ function consumeBattleSupply(db: Database.Database, shipIds: number[] | undefine
 
 function seedMissingMaps(db: Database.Database) {
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress) VALUES (?, ?, ?, 1, 0, ?, 1, 0)"
+    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, ?, 1, 0, ?)"
   );
   for (const map of masterData.api_mst_mapinfo) {
     insert.run(
       map.api_id,
       map.api_maparea_id,
       map.api_no,
-      initialMapGauge(map.api_id, map.api_required_defeat_count)
+      initialMapGauge(map.api_id, map.api_required_defeat_count),
+      currentMapPeriodKey(map.api_id)
     );
   }
 }

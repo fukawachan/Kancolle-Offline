@@ -23,8 +23,19 @@ const MULTI_STAGE_MAPS: Record<number, readonly MapPhaseDefinition[]> = {
   ]
 };
 
+const MONTHLY_EXTRA_OPERATION_MAP_IDS = new Set([15, 16, 25, 35, 45, 55, 65, 75]);
+const MEDAL_REWARD_MAP_IDS = new Set([15, 25, 35, 45, 55, 65, 75]);
+
 export function mapPhaseDefinitions(mapId: number) {
   return MULTI_STAGE_MAPS[mapId];
+}
+
+export function isMonthlyExtraOperationMap(mapId: number) {
+  return MONTHLY_EXTRA_OPERATION_MAP_IDS.has(mapId);
+}
+
+export function mapMedalRewardCount(mapId: number) {
+  return MEDAL_REWARD_MAP_IDS.has(mapId) ? 1 : 0;
 }
 
 export function mapGaugeStage(mapId: number, phase: number) {

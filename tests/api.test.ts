@@ -2722,6 +2722,32 @@ describe("local kcsapi endpoints", () => {
     expect(cleared).not.toHaveProperty("api_required_defeat_count");
   });
 
+  it("refreshes monthly EO map gauges before serializing mapinfo", async () => {
+    store.db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = 2, phase_progress = 0 WHERE id = 35").run();
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-01T00:00:00.000+09:00"));
+
+    const maps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    expect(maps.find((map: any) => map.api_id === 35)).toMatchObject({
+      api_cleared: 0,
+      api_gauge_num: 1,
+      api_gauge_type: 1,
+      api_defeat_count: 0,
+      api_required_defeat_count: 4
+    });
+  });
+
+  it("does not serialize unsupported stale normal map rows", async () => {
+    store.db.prepare(`
+      INSERT INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress)
+      VALUES (56, 5, 6, 1, 0, 1, 1, 0)
+    `).run();
+
+    const maps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
+    expect(maps.map((map: any) => map.api_id)).not.toContain(56);
+  });
+
   it("serializes multi-stage map gauges using the current real stage", async () => {
     const initialMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
     expect(initialMaps.find((map: any) => map.api_id === 72)).toMatchObject({

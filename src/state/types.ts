@@ -218,6 +218,7 @@ export type MapState = {
   gauge: number;
   phase: number;
   phaseProgress: number;
+  periodKey: string;
 };
 
 export type SortieSession = {
