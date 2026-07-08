@@ -1091,6 +1091,121 @@ describe("sortie battle simulation", () => {
     expect(hougeki.api_at_eflag).toEqual([]);
   });
 
+  it("requires night aviation personnel for non-native carrier night air attacks", () => {
+    const shoukaku = store.createShip(466);
+    const nightFighter = store.createSlotItem(338);
+    store.equipSlotItem(shoukaku.id, 0, nightFighter.id);
+    store.changeDeckShip(1, 0, shoukaku.id);
+    for (let index = 1; index < 6; index += 1) store.changeDeckShip(1, index, -1);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 0, 0, 0, 0, 0],
+        eNowHps: [999, 0, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          luck: index === 0 ? 500 : unit.luck
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+    const friendlyAttackIndex = hougeki.api_at_list.findIndex(
+      (attacker: number, index: number) => attacker === 0 && hougeki.api_at_eflag[index] === 0
+    );
+
+    expect(friendlyAttackIndex).toBe(-1);
+  });
+
+  it("emits carrier night air attacks with client night-carrier markers", () => {
+    const shoukaku = store.createShip(466);
+    const nightFighter = store.createSlotItem(338);
+    const nightPersonnel = store.createSlotItem(258);
+    store.equipSlotItem(shoukaku.id, 0, nightFighter.id);
+    store.equipSlotItem(shoukaku.id, 1, nightPersonnel.id);
+    store.changeDeckShip(1, 0, shoukaku.id);
+    for (let index = 1; index < 6; index += 1) store.changeDeckShip(1, index, -1);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 0, 0, 0, 0, 0],
+        eNowHps: [999, 0, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          luck: index === 0 ? 500 : unit.luck
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+    const friendlyAttackIndex = hougeki.api_at_list.findIndex(
+      (attacker: number, index: number) => attacker === 0 && hougeki.api_at_eflag[index] === 0
+    );
+
+    expect(friendlyAttackIndex).toBeGreaterThanOrEqual(0);
+    expect(hougeki.api_sp_list[friendlyAttackIndex]).toBe(0);
+    expect(hougeki.api_n_mother_list[friendlyAttackIndex]).toBe(1);
+    expect(hougeki.api_si_list[friendlyAttackIndex]).toEqual([338]);
+  });
+
+  it("encodes carrier night air cut-ins with api_sp_list type 6", () => {
+    const shoukaku = store.createShip(466);
+    const nightFighter = store.createSlotItem(254);
+    const nightAttacker = store.createSlotItem(257);
+    const nightPersonnel = store.createSlotItem(258);
+    store.equipSlotItem(shoukaku.id, 0, nightFighter.id);
+    store.equipSlotItem(shoukaku.id, 1, nightAttacker.id);
+    store.equipSlotItem(shoukaku.id, 2, nightPersonnel.id);
+    store.changeDeckShip(1, 0, shoukaku.id);
+    for (let index = 1; index < 6; index += 1) store.changeDeckShip(1, index, -1);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 0, 0, 0, 0, 0],
+        eNowHps: [999, 0, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          luck: index === 0 ? 500 : unit.luck
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+    const cutInIndex = hougeki.api_sp_list.indexOf(6);
+
+    expect(cutInIndex).toBeGreaterThanOrEqual(0);
+    expect(hougeki.api_at_eflag[cutInIndex]).toBe(0);
+    expect(hougeki.api_n_mother_list[cutInIndex]).toBe(1);
+    expect(hougeki.api_si_list[cutInIndex]).toEqual([254, 257]);
+  });
+
   it("encodes night double attacks with api_sp_list type 1", () => {
     const nagato = store.createShip(80);
     const mainGunA = store.createSlotItem(7);

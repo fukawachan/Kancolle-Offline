@@ -162,6 +162,61 @@ describe("battle formula helpers", () => {
     });
   });
 
+  it("calculates carrier night air attack power from base firepower and night aircraft", async () => {
+    const formulas = await import("../src/kcsapi/battle-formulas.js") as any;
+
+    expect(formulas.carrierNightAirAttackPower({
+      baseFirepower: 65,
+      nightContactBonus: 5,
+      aircraft: [
+        { count: 18, firepower: 0, torpedo: 0, bombing: 0, asw: 4, improvement: 0, modifierKind: "night" },
+        { count: 20, firepower: 2, torpedo: 9, bombing: 0, asw: 8, improvement: 0, modifierKind: "night" }
+      ]
+    })).toBeCloseTo(240.8735, 4);
+
+    expect(formulas.carrierNightAirAttackPower({
+      baseFirepower: 65,
+      aircraft: [
+        { count: 18, firepower: 4, torpedo: 8, bombing: 0, asw: 10, improvement: 4, modifierKind: "special" }
+      ]
+    })).toBeCloseTo(107.0014, 4);
+  });
+
+  it("classifies carrier night cut-ins by night aircraft mix", async () => {
+    const formulas = await import("../src/kcsapi/battle-formulas.js") as any;
+
+    expect(formulas.classifyCarrierNightCutIn({
+      nightFighters: 2,
+      nightTorpedoBombers: 1,
+      nightDiveBombers: 0,
+      otherNightAircraft: 0
+    })).toMatchObject({ spType: 6, hits: 1, modifier: 1.25 });
+    expect(formulas.classifyCarrierNightCutIn({
+      nightFighters: 1,
+      nightTorpedoBombers: 1,
+      nightDiveBombers: 0,
+      otherNightAircraft: 0
+    })).toMatchObject({ spType: 6, hits: 1, modifier: 1.2 });
+    expect(formulas.classifyCarrierNightCutIn({
+      nightFighters: 0,
+      nightTorpedoBombers: 0,
+      nightDiveBombers: 1,
+      otherNightAircraft: 2
+    })).toMatchObject({ spType: 6, hits: 1, modifier: 1.2 });
+    expect(formulas.classifyCarrierNightCutIn({
+      nightFighters: 1,
+      nightTorpedoBombers: 0,
+      nightDiveBombers: 0,
+      otherNightAircraft: 3
+    })).toMatchObject({ spType: 6, hits: 1, modifier: 1.18 });
+    expect(formulas.classifyCarrierNightCutIn({
+      nightFighters: 1,
+      nightTorpedoBombers: 0,
+      nightDiveBombers: 0,
+      otherNightAircraft: 0
+    })).toBeNull();
+  });
+
   it("calculates night cut-in activation chances from luck and battle state", () => {
     expect(nightCutInActivationChance({
       luck: 0,

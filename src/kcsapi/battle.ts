@@ -49,7 +49,9 @@ import {
   airState as resolveAirState,
   accuracyChance,
   canOpeningAswByStats,
+  carrierNightAirAttackPower,
   classifyNightAttack,
+  classifyCarrierNightCutIn,
   criticalChance,
   damageStateModifierFor,
   engagementModifierFor,
@@ -97,6 +99,16 @@ const OPENING_AIRSTRIKE_TYPES = new Set([7, 8, 11, 47, 57]);
 const TORPEDO_BOMBER_TYPES = new Set([8, 47]);
 const CONTACT_TYPES = new Set([8, 9, 10]);
 const CARRIER_TYPES = new Set([7, 11, 18]);
+const CARRIER_NIGHT_AIR_ATTACK_NATIVE_SHIP_IDS = new Set([545, 599, 610, 883, 1008]);
+const STANDARD_CARRIER_NIGHT_SHELLING_SHIP_IDS = new Set([433, 353, 432, 529, 536, 646, 735, 889, 966, 1025, 1030]);
+const ARK_ROYAL_SHIP_IDS = new Set([393, 515]);
+const NIGHT_OPERATION_PERSONNEL_IDS = new Set([258, 259]);
+const SWORDFISH_IDS = new Set([242, 243, 244]);
+const SPECIAL_CARRIER_NIGHT_AIRCRAFT_IDS = new Set([154, 242, 243, 244, 320]);
+const NIGHT_FIGHTER_DETAIL_TYPE = 45;
+const NIGHT_TORPEDO_BOMBER_DETAIL_TYPE = 46;
+const NIGHT_DIVE_BOMBER_DETAIL_TYPE = 58;
+const NIGHT_RECON_DETAIL_TYPE = 50;
 const BATTLESHIP_TYPES = new Set([8, 9, 10, 12]);
 const SUBMARINE_TYPES = new Set([13, 14]);
 const OPENING_TORPEDO_SHIP_TYPES = new Set([4, 13, 14]);
@@ -124,6 +136,13 @@ const SLOT_MASTER_BY_ID = new Map<number, (typeof masterData.api_mst_slotitem)[n
 type NightEquipmentState = {
   searchlight: boolean;
   starShell: boolean;
+  nightContactBonus: number;
+  nightContactPlaneId: number;
+};
+
+type NightEquipmentPair = {
+  friendly: NightEquipmentState;
+  enemy: NightEquipmentState;
 };
 
 type DayShellingAirControl = {
@@ -378,7 +397,11 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
   const fMaxHps = fixedMaxHp(record.mode === "combined" ? mainFriendly : friendly);
   const eMaxHps = fixedMaxHp(enemy);
   const rng = new BattleRng(record.deckId * 8191 + record.before.fNowHps.reduce((sum, hp) => sum + hp, 0));
-  const hougeki = shellingPhase(friendly, enemy, record.formation[0], rng, "night", record.formation[2]);
+  const nightEquipment = {
+    friendly: nightEquipmentState(friendly, rng, nightContactAllowed(record)),
+    enemy: nightEquipmentState(enemy, rng, nightContactAllowed(record))
+  };
+  const hougeki = shellingPhase(friendly, enemy, record.formation[0], rng, "night", record.formation[2], NO_DAY_SHELLING_AIR_CONTROL, nightEquipment);
   const nextRecord: BattleRecord = {
     ...record,
     after: {
@@ -410,7 +433,7 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
     api_eSlot: fixedUnitValues(enemy, (unit) => fixedSlotIds(unit.slots), []),
     api_fParam: fixedUnitValues(record.mode === "combined" ? mainFriendly : friendly, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
     api_eParam: fixedUnitValues(enemy, (unit) => [unit.firepower, unit.torpedo, unit.aa, unit.armor], [0, 0, 0, 0]),
-    api_touch_plane: [-1, -1],
+    api_touch_plane: [nightEquipment.friendly.nightContactPlaneId, nightEquipment.enemy.nightContactPlaneId],
     api_flare_pos: [-1, -1],
     api_hougeki: hougeki,
     api_n_support_flag: 0,
@@ -531,6 +554,7 @@ function airBaseBattleUnit(baseId: number, slots: AirBaseBattleSlot[]): BattleUn
     hp: 1,
     hpFloor: 0,
     maxHp: 1,
+    baseFirepower: 0,
     firepower: 0,
     baseTorpedo: 0,
     torpedo: 0,
@@ -1029,11 +1053,54 @@ function countEquipTypes(unit: BattleUnit, typeIds: Set<number>) {
   return unit.equippedSlots.filter((slot) => typeIds.has(safeNum(slot.slotMaster.api_type?.[2]))).length;
 }
 
-function nightEquipmentState(units: BattleUnit[]): NightEquipmentState {
+function nightEquipmentState(units: BattleUnit[], rng: BattleRng, nightContactAllowedFlag: boolean): NightEquipmentState {
+  const contact = nightContactState(units, rng, nightContactAllowedFlag);
   return {
     searchlight: units.some((unit) => isOperable(unit) && countEquipTypes(unit, SEARCHLIGHT_TYPES) > 0),
-    starShell: units.some((unit) => isOperable(unit) && countEquipTypes(unit, STAR_SHELL_TYPES) > 0)
+    starShell: units.some((unit) => isOperable(unit) && countEquipTypes(unit, STAR_SHELL_TYPES) > 0),
+    nightContactBonus: contact.bonus,
+    nightContactPlaneId: contact.planeId
   };
+}
+
+function nightContactAllowed(record: BattleRecord) {
+  const airState = record.phases.kouku?.api_stage1.api_disp_seiku;
+  return airState == null || airState === 1 || airState === 2 || airState === 4;
+}
+
+function nightContactState(units: BattleUnit[], rng: BattleRng, allowed: boolean) {
+  if (!allowed) return { bonus: 0, planeId: -1 };
+  const candidates = units
+    .filter(isOperable)
+    .flatMap((unit) =>
+      unit.equippedSlots
+        .filter((slot) => slot.count > 0 && safeNum(slot.slotMaster.api_type?.[3]) === NIGHT_RECON_DETAIL_TYPE)
+        .map((slot) => ({ unit, slot }))
+    )
+    .sort((a, b) =>
+      nightContactBonusFor(b.slot.slotMaster) - nightContactBonusFor(a.slot.slotMaster) ||
+      safeNum(b.slot.slotMaster.api_saku) - safeNum(a.slot.slotMaster.api_saku) ||
+      b.slot.slotMaster.api_id - a.slot.slotMaster.api_id
+    );
+  for (const candidate of candidates) {
+    const los = Math.max(0, safeNum(candidate.slot.slotMaster.api_saku));
+    const level = Math.max(1, candidate.unit.level);
+    const chance = Math.min(0.95, Math.floor(Math.sqrt(los) * Math.sqrt(level)) * 0.04);
+    if (rng.chance(chance)) {
+      return {
+        bonus: nightContactBonusFor(candidate.slot.slotMaster),
+        planeId: candidate.slot.slotMaster.api_id
+      };
+    }
+  }
+  return { bonus: 0, planeId: -1 };
+}
+
+function nightContactBonusFor(slotMaster: (typeof masterData.api_mst_slotitem)[number]) {
+  const accuracy = safeNum(slotMaster.api_houm);
+  if (accuracy >= 3) return 9;
+  if (accuracy >= 2) return 7;
+  return 5;
 }
 
 function equipmentAsw(unit: BattleUnit, typeIds?: Set<number>) {
@@ -1067,7 +1134,8 @@ function shellingProfile(
   formation: number,
   phase: "day" | "night",
   engagement = 1,
-  daySpottingEligible = false
+  daySpottingEligible = false,
+  nightEquipment?: NightEquipmentState
 ): ShellingAttackProfile {
   if (phase === "day" && target.targetKind === "submarine" && canAswShell(attacker)) {
     return {
@@ -1083,6 +1151,10 @@ function shellingProfile(
 
   const slotIds = specialAttackSlotIds(attacker);
   if (phase === "night") {
+    const carrierNightProfile = carrierNightAirAttackProfile(attacker, nightEquipment);
+    if (carrierNightProfile) return carrierNightProfile;
+    const swordfishProfile = swordfishNightAttackProfile(attacker, nightEquipment);
+    if (swordfishProfile) return swordfishProfile;
     const torpedoes = countEquipTypes(attacker, TORPEDO_TYPES);
     const mainGuns = countEquipTypes(attacker, MAIN_GUN_TYPES);
     const secondaries = countEquipTypes(attacker, SECONDARY_GUN_TYPES);
@@ -1094,7 +1166,7 @@ function shellingProfile(
     });
     return {
       preCapPower: nightBattlePower({
-        firepower: attacker.firepower,
+        firepower: attacker.firepower + (nightEquipment?.nightContactBonus ?? 0),
         torpedo: attacker.torpedo,
         damageModifier: damageStateModifier(attacker)
       }),
@@ -1156,6 +1228,180 @@ function nightAttackSlotIds(unit: BattleUnit, spType: number, fallback: number[]
     return ids.length > 0 ? ids : fallback;
   }
   return fallback;
+}
+
+function carrierNightAirAttackProfile(attacker: BattleUnit, nightEquipment?: NightEquipmentState): ShellingAttackProfile | null {
+  if (!canCarrierNightAirAttack(attacker)) return null;
+  const aircraft = carrierNightAircraftSlots(attacker);
+  const cutIn = classifyCarrierNightCutIn(carrierNightCutInCounts(aircraft));
+  const normalSlotIds = carrierNightNormalSlotIds(attacker, aircraft);
+  const cutInSlotIds = cutIn ? carrierNightCutInSlotIds(aircraft, normalSlotIds) : normalSlotIds;
+  return {
+    preCapPower: carrierNightAirAttackPower({
+      baseFirepower: attacker.baseFirepower,
+      nightContactBonus: nightEquipment?.nightContactBonus ?? 0,
+      fitBonus: carrierNightFitBonus(attacker, aircraft),
+      damageModifier: damageStateModifier(attacker),
+      aircraft: aircraft.map((slot) => ({
+        count: slot.count,
+        firepower: safeNum(slot.slotMaster.api_houg),
+        torpedo: safeNum(slot.slotMaster.api_raig),
+        bombing: safeNum(slot.slotMaster.api_baku),
+        asw: safeNum(slot.slotMaster.api_tais),
+        improvement: slot.improvement,
+        modifierKind: isSpecialCarrierNightAircraftSlot(slot) && !isRegularCarrierNightAircraftSlot(slot) ? "special" : "night"
+      }))
+    }),
+    cap: 360,
+    atType: 0,
+    spType: cutIn?.spType ?? 0,
+    hits: cutIn?.hits ?? 1,
+    postCapModifier: cutIn?.modifier ?? 1,
+    slotIds: cutIn ? cutInSlotIds : normalSlotIds,
+    nightCarrierAttack: true,
+    fallbackSlotIds: normalSlotIds
+  };
+}
+
+function carrierNightCutInCounts(aircraft: EquippedSlot[]) {
+  const nightFighters = aircraft.filter(isNightFighterSlot).length;
+  const nightTorpedoBombers = aircraft.filter(isNightTorpedoBomberSlot).length;
+  const nightDiveBombers = aircraft.filter(isNightDiveBomberSlot).length;
+  return {
+    nightFighters,
+    nightTorpedoBombers,
+    nightDiveBombers,
+    otherNightAircraft: Math.max(0, aircraft.length - nightFighters - nightTorpedoBombers - nightDiveBombers)
+  };
+}
+
+function carrierNightNormalSlotIds(attacker: BattleUnit, aircraft: EquippedSlot[]) {
+  return [aircraft[0]?.slotMaster.api_id ?? primarySlotId(attacker)];
+}
+
+function carrierNightCutInSlotIds(aircraft: EquippedSlot[], fallback: number[]) {
+  const nightFighters = aircraft.filter(isNightFighterSlot);
+  const nightTorpedoBombers = aircraft.filter(isNightTorpedoBomberSlot);
+  const nightDiveBombers = aircraft.filter(isNightDiveBomberSlot);
+  if (nightFighters.length >= 2 && nightTorpedoBombers.length >= 1) {
+    return slotMasterIdsOrFallback([nightFighters[0], nightFighters[1], nightTorpedoBombers[0]], fallback);
+  }
+  if (nightFighters.length >= 1 && nightTorpedoBombers.length >= 1) {
+    return slotMasterIdsOrFallback([nightFighters[0], nightTorpedoBombers[0]], fallback);
+  }
+  if (nightDiveBombers.length >= 1 && aircraft.length >= 3) {
+    return slotMasterIdsOrFallback([nightDiveBombers[0], ...aircraft.filter((slot) => slot !== nightDiveBombers[0]).slice(0, 2)], fallback);
+  }
+  if (nightFighters.length >= 1 && aircraft.length >= 4) {
+    return slotMasterIdsOrFallback([nightFighters[0], ...aircraft.filter((slot) => slot !== nightFighters[0]).slice(0, 3)], fallback);
+  }
+  return fallback;
+}
+
+function slotMasterIdsOrFallback(slots: (EquippedSlot | undefined)[], fallback: number[]) {
+  const ids = slots
+    .map((slot) => slot?.slotMaster.api_id ?? -1)
+    .filter((id) => id > 0);
+  return ids.length > 0 ? ids : fallback;
+}
+
+function canCarrierNightAirAttack(unit: BattleUnit) {
+  if (!isCarrierNightAttackShip(unit) || !carrierNightDamageAllowed(unit)) return false;
+  if (carrierNightAircraftSlots(unit).length === 0) return false;
+  return CARRIER_NIGHT_AIR_ATTACK_NATIVE_SHIP_IDS.has(unit.masterId) ||
+    hasNightOperationPersonnel(unit);
+}
+
+function canStandardCarrierNightShelling(unit: BattleUnit) {
+  return STANDARD_CARRIER_NIGHT_SHELLING_SHIP_IDS.has(unit.masterId) && damageState(unit) < 2;
+}
+
+function isCarrierNightAttackShip(unit: BattleUnit) {
+  return CARRIER_TYPES.has(unit.shipType) || CARRIER_NIGHT_AIR_ATTACK_NATIVE_SHIP_IDS.has(unit.masterId);
+}
+
+function carrierNightDamageAllowed(unit: BattleUnit) {
+  const state = damageState(unit);
+  return unit.shipType === 18 ? state < 3 : state < 2;
+}
+
+function hasNightOperationPersonnel(unit: BattleUnit) {
+  return unit.equippedSlots.some((slot) => NIGHT_OPERATION_PERSONNEL_IDS.has(slot.slotMaster.api_id));
+}
+
+function canSwordfishNightAttack(unit: BattleUnit) {
+  return ARK_ROYAL_SHIP_IDS.has(unit.masterId) &&
+    damageState(unit) < 2 &&
+    unit.equippedSlots.some((slot) => slot.count > 0 && SWORDFISH_IDS.has(slot.slotMaster.api_id));
+}
+
+function swordfishNightAttackProfile(attacker: BattleUnit, nightEquipment?: NightEquipmentState): ShellingAttackProfile | null {
+  if (!canSwordfishNightAttack(attacker)) return null;
+  const swordfish = attacker.equippedSlots.find((slot) => slot.count > 0 && SWORDFISH_IDS.has(slot.slotMaster.api_id));
+  if (!swordfish) return null;
+  const torpedoes = countEquipTypes(attacker, TORPEDO_TYPES);
+  const mainGuns = countEquipTypes(attacker, MAIN_GUN_TYPES);
+  const secondaries = countEquipTypes(attacker, SECONDARY_GUN_TYPES);
+  const attack = classifyNightAttack({
+    mainGuns,
+    secondaryGuns: secondaries,
+    torpedoes,
+    nightAircraft: 0
+  });
+  const fallbackSlotIds = [swordfish.slotMaster.api_id];
+  return {
+    preCapPower: nightBattlePower({
+      firepower: attacker.baseFirepower +
+        safeNum(swordfish.slotMaster.api_houg) +
+        Math.sqrt(Math.max(0, swordfish.improvement)) +
+        (nightEquipment?.nightContactBonus ?? 0),
+      torpedo: safeNum(swordfish.slotMaster.api_raig),
+      damageModifier: damageStateModifier(attacker)
+    }),
+    cap: 360,
+    atType: 0,
+    spType: attack.spType,
+    hits: attack.hits,
+    postCapModifier: attack.modifier,
+    slotIds: nightAttackSlotIds(attacker, attack.spType, fallbackSlotIds),
+    nightCarrierAttack: true,
+    fallbackSlotIds
+  };
+}
+
+function carrierNightAircraftSlots(unit: BattleUnit) {
+  return unit.equippedSlots.filter((slot) => slot.count > 0 && isCarrierNightAircraftSlot(slot));
+}
+
+function isCarrierNightAircraftSlot(slot: EquippedSlot) {
+  return isRegularCarrierNightAircraftSlot(slot) || isSpecialCarrierNightAircraftSlot(slot);
+}
+
+function isRegularCarrierNightAircraftSlot(slot: EquippedSlot) {
+  const detailType = safeNum(slot.slotMaster.api_type?.[3]);
+  return detailType === NIGHT_FIGHTER_DETAIL_TYPE ||
+    detailType === NIGHT_TORPEDO_BOMBER_DETAIL_TYPE ||
+    detailType === NIGHT_DIVE_BOMBER_DETAIL_TYPE;
+}
+
+function isNightFighterSlot(slot: EquippedSlot) {
+  return safeNum(slot.slotMaster.api_type?.[3]) === NIGHT_FIGHTER_DETAIL_TYPE;
+}
+
+function isNightTorpedoBomberSlot(slot: EquippedSlot) {
+  return safeNum(slot.slotMaster.api_type?.[3]) === NIGHT_TORPEDO_BOMBER_DETAIL_TYPE;
+}
+
+function isNightDiveBomberSlot(slot: EquippedSlot) {
+  return safeNum(slot.slotMaster.api_type?.[3]) === NIGHT_DIVE_BOMBER_DETAIL_TYPE;
+}
+
+function isSpecialCarrierNightAircraftSlot(slot: EquippedSlot) {
+  return SPECIAL_CARRIER_NIGHT_AIRCRAFT_IDS.has(slot.slotMaster.api_id);
+}
+
+function carrierNightFitBonus(_attacker: BattleUnit, _aircraft: EquippedSlot[]) {
+  return 0;
 }
 
 function equippedSlotMasterIds(unit: BattleUnit, typeIds: Set<number>, limit: number) {
@@ -1295,14 +1541,15 @@ function shellingPhase(
   rng: BattleRng,
   phase: "day" | "night",
   engagement = 1,
-  dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL
+  dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL,
+  nightEquipment?: NightEquipmentPair
 ): HougekiPayload {
   const payload = emptyHougeki(phase === "night");
   if (phase === "night") {
     const friendlyByPosition = unitsByPosition(friendly);
     const enemyByPosition = unitsByPosition(enemy);
-    const friendlyNightEquipment = nightEquipmentState(friendly);
-    const enemyNightEquipment = nightEquipmentState(enemy);
+    const friendlyNightEquipment = nightEquipment?.friendly ?? nightEquipmentState(friendly, rng, true);
+    const enemyNightEquipment = nightEquipment?.enemy ?? nightEquipmentState(enemy, rng, true);
     for (let turn = 0; turn < 6; turn += 1) {
       const friendlyAttacker = friendlyByPosition[turn];
       const enemyAttacker = enemyByPosition[turn];
@@ -1342,7 +1589,7 @@ function appendShellingAttack(
   if (!target) return;
 
   const profile = activateShellingProfile(
-    shellingProfile(attacker, target, formation, phase, engagement, daySpottingEligible(attacker, phase, dayAirControl)),
+    shellingProfile(attacker, target, formation, phase, engagement, daySpottingEligible(attacker, phase, dayAirControl), nightEquipment),
     attacker,
     phase,
     rng,
@@ -1384,11 +1631,20 @@ function appendShellingAttack(
   payload.api_cl_list.push(cls);
   payload.api_damage.push(damages);
   if (payload.api_sp_list) payload.api_sp_list.push(profile.spType);
-  if (payload.api_n_mother_list) payload.api_n_mother_list.push(0);
+  if (payload.api_n_mother_list) payload.api_n_mother_list.push(profile.nightCarrierAttack ? 1 : 0);
 }
 
 function shellingTarget(attacker: BattleUnit, targets: BattleUnit[], phase: "day" | "night", rng: BattleRng) {
-  if (phase !== "day") return randomAlive(targets, rng);
+  if (phase !== "day") {
+    const living = targets.filter(isOperable);
+    if (living.length === 0) return undefined;
+    if (canCarrierNightAirAttack(attacker) || canSwordfishNightAttack(attacker)) {
+      const surfaceTargets = living.filter((unit) => unit.targetKind !== "submarine");
+      if (surfaceTargets.length > 0) return rng.pick(surfaceTargets);
+      return canStandardCarrierNightShelling(attacker) ? rng.pick(living) : undefined;
+    }
+    return rng.pick(living);
+  }
   const living = targets.filter(isOperable);
   if (living.length === 0) return undefined;
   const submarines = living.filter((unit) => unit.targetKind === "submarine");
@@ -1419,13 +1675,23 @@ function activateShellingProfile(
     searchlight: nightEquipment?.searchlight,
     starShell: nightEquipment?.starShell
   });
-  return rng.chance(chance) ? profile : normalNightShellingProfile(attacker);
+  if (rng.chance(chance)) return profile;
+  if (profile.nightCarrierAttack) {
+    return {
+      ...profile,
+      spType: 0,
+      hits: 1,
+      postCapModifier: 1,
+      slotIds: profile.fallbackSlotIds ?? profile.slotIds
+    };
+  }
+  return normalNightShellingProfile(attacker, nightEquipment);
 }
 
-function normalNightShellingProfile(attacker: BattleUnit): ShellingAttackProfile {
+function normalNightShellingProfile(attacker: BattleUnit, nightEquipment?: NightEquipmentState): ShellingAttackProfile {
   return {
     preCapPower: nightBattlePower({
-      firepower: attacker.firepower,
+      firepower: attacker.firepower + (nightEquipment?.nightContactBonus ?? 0),
       torpedo: attacker.torpedo,
       damageModifier: damageStateModifier(attacker)
     }),
@@ -1728,6 +1994,7 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     hp: ship.hp,
     hpFloor: 0,
     maxHp: ship.maxHp,
+    baseFirepower,
     firepower: baseFirepower + equipSum("api_houg"),
     baseTorpedo,
     torpedo: baseTorpedo + equipSum("api_raig"),
@@ -1913,6 +2180,7 @@ function enemyUnit(masterId: number, position: number): BattleUnit {
     hp: template.hp,
     hpFloor: 0,
     maxHp: template.hp,
+    baseFirepower: template.firepower,
     firepower: template.firepower,
     baseTorpedo: template.torpedo,
     torpedo: template.torpedo,
@@ -1999,6 +2267,7 @@ function practiceEnemyUnit(ship: PracticeRivalShip, position: number): BattleUni
     hp: maxHp,
     hpFloor: 1,
     maxHp,
+    baseFirepower: leveledStat(master?.api_houg, ship.level, 0),
     firepower: leveledStat(master?.api_houg, ship.level, 0) + equipSum("api_houg"),
     baseTorpedo: leveledStat(master?.api_raig, ship.level, 0),
     torpedo: leveledStat(master?.api_raig, ship.level, 0) + equipSum("api_raig"),
@@ -2058,6 +2327,7 @@ function recordUnitsFrom(record: BattleRecord, side: Side) {
         hp,
         hpFloor: 0,
         maxHp: record.before.fNowHps[index] || hp,
+        baseFirepower: statValue(master?.api_houg),
         firepower: statValue(master?.api_houg),
         baseTorpedo: statValue(master?.api_raig),
         torpedo: statValue(master?.api_raig),
@@ -2110,6 +2380,7 @@ function recordEscortUnitsFrom(record: BattleRecord): BattleUnit[] {
         hp,
         hpFloor: 0,
         maxHp: record.before.fCombinedNowHps?.[index] || hp,
+        baseFirepower: statValue(master?.api_houg),
         firepower: statValue(master?.api_houg),
         baseTorpedo: statValue(master?.api_raig),
         torpedo: statValue(master?.api_raig),
@@ -2155,6 +2426,7 @@ function snapshotUnits(units: BattleUnit[]): BattleUnitSnapshot[] {
     level: unit.level,
     hpFloor: unit.hpFloor,
     maxHp: unit.maxHp,
+    baseFirepower: unit.baseFirepower,
     firepower: unit.firepower,
     baseTorpedo: unit.baseTorpedo,
     torpedo: unit.torpedo,
@@ -2225,6 +2497,7 @@ function unitFromSnapshot(snapshot: BattleUnitSnapshot, hp: number): BattleUnit 
     hp,
     hpFloor: safeNum(snapshot.hpFloor, 0),
     maxHp: snapshot.maxHp,
+    baseFirepower: safeNum(snapshot.baseFirepower, snapshot.firepower),
     firepower: snapshot.firepower,
     baseTorpedo: safeNum(snapshot.baseTorpedo, snapshot.torpedo),
     torpedo: snapshot.torpedo,
@@ -2275,8 +2548,11 @@ function isEffectivelySunk(unit: BattleUnit) {
 
 function canShell(unit: BattleUnit, phase: "day" | "night") {
   if (!isOperable(unit)) return false;
+  if (phase === "night") {
+    if (!isCarrierNightAttackShip(unit)) return true;
+    return canCarrierNightAirAttack(unit) || canSwordfishNightAttack(unit) || canStandardCarrierNightShelling(unit);
+  }
   if (!CARRIER_TYPES.has(unit.shipType)) return true;
-  if (phase === "night") return false;
 
   const state = damageState(unit);
   if (unit.shipType === 18 ? state >= 3 : state >= 2) return false;

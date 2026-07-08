@@ -106,6 +106,7 @@ export type BattleUnit = {
   hp: number;
   hpFloor: number;
   maxHp: number;
+  baseFirepower: number;
   firepower: number;
   baseTorpedo: number;
   torpedo: number;
@@ -146,6 +147,7 @@ export type BattleUnitSnapshot = {
   level: number;
   hpFloor: number;
   maxHp: number;
+  baseFirepower: number;
   firepower: number;
   baseTorpedo: number;
   torpedo: number;
@@ -366,4 +368,6 @@ export type ShellingAttackProfile = {
   hits: number;
   postCapModifier: number;
   slotIds: number[];
+  nightCarrierAttack?: boolean;
+  fallbackSlotIds?: number[];
 };

@@ -42,6 +42,33 @@ export type NightAttackKind = {
   modifier: number;
 };
 
+export type CarrierNightAircraftModifierKind = "night" | "special";
+
+export type CarrierNightAircraftPowerSlot = {
+  count: number;
+  firepower: number;
+  torpedo: number;
+  bombing: number;
+  asw: number;
+  improvement?: number;
+  modifierKind: CarrierNightAircraftModifierKind;
+};
+
+export type CarrierNightAirAttackPowerInput = {
+  baseFirepower: number;
+  aircraft: CarrierNightAircraftPowerSlot[];
+  nightContactBonus?: number;
+  fitBonus?: number;
+  damageModifier?: number;
+};
+
+export type CarrierNightCutInInput = {
+  nightFighters: number;
+  nightTorpedoBombers: number;
+  nightDiveBombers: number;
+  otherNightAircraft: number;
+};
+
 export type NightCutInActivationInput = {
   luck: number;
   flagship: boolean;
@@ -205,6 +232,47 @@ export function classifyNightAttack(input: {
     return { spType: 1, hits: 2, modifier: 1.2 };
   }
   return { spType: 0, hits: 1, modifier: 1 };
+}
+
+export function carrierNightAirAttackPower(input: CarrierNightAirAttackPowerInput) {
+  const aircraft = input.aircraft.filter((slot) => Math.trunc(Number(slot.count) || 0) > 0);
+  const baseFirepower = Math.max(0, Number(input.baseFirepower) || 0);
+  const aircraftStats = aircraft.reduce(
+    (sum, slot) =>
+      sum +
+      Math.max(0, Number(slot.firepower) || 0) +
+      Math.max(0, Number(slot.torpedo) || 0) +
+      Math.max(0, Number(slot.bombing) || 0),
+    0
+  );
+  const nightContact = Math.max(0, Number(input.nightContactBonus ?? 0) || 0);
+  const fitBonus = Number(input.fitBonus ?? 0) || 0;
+  const aircraftModifier = aircraft.reduce((sum, slot) => {
+    const count = Math.max(0, Math.trunc(Number(slot.count) || 0));
+    const statSum =
+      Math.max(0, Number(slot.firepower) || 0) +
+      Math.max(0, Number(slot.torpedo) || 0) +
+      Math.max(0, Number(slot.bombing) || 0) +
+      Math.max(0, Number(slot.asw) || 0);
+    const improvement = Math.sqrt(Math.max(0, Number(slot.improvement ?? 0) || 0));
+    const [countFactor, statFactor] = slot.modifierKind === "night" ? [3, 0.45] : [0, 0.3];
+    return sum + countFactor * count + statFactor * statSum * Math.sqrt(count) + improvement;
+  }, 0);
+  return (baseFirepower + aircraftStats + nightContact + fitBonus + aircraftModifier) *
+    Math.max(0, Number(input.damageModifier ?? 1) || 0);
+}
+
+export function classifyCarrierNightCutIn(input: CarrierNightCutInInput): NightAttackKind | null {
+  const nightFighters = Math.max(0, Math.trunc(Number(input.nightFighters) || 0));
+  const nightTorpedoBombers = Math.max(0, Math.trunc(Number(input.nightTorpedoBombers) || 0));
+  const nightDiveBombers = Math.max(0, Math.trunc(Number(input.nightDiveBombers) || 0));
+  const otherNightAircraft = Math.max(0, Math.trunc(Number(input.otherNightAircraft) || 0));
+  const total = nightFighters + nightTorpedoBombers + nightDiveBombers + otherNightAircraft;
+  if (nightFighters >= 2 && nightTorpedoBombers >= 1) return { spType: 6, hits: 1, modifier: 1.25 };
+  if (nightFighters >= 1 && nightTorpedoBombers >= 1) return { spType: 6, hits: 1, modifier: 1.2 };
+  if (nightDiveBombers >= 1 && total >= 3) return { spType: 6, hits: 1, modifier: 1.2 };
+  if (nightFighters >= 1 && total >= 4) return { spType: 6, hits: 1, modifier: 1.18 };
+  return null;
 }
 
 export function nightCutInActivationChance(input: NightCutInActivationInput) {
