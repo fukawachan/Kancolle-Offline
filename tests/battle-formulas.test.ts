@@ -5,6 +5,9 @@ import {
   airState,
   canOpeningAswByStats,
   classifyNightAttack,
+  combinedAccuracyModifierFor,
+  combinedFormationModifierFor,
+  combinedPowerBonusFor,
   accuracyChance,
   criticalChance,
   damageStateModifierFor,
@@ -79,6 +82,80 @@ describe("battle formula helpers", () => {
       cutInModifier: 1.35,
       randomFactor: 0.5
     })).toBe(7);
+  });
+
+  it("applies combined fleet formation and power correction tables", () => {
+    expect(combinedFormationModifierFor(1, "shelling")).toBe(0.8);
+    expect(combinedFormationModifierFor(2, "torpedo")).toBe(0.9);
+    expect(combinedFormationModifierFor(3, "antiAir")).toBe(1.5);
+    expect(combinedFormationModifierFor(4, "asw")).toBe(0.7);
+
+    expect(combinedPowerBonusFor({
+      combinedType: 1,
+      attackerFleet: "main",
+      attackerSide: 0,
+      defenderCombined: false,
+      phase: "shelling"
+    })).toBe(2);
+    expect(combinedPowerBonusFor({
+      combinedType: 2,
+      attackerFleet: "main",
+      attackerSide: 0,
+      defenderCombined: false,
+      phase: "shelling"
+    })).toBe(10);
+    expect(combinedPowerBonusFor({
+      combinedType: 3,
+      attackerFleet: "main",
+      attackerSide: 0,
+      defenderCombined: true,
+      phase: "shelling"
+    })).toBe(-5);
+    expect(combinedPowerBonusFor({
+      combinedType: 1,
+      attackerFleet: "escort",
+      attackerSide: 0,
+      defenderCombined: false,
+      phase: "shelling"
+    })).toBe(10);
+    expect(combinedPowerBonusFor({
+      combinedType: 2,
+      attackerFleet: "escort",
+      attackerSide: 0,
+      defenderCombined: false,
+      phase: "shelling"
+    })).toBe(-5);
+    expect(combinedPowerBonusFor({
+      combinedType: 1,
+      attackerFleet: "escort",
+      attackerSide: 0,
+      defenderCombined: true,
+      phase: "torpedo"
+    })).toBe(10);
+  });
+
+  it("exposes documented combined fleet accuracy approximations", () => {
+    expect(combinedAccuracyModifierFor({
+      combinedType: 1,
+      attackerFleet: "escort",
+      phase: "shelling",
+      formation: 4,
+      defenderCombined: false
+    })).toBe(1.1);
+    expect(combinedAccuracyModifierFor({
+      combinedType: 2,
+      attackerFleet: "main",
+      phase: "shelling",
+      formation: 4,
+      defenderCombined: false
+    })).toBeCloseTo(0.76, 5);
+    expect(combinedAccuracyModifierFor({
+      combinedType: 3,
+      attackerFleet: "main",
+      phase: "shelling",
+      formation: 4,
+      defenderCombined: false
+    })).toBeCloseTo(0.65, 5);
   });
 
   it("calculates bounded hit and critical chances from combat stats", () => {

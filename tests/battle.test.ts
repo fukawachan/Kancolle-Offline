@@ -1583,6 +1583,39 @@ describe("sortie battle simulation", () => {
       expect(battle.payload.api_kouku?.api_stage3_combined?.api_edam).toHaveLength(6);
     });
 
+    it("normalizes unavailable combined formations when the escort has fewer than four ships", () => {
+      const escortA = store.createShip(119);
+      const escortB = store.createShip(1);
+      const escortC = store.createShip(2);
+      store.changeDeckShip(2, 0, escortA.id);
+      store.changeDeckShip(2, 1, escortB.id);
+      store.changeDeckShip(2, 2, escortC.id);
+      store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+
+      const battle = createCombinedBattle(store.getSave(), { formation: 3 });
+
+      expect(battle.record.formation[0]).toBe(1);
+      expect(battle.payload.api_formation[0]).toBe(1);
+    });
+
+    it("keeps escort aircraft out of combined air battle against normal enemy fleets", () => {
+      const mainAkagi = store.createShip(277);
+      const mainFighter = store.createSlotItem(20);
+      const escortFlagship = store.createShip(119);
+      const escortAkagi = store.createShip(277);
+      const escortFighter = store.createSlotItem(20);
+      store.equipSlotItem(mainAkagi.id, 0, mainFighter.id);
+      store.equipSlotItem(escortAkagi.id, 0, escortFighter.id);
+      store.changeDeckShip(1, 0, mainAkagi.id);
+      store.changeDeckShip(2, 0, escortFlagship.id);
+      store.changeDeckShip(2, 1, escortAkagi.id);
+      store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+
+      const battle = createCombinedBattle(store.getSave(), { formation: 1, endpoint: "combinedAir" });
+
+      expect(battle.payload.api_kouku?.api_plane_from[0]).toEqual([1]);
+    });
+
     it("acceptance: night torpedo cut-in keeps torpedo snapshots and two-hit damage", () => {
       const torpedoA = store.createSlotItem(13);
       const torpedoB = store.createSlotItem(14);

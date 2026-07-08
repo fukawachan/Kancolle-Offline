@@ -117,6 +117,15 @@ describe("local kcsapi endpoints", () => {
     expect(data.api_maxhps).toHaveLength(13);
   }
 
+  function expectFixedCombinedFleetArrays(data: any) {
+    for (const key of ["api_f_nowhps_combined", "api_f_maxhps_combined", "api_e_nowhps_combined", "api_e_maxhps_combined", "api_fParam_combined", "api_eParam_combined", "api_eSlot_combined"]) {
+      expect(data[key], key).toHaveLength(6);
+    }
+    expect(data.api_ship_ke_combined).toHaveLength(6);
+    expect(data.api_nowhps_combined).toHaveLength(13);
+    expect(data.api_maxhps_combined).toHaveLength(13);
+  }
+
   function isVictoryRank(rank: string) {
     return ["S", "A", "B"].includes(rank);
   }
@@ -2630,6 +2639,56 @@ describe("local kcsapi endpoints", () => {
     expect(equippableUnsetSlotIds.length).toBeGreaterThan(0);
   });
 
+  it("validates and persists combined fleet formation requests", async () => {
+    const carrier = store.createShip(277);
+    const lightCruiser = store.createShip(21);
+    const destroyerA = store.createShip(9);
+    const destroyerB = store.createShip(10);
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: carrier.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 1, api_ship_id: -1 });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: lightCruiser.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: destroyerA.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 2, api_ship_id: destroyerB.id });
+
+    const combined = await post("api_req_hensei/combined", { api_combined_type: 1 });
+    const port = await post("api_port/port");
+
+    expect(combined.json()).toMatchObject({ api_result: 1, api_data: { api_combined_flag: 1 } });
+    expect(port.json().api_data.api_combined_flag).toBe(1);
+  });
+
+  it("automatically disables combined fleet when organize changes make it invalid", async () => {
+    const carrier = store.createShip(277);
+    const lightCruiser = store.createShip(21);
+    const destroyerA = store.createShip(9);
+    const destroyerB = store.createShip(10);
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: carrier.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 1, api_ship_id: -1 });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: lightCruiser.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: destroyerA.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 2, api_ship_id: destroyerB.id });
+    await post("api_req_hensei/combined", { api_combined_type: 1 });
+
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 2, api_ship_id: -1 });
+    const port = await post("api_port/port");
+
+    expect(port.json().api_data.api_combined_flag).toBe(0);
+  });
+
+  it("keeps combined fleet disabled when requested composition is invalid", async () => {
+    const carrier = store.createShip(277);
+    const battleship = store.createShip(80);
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: carrier.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: battleship.id });
+
+    const combined = await post("api_req_hensei/combined", { api_combined_type: 1 });
+    const port = await post("api_port/port");
+
+    expect(combined.statusCode).toBe(200);
+    expect(combined.json()).toMatchObject({ api_result: 1, api_data: { api_combined_flag: 0 } });
+    expect(port.json().api_data.api_combined_flag).toBe(0);
+  });
+
   it("keeps deck membership unique and fixed-width when changing organize slots", async () => {
     const extraShip = store.createShip(7);
 
@@ -3823,6 +3882,68 @@ describe("local kcsapi endpoints", () => {
     }
     expect(after.ships.find((ship) => ship.id === escort1.id)?.exp).toBeGreaterThan(0);
     expect(after.ships.find((ship) => ship.id === escort2.id)?.exp).toBeGreaterThan(0);
+  });
+
+  it("keeps every combined battle endpoint contract stable", async () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    const bomber = store.createSlotItem(23);
+    const escort1 = store.createShip(7);
+    const escort2 = store.createShip(11);
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter.id });
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: bomber.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: akagi.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 0, api_ship_id: escort1.id });
+    await post("api_req_hensei/change", { api_id: 2, api_ship_idx: 1, api_ship_id: escort2.id });
+    await post("api_req_hensei/combined", { api_combined_type: 1 });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    for (const pathname of [
+      "api_req_combined_battle/battle",
+      "api_req_combined_battle/battle_water",
+      "api_req_combined_battle/each_battle",
+      "api_req_combined_battle/each_battle_water",
+      "api_req_combined_battle/airbattle",
+      "api_req_combined_battle/ld_airbattle",
+      "api_req_combined_battle/ld_shooting",
+      "api_req_combined_battle/ec_battle",
+      "api_req_combined_battle/ec_night_to_day"
+    ]) {
+      const response = await post(pathname, { api_formation: 1 });
+      expect(response.statusCode, pathname).not.toBe(500);
+      const body = response.json();
+      expect(body.api_result, pathname).toBe(1);
+      expectBattlePhasePlaceholders(body.api_data);
+      expectFixedFleetArrays(body.api_data);
+      expectFixedCombinedFleetArrays(body.api_data);
+    }
+
+    await post("api_req_combined_battle/battle", { api_formation: 1 });
+    for (const pathname of [
+      "api_req_combined_battle/midnight_battle",
+      "api_req_combined_battle/sp_midnight",
+      "api_req_combined_battle/ec_midnight_battle"
+    ]) {
+      const response = await post(pathname);
+      expect(response.statusCode, pathname).not.toBe(500);
+      const data = response.json().api_data;
+      expect(data.api_hougeki).toMatchObject({
+        api_at_list: expect.any(Array),
+        api_damage: expect.any(Array)
+      });
+      expectFixedCombinedFleetArrays(data);
+    }
+
+    const result = await post("api_req_combined_battle/battleresult");
+    expect(result.statusCode).not.toBe(500);
+    expect(result.json().api_data).toMatchObject({
+      api_get_ship_exp_combined: expect.any(Array),
+      api_get_exp_lvup_combined: expect.any(Array)
+    });
+    const goback = await post("api_req_combined_battle/goback_port");
+    expect(goback.statusCode).not.toBe(500);
+    expect(goback.json().api_result).toBe(1);
   });
 
   it("has non-unknown local handlers for the planned API surface", async () => {

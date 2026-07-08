@@ -97,6 +97,7 @@ export type EquippedSlot = {
 };
 
 export type BattleUnit = {
+  fleetKind?: BattleFleetKind;
   side: Side;
   position: number;
   apiIndex: number;
@@ -140,6 +141,7 @@ export type BattleUnitSlotSnapshot = {
 };
 
 export type BattleUnitSnapshot = {
+  fleetKind?: BattleFleetKind;
   side: Side;
   position: number;
   shipId: number;
@@ -256,6 +258,7 @@ export type AirBaseAircraftLossRecord = {
 export type BattleRecord = {
   endpoint: BattleEndpointKind;
   mode: BattleMode;
+  combinedType?: number;
   deckId: number;
   escortDeckId?: number;
   practiceEnemyId?: number;

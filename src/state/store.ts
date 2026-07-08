@@ -44,6 +44,7 @@ import {
   proficiencyExpForVisible,
   visibleProficiency
 } from "../kcsapi/aircraft-proficiency.js";
+import { validateCombinedFleet } from "../kcsapi/combined-fleet.js";
 import {
   MARRIED_SHIP_LEVEL_CAP,
   SHIP_LEVEL_CAP,
@@ -368,8 +369,16 @@ export function createStateStore(options: StateStoreOptions) {
       return position;
     },
     setCombinedFleet: (enabled: number) => {
-      db.prepare("UPDATE players SET combined_fleet = ? WHERE id = 1").run(enabled);
-      return enabled;
+      const requested = Math.trunc(Number(enabled) || 0);
+      if (requested === 0) {
+        db.prepare("UPDATE players SET combined_fleet = 0 WHERE id = 1").run();
+        return 0;
+      }
+      const current = getSave(db).player.combinedFleet;
+      const validation = validateCombinedFleet(getSave(db), requested);
+      if (!validation.ok) return current;
+      db.prepare("UPDATE players SET combined_fleet = ? WHERE id = 1").run(validation.combinedFleet);
+      return validation.combinedFleet;
     },
     setPortBgm: (bgmId: number) => {
       db.prepare("UPDATE players SET port_bgm_id = ? WHERE id = 1").run(bgmId);
@@ -433,6 +442,7 @@ export function createStateStore(options: StateStoreOptions) {
           db.prepare("UPDATE players SET flagship_position = ? WHERE id = 1").run(nextPosition);
         }
       }
+      revalidateCombinedFleet(db);
       return getSave(db).decks.find((item) => item.id === deckId);
     },
     clearDeckFollowerShips: (deckId: number) => {
@@ -450,6 +460,7 @@ export function createStateStore(options: StateStoreOptions) {
         }
       });
       tx();
+      revalidateCombinedFleet(db);
       return getSave(db).decks.find((item) => item.id === deckId);
     },
     registerPresetDeck: (deckId: number, presetNo: number, name: string) =>
@@ -458,8 +469,11 @@ export function createStateStore(options: StateStoreOptions) {
     togglePresetDeckLock: (presetNo: number) => togglePresetDeckLock(db, presetNo),
     expandPresetDecks: (): PresetDeckExpandResult => expandPresetDecks(db),
     swapPresetDecks: (fromPresetNo: number, toPresetNo: number) => swapPresetDecks(db, fromPresetNo, toPresetNo),
-    selectPresetDeck: (presetNo: number, deckId: number): PresetDeckSelectResult =>
-      selectPresetDeck(db, presetNo, deckId),
+    selectPresetDeck: (presetNo: number, deckId: number): PresetDeckSelectResult => {
+      const result = selectPresetDeck(db, presetNo, deckId);
+      if (result.ok) revalidateCombinedFleet(db);
+      return result;
+    },
     toggleShipLock: (shipId: number, explicit?: number) => {
       const ship = getSave(db).ships.find((item) => item.id === shipId);
       if (!ship) return null;
@@ -2133,6 +2147,16 @@ function enemySinkLabels(record: BattleRecord) {
     if (safeNum(before[index]) > 0 && safeNum(after[index]) <= 0) labels.push("敵艦");
   }
   return labels;
+}
+
+function revalidateCombinedFleet(db: Database.Database) {
+  const save = getSave(db);
+  const current = Math.trunc(Number(save.player.combinedFleet) || 0);
+  if (current <= 0) return;
+  const validation = validateCombinedFleet(save, current);
+  if (!validation.ok) {
+    db.prepare("UPDATE players SET combined_fleet = 0 WHERE id = 1").run();
+  }
 }
 
 function applyMapProgress(db: Database.Database, record: BattleRecord) {

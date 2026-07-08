@@ -19,6 +19,27 @@ export type FighterPowerSlot = {
 };
 
 export type BattleFormulaPhase = "shelling" | "torpedo" | "antiAir" | "night";
+export type CombinedFormulaPhase = "shelling" | "torpedo" | "antiAir" | "asw" | "air";
+export type CombinedPowerPhase = "shelling" | "torpedo" | "air";
+export type CombinedFormulaFleetKind = "main" | "escort" | "enemyMain" | "enemyEscort";
+export type CombinedFormulaFleetType = 1 | 2 | 3;
+
+export type CombinedPowerBonusInput = {
+  combinedType: CombinedFormulaFleetType;
+  attackerFleet: CombinedFormulaFleetKind;
+  attackerSide: 0 | 1;
+  defenderCombined: boolean;
+  phase: CombinedPowerPhase;
+  targetFleet?: CombinedFormulaFleetKind;
+};
+
+export type CombinedAccuracyModifierInput = {
+  combinedType: CombinedFormulaFleetType;
+  attackerFleet: CombinedFormulaFleetKind;
+  phase: "shelling" | "torpedo" | "air" | "asw" | "night";
+  formation: number;
+  defenderCombined: boolean;
+};
 
 export type AntiAirStage2Input = {
   slotCount: number;
@@ -196,6 +217,36 @@ export function formationModifierFor(formation: number, phase: BattleFormulaPhas
   return table[Math.trunc(formation)] ?? 1;
 }
 
+export function combinedFormationModifierFor(formation: number, phase: CombinedFormulaPhase) {
+  const shelling: Record<number, number> = { 1: 0.8, 2: 1, 3: 0.7, 4: 1.1 };
+  const torpedo: Record<number, number> = { 1: 0.7, 2: 0.9, 3: 0.6, 4: 1 };
+  const asw: Record<number, number> = { 1: 1.3, 2: 1.1, 3: 1, 4: 0.7 };
+  const antiAir: Record<number, number> = { 1: 1.1, 2: 1, 3: 1.5, 4: 1 };
+  const air: Record<number, number> = { 1: 1, 2: 1, 3: 1, 4: 1 };
+  const table =
+    phase === "shelling" ? shelling :
+      phase === "torpedo" ? torpedo :
+        phase === "asw" ? asw :
+          phase === "antiAir" ? antiAir : air;
+  return table[Math.trunc(formation)] ?? 1;
+}
+
+export function combinedPowerBonusFor(input: CombinedPowerBonusInput) {
+  if (input.phase === "air") return combinedAirPowerBonusFor(input);
+  if (input.phase === "torpedo") return combinedTorpedoPowerBonusFor(input);
+  return combinedShellingPowerBonusFor(input);
+}
+
+export function combinedAccuracyModifierFor(input: CombinedAccuracyModifierInput) {
+  if (input.phase !== "shelling" || input.defenderCombined) return 1;
+  const formation = Math.trunc(Number(input.formation) || 0);
+  if (formation !== 4) return 1;
+  if (input.combinedType === 1 && input.attackerFleet === "escort") return 1.1;
+  if (input.combinedType === 2 && input.attackerFleet === "main") return 0.76;
+  if (input.combinedType === 3 && input.attackerFleet === "main") return 0.65;
+  return 1;
+}
+
 export function engagementModifierFor(engagement: number) {
   const table: Record<number, number> = {
     1: 1,
@@ -358,6 +409,43 @@ export function resolveBattleDamage(input: BattleDamageInput) {
   if (targetHp <= 1) return 0;
   const scratch = Math.floor(targetHp * 0.06);
   return Math.max(1, Math.min(targetHp - 1, scratch));
+}
+
+function combinedShellingPowerBonusFor(input: CombinedPowerBonusInput) {
+  const combinedType = input.combinedType;
+  if (input.attackerSide === 0) {
+    if (input.defenderCombined) {
+      const main: Record<CombinedFormulaFleetType, number> = { 1: 2, 2: 2, 3: -5 };
+      const escort: Record<CombinedFormulaFleetType, number> = { 1: -5, 2: -5, 3: -5 };
+      return input.attackerFleet === "escort" ? escort[combinedType] : main[combinedType];
+    }
+    const main: Record<CombinedFormulaFleetType, number> = { 1: 2, 2: 10, 3: -5 };
+    const escort: Record<CombinedFormulaFleetType, number> = { 1: 10, 2: -5, 3: 10 };
+    return input.attackerFleet === "escort" ? escort[combinedType] : main[combinedType];
+  }
+
+  if (input.defenderCombined) {
+    return input.attackerFleet === "enemyEscort" ? -5 : 10;
+  }
+
+  const targetFleet = input.targetFleet ?? "main";
+  if (targetFleet === "escort") {
+    const enemyVsEscort: Record<CombinedFormulaFleetType, number> = { 1: 5, 2: -5, 3: 5 };
+    return enemyVsEscort[combinedType];
+  }
+  const enemyVsMain: Record<CombinedFormulaFleetType, number> = { 1: 10, 2: 5, 3: 10 };
+  return enemyVsMain[combinedType];
+}
+
+function combinedTorpedoPowerBonusFor(input: CombinedPowerBonusInput) {
+  if (input.defenderCombined) return input.attackerSide === 0 ? 10 : 5;
+  return input.attackerSide === 0 ? -5 : 10;
+}
+
+function combinedAirPowerBonusFor(input: CombinedPowerBonusInput) {
+  if (!input.defenderCombined || input.attackerSide !== 0) return 0;
+  const targetFleet = input.targetFleet ?? "enemyMain";
+  return targetFleet === "enemyEscort" ? -20 : -10;
 }
 
 function clampProbability(value: number, min: number, max: number) {
