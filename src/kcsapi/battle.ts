@@ -122,6 +122,16 @@ type NightEquipmentState = {
   starShell: boolean;
 };
 
+type DayShellingAirControl = {
+  friendlySpotting: boolean;
+  enemySpotting: boolean;
+};
+
+const NO_DAY_SHELLING_AIR_CONTROL: DayShellingAirControl = {
+  friendlySpotting: false,
+  enemySpotting: false
+};
+
 export function resolveDamage(input: DamageInput) {
   const targetHp = Math.max(0, Math.trunc(input.targetHp ?? Number.MAX_SAFE_INTEGER));
   const defense = input.armor * 0.7 + input.armorRoll * 0.6;
@@ -150,11 +160,12 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const airBase = hasBattlePhase(phaseSet, "airBase") ? airBaseAttackPhase(save, enemy, rng) : { payload: null, losses: [] };
   const airBaseAttack = airBase.payload;
   const kouku = hasBattlePhase(phaseSet, "kouku") ? airPhase(friendly, enemy, formation[0], rng) : null;
+  const dayAirControl = dayShellingAirControl(kouku);
   const openingTaisen = hasBattlePhase(phaseSet, "openingTaisen") ? openingAswPhase(friendly, enemy, formation[0], rng) : null;
   const openingAtack = hasBattlePhase(phaseSet, "openingAtack") ? openingTorpedoPhase(friendly, enemy, formation[0], rng) : null;
-  const hougeki1 = hasBattlePhase(phaseSet, "hougeki1") ? shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2]) : emptyHougeki(false);
+  const hougeki1 = hasBattlePhase(phaseSet, "hougeki1") ? shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2], dayAirControl) : emptyHougeki(false);
   const hougeki2 = hasBattlePhase(phaseSet, "hougeki2") && hasSecondShellingRound(friendly, enemy)
-    ? shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2])
+    ? shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2], dayAirControl)
     : null;
   const raigeki = hasBattlePhase(phaseSet, "raigeki") ? torpedoPhase(friendly, enemy, formation[0], rng) : null;
 
@@ -213,10 +224,11 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
   const beforeE = fixedHp(enemy);
 
   const kouku = airPhase(friendly, enemy, formation[0], rng);
+  const dayAirControl = dayShellingAirControl(kouku);
   const openingTaisen = openingAswPhase(friendly, enemy, formation[0], rng);
   const openingAtack = openingTorpedoPhase(friendly, enemy, formation[0], rng);
-  const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2]);
-  const hougeki2 = hasSecondShellingRound(friendly, enemy) ? shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2]) : null;
+  const hougeki1 = shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2], dayAirControl);
+  const hougeki2 = hasSecondShellingRound(friendly, enemy) ? shellingPhase(friendly, enemy, formation[0], rng, "day", formation[2], dayAirControl) : null;
   const raigeki = torpedoPhase(friendly, enemy, formation[0], rng);
   const afterF = fixedHp(friendly);
   const afterE = fixedHp(enemy);
@@ -290,10 +302,11 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const airBase = hasBattlePhase(phaseSet, "airBase") ? airBaseAttackPhase(save, enemy, rng) : { payload: null, losses: [] };
   const airBaseAttack = airBase.payload;
   const kouku = hasBattlePhase(phaseSet, "kouku") ? airPhase([...friendly, ...escort], enemy, formation[0], rng) : null;
+  const dayAirControl = dayShellingAirControl(kouku);
   const openingTaisen = hasBattlePhase(phaseSet, "openingTaisen") ? openingAswPhase(escort, escortTargets, formation[0], rng) : null;
   const openingAtack = hasBattlePhase(phaseSet, "openingAtack") ? openingTorpedoPhase(escort, escortTargets, formation[0], rng) : null;
   const shelling = hasBattlePhase(phaseSet, "hougeki1")
-    ? combinedShellingPhases(save.player.combinedFleet, friendly, escort, enemy, formation[0], rng, formation[2], escortTargets, phaseSet)
+    ? combinedShellingPhases(save.player.combinedFleet, friendly, escort, enemy, formation[0], rng, formation[2], escortTargets, phaseSet, dayAirControl)
     : { hougeki1: emptyHougeki(false), hougeki2: null, hougeki3: null };
   const raigeki = hasBattlePhase(phaseSet, "raigeki") ? torpedoPhase(escort, escortTargets, formation[0], rng) : null;
   const afterF = fixedHp(friendly);
@@ -770,6 +783,23 @@ function airPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number
   };
 }
 
+function dayShellingAirControl(kouku: KoukuPayload | null): DayShellingAirControl {
+  const airState = kouku?.api_stage1.api_disp_seiku ?? 0;
+  return {
+    friendlySpotting: airState === 1 || airState === 2,
+    enemySpotting: airState === 4 || airState === 5
+  };
+}
+
+function daySpottingEligible(
+  attacker: BattleUnit,
+  phase: "day" | "night",
+  airControl: DayShellingAirControl
+) {
+  if (phase !== "day") return false;
+  return attacker.side === 0 ? airControl.friendlySpotting : airControl.enemySpotting;
+}
+
 function activeAirSlots(units: BattleUnit[]) {
   return units
     .filter(isOperable)
@@ -1027,7 +1057,14 @@ export function emptyKoukuStage3Payload(length = 6): KoukuStage3Payload {
   };
 }
 
-function shellingProfile(attacker: BattleUnit, target: BattleUnit, formation: number, phase: "day" | "night", engagement = 1): ShellingAttackProfile {
+function shellingProfile(
+  attacker: BattleUnit,
+  target: BattleUnit,
+  formation: number,
+  phase: "day" | "night",
+  engagement = 1,
+  daySpottingEligible = false
+): ShellingAttackProfile {
   if (phase === "day" && target.targetKind === "submarine" && canAswShell(attacker)) {
     return {
       preCapPower: aswAttackPower(attacker) * formationModifier(formation, "shelling") * engagementModifierFor(engagement) * damageStateModifier(attacker),
@@ -1070,16 +1107,18 @@ function shellingProfile(attacker: BattleUnit, target: BattleUnit, formation: nu
   const seaplane = countEquipTypes(attacker, SEAPLANE_TYPES) > 0;
   const mainGunCount = countEquipTypes(attacker, MAIN_GUN_TYPES);
   const mainGun = mainGunCount > 0;
-  const doubleAttack = !apShell && seaplane && mainGunCount >= 2;
+  const spotting = daySpottingEligible && seaplane;
+  const apCutIn = spotting && apShell && mainGun;
+  const doubleAttack = spotting && !apShell && mainGunCount >= 2;
   const isCarrierShelling = CARRIER_TYPES.has(attacker.shipType) && attacker.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId));
   const base = isCarrierShelling
     ? 55 + Math.floor(1.5 * (attacker.firepower + airstrikeStatSum(attacker)))
     : attacker.firepower + 5;
-  const postCapModifier = apShell && mainGun ? 1.3 : doubleAttack ? 1.2 : 1;
+  const postCapModifier = apCutIn ? 1.3 : doubleAttack ? 1.2 : 1;
   return {
     preCapPower: base * formationModifier(formation, "shelling") * engagementModifierFor(engagement) * damageStateModifier(attacker),
     cap: 220,
-    atType: apShell && mainGun ? 3 : doubleAttack ? 2 : 0,
+    atType: apCutIn ? 3 : doubleAttack ? 2 : 0,
     spType: 0,
     hits: doubleAttack ? 2 : 1,
     postCapModifier,
@@ -1216,27 +1255,28 @@ function combinedShellingPhases(
   rng: BattleRng,
   engagement = 1,
   escortTargets: BattleUnit[] = enemy,
-  phaseSet: Set<string> = new Set(["hougeki1", "hougeki2", "hougeki3"])
+  phaseSet: Set<string> = new Set(["hougeki1", "hougeki2", "hougeki3"]),
+  dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL
 ) {
   const hasSecondRound = hasSecondShellingRound([...main, ...escort], enemy);
   if (combinedType === 2) {
     return {
-      hougeki1: shellingPhase(main, enemy, formation, rng, "day", engagement),
-      hougeki2: hasBattlePhase(phaseSet, "hougeki2") ? shellingPhase(escort, escortTargets, formation, rng, "day", engagement) : null,
-      hougeki3: hasBattlePhase(phaseSet, "hougeki3") && hasSecondRound ? shellingPhase(main, enemy, formation, rng, "day", engagement) : null
+      hougeki1: shellingPhase(main, enemy, formation, rng, "day", engagement, dayAirControl),
+      hougeki2: hasBattlePhase(phaseSet, "hougeki2") ? shellingPhase(escort, escortTargets, formation, rng, "day", engagement, dayAirControl) : null,
+      hougeki3: hasBattlePhase(phaseSet, "hougeki3") && hasSecondRound ? shellingPhase(main, enemy, formation, rng, "day", engagement, dayAirControl) : null
     };
   }
   if (combinedType === 3) {
     return {
-      hougeki1: shellingPhase(escort, escortTargets, formation, rng, "day", engagement),
-      hougeki2: hasBattlePhase(phaseSet, "hougeki2") ? shellingPhase(main, enemy, formation, rng, "day", engagement) : null,
-      hougeki3: hasBattlePhase(phaseSet, "hougeki3") && hasSecondRound ? shellingPhase(escort, enemy, formation, rng, "day", engagement) : null
+      hougeki1: shellingPhase(escort, escortTargets, formation, rng, "day", engagement, dayAirControl),
+      hougeki2: hasBattlePhase(phaseSet, "hougeki2") ? shellingPhase(main, enemy, formation, rng, "day", engagement, dayAirControl) : null,
+      hougeki3: hasBattlePhase(phaseSet, "hougeki3") && hasSecondRound ? shellingPhase(escort, enemy, formation, rng, "day", engagement, dayAirControl) : null
     };
   }
   return {
-    hougeki1: shellingPhase(escort, escortTargets, formation, rng, "day", engagement),
-    hougeki2: hasBattlePhase(phaseSet, "hougeki2") ? shellingPhase(main, enemy, formation, rng, "day", engagement) : null,
-    hougeki3: hasBattlePhase(phaseSet, "hougeki3") && hasSecondRound ? shellingPhase(main, enemy, formation, rng, "day", engagement) : null
+    hougeki1: shellingPhase(escort, escortTargets, formation, rng, "day", engagement, dayAirControl),
+    hougeki2: hasBattlePhase(phaseSet, "hougeki2") ? shellingPhase(main, enemy, formation, rng, "day", engagement, dayAirControl) : null,
+    hougeki3: hasBattlePhase(phaseSet, "hougeki3") && hasSecondRound ? shellingPhase(main, enemy, formation, rng, "day", engagement, dayAirControl) : null
   };
 }
 
@@ -1244,7 +1284,15 @@ function hasSecondShellingRound(friendly: BattleUnit[], enemy: BattleUnit[]) {
   return [...friendly, ...enemy].some((unit) => isOperable(unit) && BATTLESHIP_TYPES.has(unit.shipType));
 }
 
-function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: number, rng: BattleRng, phase: "day" | "night", engagement = 1): HougekiPayload {
+function shellingPhase(
+  friendly: BattleUnit[],
+  enemy: BattleUnit[],
+  formation: number,
+  rng: BattleRng,
+  phase: "day" | "night",
+  engagement = 1,
+  dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL
+): HougekiPayload {
   const payload = emptyHougeki(phase === "night");
   if (phase === "night") {
     const friendlyByPosition = unitsByPosition(friendly);
@@ -1264,8 +1312,8 @@ function shellingPhase(friendly: BattleUnit[], enemy: BattleUnit[], formation: n
   const enemyOrder = attackOrder(enemy);
   const turns = Math.max(friendlyOrder.length, enemyOrder.length);
   for (let turn = 0; turn < turns; turn += 1) {
-    if (friendlyOrder[turn]) appendShellingAttack(payload, friendlyOrder[turn], enemy, formation, rng, phase, engagement);
-    if (enemyOrder[turn]) appendShellingAttack(payload, enemyOrder[turn], friendly, 1, rng, phase, engagement);
+    if (friendlyOrder[turn]) appendShellingAttack(payload, friendlyOrder[turn], enemy, formation, rng, phase, engagement, undefined, dayAirControl);
+    if (enemyOrder[turn]) appendShellingAttack(payload, enemyOrder[turn], friendly, 1, rng, phase, engagement, undefined, dayAirControl);
   }
   return payload;
 }
@@ -1282,13 +1330,20 @@ function appendShellingAttack(
   rng: BattleRng,
   phase: "day" | "night",
   engagement = 1,
-  nightEquipment?: NightEquipmentState
+  nightEquipment?: NightEquipmentState,
+  dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL
 ) {
   if (!canShell(attacker, phase)) return;
   const target = shellingTarget(attacker, targets, phase, rng);
   if (!target) return;
 
-  const profile = activateShellingProfile(shellingProfile(attacker, target, formation, phase, engagement), attacker, phase, rng, nightEquipment);
+  const profile = activateShellingProfile(
+    shellingProfile(attacker, target, formation, phase, engagement, daySpottingEligible(attacker, phase, dayAirControl)),
+    attacker,
+    phase,
+    rng,
+    nightEquipment
+  );
   if (profile.preCapPower <= 0 || profile.hits <= 0) return;
   const damages: number[] = [];
   const cls: number[] = [];
@@ -1530,7 +1585,7 @@ function battleResult(
   const mvp = [...friendly].sort((a, b) => b.damageDealt - a.damageDealt || a.position - b.position)[0]?.position ?? 1;
   const baseExp = mode === "practice" && practice
     ? practiceBaseShipExp(practice.enemyShipLevels, rank, practiceSeededBonus(practice.seed))
-    : rank === "S" ? 40 : rank === "A" ? 35 : rank === "B" ? 30 : 20;
+    : sortie?.baseExp ?? legacySortieBaseExp(rank);
   const memberExp = mode === "practice" && practice
     ? practiceMemberExp(practice.playerLevel, practice.enemyLevel, rank)
     : baseExp * 2;
@@ -1551,6 +1606,10 @@ function battleResult(
     dropShipName: drop?.shipName ?? "",
     dropShipType: drop?.shipType ?? ""
   };
+}
+
+function legacySortieBaseExp(rank: BattleResultRecord["rank"]) {
+  return rank === "S" ? 40 : rank === "A" ? 35 : rank === "B" ? 30 : 20;
 }
 
 function practiceBattleRank(friendly: BattleUnit[], enemy: BattleUnit[]): BattleResultRecord["rank"] {
@@ -1619,7 +1678,13 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
   const equipSum = (field: keyof (typeof masterData.api_mst_slotitem)[number]) =>
     slotMasters.reduce((sum, item) => sum + safeNum(item[field]), 0);
   const slots = slotMasters.map((item) => item.api_id);
-  const baseAsw = shipBaseAsw(master, ship.level);
+  const modernization = shipModernization(ship);
+  const baseFirepower = statValue(master?.api_houg) + modernization[0];
+  const baseTorpedo = statValue(master?.api_raig) + modernization[1];
+  const baseAa = statValue(master?.api_tyku) + modernization[2];
+  const baseArmor = statValue(master?.api_souk) + modernization[3];
+  const baseLuck = statValue(master?.api_luck) + modernization[4] + ship.marriageLuckBonus;
+  const baseAsw = shipBaseAsw(master, ship.level) + modernization[6];
   const asw = baseAsw + equipSum("api_tais");
   const airSlots = equippedSlots
     .filter((item) => item.count > 0 && isAircraftSlotItem(item.slotMaster))
@@ -1653,16 +1718,16 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
     hp: ship.hp,
     hpFloor: 0,
     maxHp: ship.maxHp,
-    firepower: statValue(master?.api_houg) + equipSum("api_houg"),
-    baseTorpedo: statValue(master?.api_raig),
-    torpedo: statValue(master?.api_raig) + equipSum("api_raig"),
-    aa: statValue(master?.api_tyku) + equipSum("api_tyku"),
+    firepower: baseFirepower + equipSum("api_houg"),
+    baseTorpedo,
+    torpedo: baseTorpedo + equipSum("api_raig"),
+    aa: baseAa + equipSum("api_tyku"),
     baseAsw,
     asw,
-    armor: statValue(master?.api_souk) + equipSum("api_souk"),
-    luck: statValue(master?.api_luck) + equipSum("api_luck"),
+    armor: baseArmor + equipSum("api_souk"),
+    luck: baseLuck + equipSum("api_luck"),
     accuracy: equipSum("api_houm"),
-    evasion: shipEvasion(master, ship.level) + equipSum("api_houk"),
+    evasion: shipDisplayEvasion(ship, equipSum("api_houk")),
     range: Math.max(safeNum(master?.api_leng, 1), ...slotMasters.map((item) => safeNum(item.api_leng, 0))),
     ammoModifier: ammoModifier(ship.ammo, ship.maxAmmo),
     shipType: safeNum(master?.api_stype, 2),
@@ -2329,6 +2394,10 @@ function shipEvasion(master: (typeof masterData.api_mst_ship)[number] | undefine
   return leveledStat((master as { api_kaih?: unknown } | undefined)?.api_kaih, level, 0);
 }
 
+function shipDisplayEvasion(ship: Ship, equipmentEvasion: number) {
+  return ship.level + equipmentEvasion;
+}
+
 function shipBaseAsw(master: (typeof masterData.api_mst_ship)[number] | undefined, level: number) {
   const explicit = statValue((master as { api_tais?: unknown } | undefined)?.api_tais, -1);
   if (explicit >= 0) return explicit;
@@ -2338,6 +2407,12 @@ function shipBaseAsw(master: (typeof masterData.api_mst_ship)[number] | undefine
   if ([2, 3, 4, 21, 22].includes(shipType)) return normalizedLevel;
   if ([7, 10, 16, 17].includes(shipType)) return Math.floor(normalizedLevel / 2);
   return 0;
+}
+
+function shipModernization(ship: Ship) {
+  const stats = ship.stats as Record<string, unknown> | undefined;
+  const kyouka = Array.isArray(stats?.api_kyouka) ? stats.api_kyouka : [];
+  return normalizeFixed(kyouka, 7, 0).map((value) => safeNum(value));
 }
 
 function slotMasterById(id: number) {

@@ -2252,8 +2252,9 @@ function buildBattleSettlement(save: SaveState, record: BattleRecord): BattleSet
   const baseExp = safeNum(record.result?.baseExp, 0);
   const memberGain = safeNum(record.result?.memberExp, baseExp * 2);
   const memberExp = save.player.exp + memberGain;
-  const main = buildFleetSettlement(save, record.shipIds, safeNum(record.result?.mvp, 1), baseExp);
-  const escort = record.mode === "combined" ? buildFleetSettlement(save, record.escortShipIds ?? [], safeNum(record.result?.mvpCombined, 1), baseExp) : undefined;
+  const rankModifier = record.mode === "practice" ? 1 : sortieShipExpRankModifier(record.result?.rank);
+  const main = buildFleetSettlement(save, record.shipIds, safeNum(record.result?.mvp, 1), baseExp, rankModifier);
+  const escort = record.mode === "combined" ? buildFleetSettlement(save, record.escortShipIds ?? [], safeNum(record.result?.mvpCombined, 1), baseExp, rankModifier) : undefined;
   const dropShipId = record.mode === "practice" ? 0 : safeNum(record.result?.dropShipId, 0);
   return {
     memberLevel: playerLevelForExp(memberExp),
@@ -2267,14 +2268,14 @@ function buildBattleSettlement(save: SaveState, record: BattleRecord): BattleSet
   };
 }
 
-function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: number, baseExp: number) {
+function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: number, baseExp: number, rankModifier = 1) {
   const fixedShipIds = normalizeFixed(shipIds.map((id) => Number(id)), 6, -1);
   return fixedShipIds.map((shipId, index) => {
     if (shipId <= 0) return { shipId, gainedExp: -1, beforeExp: -1, afterExp: -1, afterLevel: 0, levelup: [-1] };
     const ship = save.ships.find((item) => item.id === shipId);
     if (!ship) return { shipId, gainedExp: -1, beforeExp: -1, afterExp: -1, afterLevel: 0, levelup: [-1] };
     const flagship = index === 0;
-    const multiplier = (flagship ? 1.5 : 1) * (mvp === index + 1 ? 2 : 1);
+    const multiplier = rankModifier * (flagship ? 1.5 : 1) * (mvp === index + 1 ? 2 : 1);
     const gainedExp = Math.max(1, Math.floor(baseExp * multiplier));
     const afterExp = ship.exp + gainedExp;
     const cap = shipLevelCap(ship);
@@ -2287,6 +2288,14 @@ function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: numb
       levelup: shipLevelupInfo(ship.exp, gainedExp, cap)
     };
   });
+}
+
+function sortieShipExpRankModifier(rank: BattleRecord["result"]["rank"] | undefined) {
+  if (rank === "S") return 1.2;
+  if (rank === "C") return 0.8;
+  if (rank === "D") return 0.7;
+  if (rank === "E") return 0.5;
+  return 1;
 }
 
 function applyFleetHp(db: Database.Database, shipIds: number[] | undefined, hps: number[] | undefined) {

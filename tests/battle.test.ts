@@ -2,7 +2,14 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createCombinedBattle, createPracticeBattle, createSortieBattle, createNightBattlePayload, resolveDamage } from "../src/kcsapi/battle.js";
+import {
+  battleResultPayload,
+  createCombinedBattle,
+  createPracticeBattle,
+  createSortieBattle,
+  createNightBattlePayload,
+  resolveDamage
+} from "../src/kcsapi/battle.js";
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
@@ -237,6 +244,115 @@ describe("sortie battle simulation", () => {
     expect(battle.payload.api_stage_flag).toEqual([1, 0, 0]);
     expect(battle.payload.api_kouku?.api_stage2).toBeNull();
     expect(battle.payload.api_kouku?.api_stage3).toBeNull();
+  });
+
+  it("uses 3-5 B sortie base experience for settlement multipliers", () => {
+    const yamato = store.createShip(911);
+    store.changeDeckShip(1, 0, yamato.id);
+    store.clearDeckFollowerShips(1);
+    store.startSortie(1, 3, 5);
+    const session = store.getSave().sortieSession!;
+    const node = sortieNodes().find((item) => item.mapId === 35 && item.point === "B")!;
+    const originalEncounters = node.encounters.map((encounter) => ({
+      shipIds: [...encounter.shipIds],
+      formation: encounter.formation,
+      weight: encounter.weight
+    }));
+    const originalEnemy = {
+      ...ENEMY_UNIT_TEMPLATES[1501],
+      slots: [...ENEMY_UNIT_TEMPLATES[1501].slots],
+      onSlot: [...ENEMY_UNIT_TEMPLATES[1501].onSlot]
+    };
+
+    try {
+      for (const encounter of node.encounters) {
+        Object.assign(encounter as any, { shipIds: [1501], formation: 1, weight: 1 });
+      }
+      Object.assign(ENEMY_UNIT_TEMPLATES[1501], { hp: 1, armor: 0, firepower: 0, torpedo: 0 });
+      store.db.prepare("UPDATE sortie_sessions SET node = 1, seed = 0, state_json = ? WHERE id = 1")
+        .run(JSON.stringify({ ...session.state, point: "B", routeStep: 1, visited: ["Start", "B"], battles: 0 }));
+
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      store.recordSortieBattle(battle.record as unknown as Record<string, unknown>);
+      const applied = store.applySortieBattleResult();
+      const payload = battleResultPayload(applied.record as any);
+
+      expect(payload).toMatchObject({
+        api_win_rank: "S",
+        api_get_base_exp: 300,
+        api_mvp: 1
+      });
+      const shipExp = payload.api_get_ship_exp as number[];
+      expect(shipExp.slice(1, 7)).toEqual([1080, -1, -1, -1, -1, -1]);
+    } finally {
+      node.encounters.forEach((encounter, index) => {
+        Object.assign(encounter as any, originalEncounters[index]);
+      });
+      Object.assign(ENEMY_UNIT_TEMPLATES[1501], originalEnemy);
+    }
+  });
+
+  it("blocks enemy daytime spotting attacks when friendly fleet has air supremacy", () => {
+    const akagi = store.createShip(277);
+    const fighter = store.createSlotItem(20);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.clearDeckFollowerShips(1);
+    store.startSortie(1, 3, 5);
+    const session = store.getSave().sortieSession!;
+    const node = sortieNodes().find((item) => item.mapId === 35 && item.point === "B")!;
+    const originalEncounters = node.encounters.map((encounter) => ({
+      shipIds: [...encounter.shipIds],
+      formation: encounter.formation,
+      weight: encounter.weight
+    }));
+
+    try {
+      for (const encounter of node.encounters) {
+        Object.assign(encounter as any, {
+          shipIds: [1554, 1542, 1522, 1522, 1575, 1575],
+          formation: 1,
+          weight: 1
+        });
+      }
+      store.db.prepare("UPDATE sortie_sessions SET node = 1, seed = 0, state_json = ? WHERE id = 1")
+        .run(JSON.stringify({ ...session.state, point: "B", routeStep: 1, visited: ["Start", "B"], battles: 0 }));
+
+      const battle = createSortieBattle(store.getSave(), { formation: 1 });
+      const enemyAttackTypes = battle.payload.api_hougeki1.api_at_type.filter(
+        (_type: number, index: number) => battle.payload.api_hougeki1.api_at_eflag[index] === 1
+      );
+
+      expect(battle.payload.api_kouku?.api_stage1.api_disp_seiku).toBe(1);
+      expect(enemyAttackTypes).not.toContain(2);
+      expect(enemyAttackTypes).not.toContain(3);
+    } finally {
+      node.encounters.forEach((encounter, index) => {
+        Object.assign(encounter as any, originalEncounters[index]);
+      });
+    }
+  });
+
+  it("uses modernization and displayed level stats in friendly battle units", () => {
+    const prinz = store.createShip(177);
+    store.changeDeckShip(1, 0, prinz.id);
+    store.clearDeckFollowerShips(1);
+    store.db.prepare("UPDATE ships SET level = 85, stats_json = ? WHERE id = ?")
+      .run(JSON.stringify({ api_kyouka: [27, 44, 42, 34, 0, 0, 0], modernized: true }), prinz.id);
+
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const unit = battle.record.units?.friendly[0];
+
+    expect(unit).toMatchObject({
+      masterId: 177,
+      level: 85,
+      firepower: 75,
+      torpedo: 84,
+      aa: 60,
+      armor: 82,
+      evasion: 85
+    });
+    expect(battle.payload.api_fParam[0]).toEqual([75, 84, 60, 82]);
   });
 
   it("does not let carrier aircraft torpedo stats participate in closing torpedo combat", () => {
@@ -568,19 +684,24 @@ describe("sortie battle simulation", () => {
 
   it("emits complete two-hit arrays for daytime double attacks after the first hit sinks", () => {
     const nagato = store.createShip(80);
+    const akagi = store.createShip(277);
     const mainGunA = store.createSlotItem(7);
     const mainGunB = store.createSlotItem(8);
     const seaplane = store.createSlotItem(25);
+    const fighter = store.createSlotItem(20);
     store.equipSlotItem(nagato.id, 0, mainGunA.id);
     store.equipSlotItem(nagato.id, 1, mainGunB.id);
     store.equipSlotItem(nagato.id, 2, seaplane.id);
+    store.equipSlotItem(akagi.id, 0, fighter.id);
     store.changeDeckShip(1, 0, nagato.id);
+    store.changeDeckShip(1, 1, akagi.id);
     store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
 
     const battle = createSortieBattle(store.getSave(), { formation: 1 });
     const hougeki = battle.payload.api_hougeki1;
     const attackIndex = hougeki.api_at_type.indexOf(2);
 
+    expect(battle.payload.api_kouku?.api_stage1.api_disp_seiku).toBe(1);
     expect(attackIndex).toBeGreaterThanOrEqual(0);
     expect(hougeki.api_damage[attackIndex][0]).toBe(20);
     expect(hougeki.api_df_list[attackIndex]).toEqual([0, 0]);

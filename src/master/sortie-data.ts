@@ -27,6 +27,7 @@ export type SortieEncounter = {
   enemyCombinedShipIds?: readonly number[];
   formation: number;
   weight: number;
+  baseExp?: number;
 };
 
 export type SortieDropEntry = {
@@ -49,6 +50,7 @@ export type SortieNodeData = {
   colorNo: number;
   encounters: readonly SortieEncounter[];
   dropPool: readonly SortieDropEntry[];
+  baseExp?: number;
 };
 
 export type SelectedSortieEncounter = {
@@ -62,6 +64,7 @@ export type SelectedSortieEncounter = {
   shipIds: readonly number[];
   enemyCombinedShipIds: readonly number[];
   formation: number;
+  baseExp?: number;
 };
 
 export type SelectedSortieDrop = {
@@ -106,6 +109,10 @@ const SORTIE_NODE_BY_MAP_AND_NODE = new Map(
   SORTIE_NODES.map((node) => [sortieNodeKey(node.mapId, node.node), node] as const)
 );
 
+const SORTIE_POINT_BASE_EXP = new Map<string, number>([
+  ["35:B", 300]
+]);
+
 export function sortieMapId(areaId: number, mapNo: number) {
   return Math.trunc(areaId) * 10 + Math.trunc(mapNo);
 }
@@ -141,7 +148,8 @@ export function selectSortieEncounter(
     enemyFleetKey: encounter.key,
     shipIds: encounter.shipIds,
     enemyCombinedShipIds: encounter.enemyCombinedShipIds ?? [],
-    formation: encounter.formation
+    formation: encounter.formation,
+    baseExp: encounter.baseExp ?? node.baseExp ?? SORTIE_POINT_BASE_EXP.get(sortiePointKey(node.mapId, node.point))
   };
 }
 
@@ -177,6 +185,10 @@ export function fallbackEnemyShipIds(nodeNo: number) {
 
 function sortieNodeKey(mapId: number, nodeNo: number) {
   return String(mapId) + ":" + String(nodeNo);
+}
+
+function sortiePointKey(mapId: number, point: string) {
+  return String(mapId) + ":" + point;
 }
 
 function dropWeight(entry: SortieDropEntry, rankIndex: number, enemyFleetKey: string | undefined) {
