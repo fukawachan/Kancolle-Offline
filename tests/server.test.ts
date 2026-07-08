@@ -402,6 +402,34 @@ describe("local Fastify server", () => {
     expect(png.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
+  it("serves battle result landing 612 sprites from the 602 atlas fallback", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const atlas = await app.inject({
+      method: "GET",
+      url: "/kcs2/img/battle_result/battle_result_landing_612.json?version=6.2.1.0"
+    });
+    const png = await app.inject({
+      method: "GET",
+      url: "/kcs2/img/battle_result/battle_result_landing_612.png?version=6.2.1.0"
+    });
+
+    expect(atlas.statusCode).toBe(200);
+    expect(atlas.headers["content-type"]).toContain("application/json");
+    const atlasData = atlas.json() as { frames: Record<string, unknown>; meta: { image: string } };
+    const frameKeys = Object.keys(atlasData.frames);
+    expect(frameKeys).toContain("battle_result_landing_612_0");
+    expect(frameKeys).toContain("battle_result_landing_612_9");
+    expect(frameKeys.some((key) => key.startsWith("battle_result_landing_602_"))).toBe(false);
+    expect(atlasData.meta.image).toBe("battle_result_landing_612.png");
+    expect(png.statusCode).toBe(200);
+    expect(png.headers["content-type"]).toContain("image/png");
+  });
+
   it("falls back to cached PNG title images when the client asks for legacy JPG names", async () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),

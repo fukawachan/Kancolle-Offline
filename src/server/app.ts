@@ -32,6 +32,7 @@ const SPECIAL_REMODEL_ANIMATION_TYPE = {
   shipCamera: 2,
   playVoice: 6
 } as const;
+const BATTLE_RESULT_LANDING_FALLBACKS = new Map([["612", "602"]]);
 
 export type BuildAppOptions = {
   cacheDir: string;
@@ -203,6 +204,14 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
         .send(recordAirbaseFallback.body);
     }
 
+    const battleResultLandingFallback = await readBattleResultLandingFallback(options.cacheDir, request.url);
+    if (battleResultLandingFallback) {
+      return reply
+        .type(battleResultLandingFallback.contentType)
+        .header("cache-control", "public, max-age=3600")
+        .send(battleResultLandingFallback.body);
+    }
+
     const pngFallback = await readPngFallback(options.cacheDir, request.url);
     if (pngFallback) {
       return reply
@@ -341,6 +350,64 @@ async function readRecordAirbaseMaintFallback(cacheDir: string, url: string) {
         meta: {
           ...(atlas.meta ?? {}),
           image: "record_airbase_maint.png"
+        }
+      })
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readBattleResultLandingFallback(cacheDir: string, url: string) {
+  const pathname = decodeURIComponent(new URL(url, "http://local").pathname);
+  const match = pathname.match(/^\/kcs2\/img\/battle_result\/battle_result_landing_(\d{3})\.(json|png)$/i);
+  if (!match) return null;
+
+  const targetId = match[1];
+  const extension = match[2].toLowerCase();
+  const sourceId = BATTLE_RESULT_LANDING_FALLBACKS.get(targetId);
+  if (!sourceId) return null;
+
+  const resolvedCacheDir = path.resolve(cacheDir);
+  const fallbackPath = path.resolve(
+    resolvedCacheDir,
+    `./kcs2/img/battle_result/battle_result_landing_${sourceId}.${extension}`
+  );
+  if (!fallbackPath.startsWith(`${resolvedCacheDir}${path.sep}`)) return null;
+
+  try {
+    if (extension === "png") {
+      return { contentType: "image/png", body: await readFile(fallbackPath) };
+    }
+
+    const atlas = JSON.parse(await readFile(fallbackPath, "utf8")) as {
+      frames?: Record<string, unknown>;
+      animations?: Record<string, unknown>;
+      meta?: Record<string, unknown>;
+    };
+    const sourcePrefix = `battle_result_landing_${sourceId}_`;
+    const targetPrefix = `battle_result_landing_${targetId}_`;
+    const frameNames: string[] = [];
+    const frames = Object.fromEntries(
+      Object.entries(atlas.frames ?? {}).map(([key, value]) => {
+        const frameName = key.startsWith(sourcePrefix) ? `${targetPrefix}${key.slice(sourcePrefix.length)}` : key;
+        frameNames.push(frameName);
+        return [frameName, value];
+      })
+    );
+
+    return {
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({
+        ...atlas,
+        frames,
+        animations: {
+          ...(atlas.animations ?? {}),
+          battle_result_landing: frameNames
+        },
+        meta: {
+          ...(atlas.meta ?? {}),
+          image: `battle_result_landing_${targetId}.png`
         }
       })
     };
