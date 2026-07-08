@@ -508,16 +508,14 @@ export function createStateStore(options: StateStoreOptions) {
       const ship = save.ships.find((item) => item.id === shipId);
       if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
       const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
-      let slotIds = normalizeFixed(ship.slotIds, 5, -1);
-      let currentOnSlot = normalizeFixed(ship.onSlot, 5, 0);
-      if (itemId <= 0) {
-        const compacted = compactAfterUnequip(slotIds, currentOnSlot, slotIndex);
-        slotIds = compacted.slotIds;
-        currentOnSlot = compacted.onSlot;
-      } else {
-        slotIds[Math.max(0, slotIndex)] = itemId;
-      }
-      const onSlot = onSlotForShip(master, save.slotItems, slotIds, currentOnSlot, itemId > 0);
+      const { slotIds, onSlot } = equipOrdinarySlot(
+        master,
+        save.slotItems,
+        ship.slotIds,
+        ship.onSlot,
+        slotIndex,
+        itemId
+      );
       db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(slotIds), JSON.stringify(onSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
@@ -534,17 +532,10 @@ export function createStateStore(options: StateStoreOptions) {
     exchangeSlotIndex: (shipId: number, from: number, to: number) => {
       const ship = getSave(db).ships.find((item) => item.id === shipId);
       if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
-      const slotIds = normalizeFixed(ship.slotIds, 5, -1);
-      const onSlot = normalizeFixed(ship.onSlot, 5, 0);
-      const moving = slotIds[from];
-      slotIds[from] = slotIds[to];
-      slotIds[to] = moving;
-      const movingCount = onSlot[from];
-      onSlot[from] = onSlot[to];
-      onSlot[to] = movingCount;
       const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
-      const nextOnSlot = onSlotForShip(master, getSave(db).slotItems, slotIds, onSlot, false);
-      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(slotIds), JSON.stringify(nextOnSlot), shipId);
+      const save = getSave(db);
+      const exchanged = exchangeOrdinarySlots(master, save.slotItems, ship.slotIds, ship.onSlot, from, to);
+      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(JSON.stringify(exchanged.slotIds), JSON.stringify(exchanged.onSlot), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     registerPresetSlot: (presetNo: number, shipId: number) => registerPresetSlot(db, presetNo, shipId),
@@ -4811,17 +4802,134 @@ function clearRepairDock(db: Database.Database, dockId: number) {
   db.prepare("UPDATE repair_docks SET ship_id = 0, complete_time = 0, state = 0 WHERE id = ?").run(dockId);
 }
 
-function compactAfterUnequip(slotIds: number[], onSlot: number[], slotIndex: number) {
-  const targetIndex = Math.max(0, Math.trunc(slotIndex));
+type OrdinarySlotSource = {
+  slotId: number;
+  previousSlotId: number;
+  previousCount: number;
+  previousMax: number;
+};
+
+function equipOrdinarySlot(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  slotItems: SlotItem[],
+  slotIds: number[],
+  onSlot: number[],
+  slotIndex: number,
+  itemId: number
+) {
+  const sources = ordinarySlotSources(master, slotIds, onSlot);
+  const targetIndex = itemId > 0
+    ? firstAvailableOrdinarySlotIndex(sources, slotIndex)
+    : clampSlotIndex(slotIndex);
+
+  if (itemId > 0) {
+    const previous = sources[targetIndex];
+    sources[targetIndex] = {
+      slotId: itemId,
+      previousSlotId: previous?.slotId ?? -1,
+      previousCount: previous?.previousCount ?? -1,
+      previousMax: previous?.previousMax ?? 0
+    };
+  } else {
+    sources[targetIndex] = null;
+  }
+
+  return ordinarySlotPayload(master, slotItems, compactOrdinarySlotSources(sources));
+}
+
+function exchangeOrdinarySlots(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  slotItems: SlotItem[],
+  slotIds: number[],
+  onSlot: number[],
+  from: number,
+  to: number
+) {
+  const sources = ordinarySlotSources(master, slotIds, onSlot);
+  const fromIndex = clampSlotIndex(from);
+  const toIndex = clampSlotIndex(to);
+  const moving = sources[fromIndex];
+  sources[fromIndex] = sources[toIndex];
+  sources[toIndex] = moving;
+  return ordinarySlotPayload(master, slotItems, sources);
+}
+
+function ordinarySlotSources(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  slotIds: number[],
+  onSlot: number[]
+): Array<OrdinarySlotSource | null> {
   const fixedSlotIds = normalizeFixed(slotIds, 5, -1);
   const fixedOnSlot = normalizeFixed(onSlot, 5, 0);
-  const remaining = fixedSlotIds
-    .map((slotId, index) => ({ slotId, count: fixedOnSlot[index], index }))
-    .filter((entry) => entry.index !== targetIndex && entry.slotId > 0);
+  return fixedSlotIds.map((slotId, index) =>
+    slotId > 0
+      ? {
+          slotId,
+          previousSlotId: slotId,
+          previousCount: Math.max(0, Math.trunc(safeNum(fixedOnSlot[index]))),
+          previousMax: slotAircraftMax(master, index)
+        }
+      : null
+  );
+}
+
+function compactOrdinarySlotSources(sources: Array<OrdinarySlotSource | null>) {
+  return normalizeFixed(
+    sources.filter((source): source is OrdinarySlotSource => source != null && source.slotId > 0),
+    5,
+    null
+  );
+}
+
+function ordinarySlotPayload(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  slotItems: SlotItem[],
+  sources: Array<OrdinarySlotSource | null>
+) {
+  const fixedSources = normalizeFixed(sources, 5, null);
   return {
-    slotIds: normalizeFixed(remaining.map((entry) => entry.slotId), 5, -1),
-    onSlot: normalizeFixed(remaining.map((entry) => entry.count), 5, 0)
+    slotIds: fixedSources.map((source) => source?.slotId ?? -1),
+    onSlot: fixedSources.map((source, index) => aircraftCountForSlotSource(master, slotItems, source, index))
   };
+}
+
+function firstAvailableOrdinarySlotIndex(sources: Array<OrdinarySlotSource | null>, slotIndex: number) {
+  const targetIndex = clampSlotIndex(slotIndex);
+  for (let index = 0; index <= targetIndex; index++) {
+    if (!sources[index]) return index;
+  }
+  return targetIndex;
+}
+
+function aircraftCountForSlotSource(
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  slotItems: SlotItem[],
+  source: OrdinarySlotSource | null,
+  index: number
+) {
+  if (!source || source.slotId <= 0) return 0;
+  const slotMaster = slotMasterFor(slotItems, source.slotId);
+  const max = slotAircraftMax(master, index);
+  if (!slotMaster || !isAircraftSlotItem(slotMaster) || max <= 0) return 0;
+
+  const previousMaster = slotMasterFor(slotItems, source.previousSlotId);
+  if (!previousMaster || !isAircraftSlotItem(previousMaster) || source.previousMax <= 0) return max;
+  if (source.previousCount >= source.previousMax) return max;
+  return Math.min(source.previousCount, max);
+}
+
+function slotMasterFor(slotItems: SlotItem[], slotItemId: number) {
+  const item = slotItems.find((slotItem) => slotItem.id === slotItemId);
+  return item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
+}
+
+function slotAircraftMax(master: (typeof masterData.api_mst_ship)[number] | undefined, index: number) {
+  const maxeq = Array.isArray(master?.api_maxeq) ? master.api_maxeq : [];
+  return Math.max(0, Math.trunc(safeNum(maxeq[index])));
+}
+
+function clampSlotIndex(value: number) {
+  return Math.max(0, Math.min(4, Math.trunc(safeNum(value))));
 }
 
 function normalizeFixed<T>(values: T[], length: number, fill: T): T[] {

@@ -202,7 +202,7 @@ describe("sortie battle simulation", () => {
     expect(kouku).toMatchObject({
       api_plane_from: [[1], []],
       api_stage1: {
-        api_f_count: 52,
+        api_f_count: 40,
         api_f_lostcount: expect.any(Number),
         api_e_count: 0,
         api_e_lostcount: 0,
@@ -220,7 +220,7 @@ describe("sortie battle simulation", () => {
     if (!kouku?.api_stage2 || !kouku.api_stage3) {
       throw new Error("expected interception and airstrike stages");
     }
-    expect(kouku.api_stage2.api_f_count).toBeLessThan(52);
+    expect(kouku.api_stage2.api_f_count).toBeLessThan(40);
     expect(kouku.api_stage3.api_edam.some((damage) => damage > 0)).toBe(true);
     expect(battle.record.aircraftLosses?.friendly[akagi.id]).toBeGreaterThan(0);
     const stage3 = kouku.api_stage3;
@@ -622,7 +622,7 @@ describe("sortie battle simulation", () => {
     const bomber = store.createSlotItem(23);
     store.equipSlotItem(akagi.id, 2, bomber.id);
     store.changeDeckShip(1, 0, akagi.id);
-    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([0, 0, 2, 0, 0]), akagi.id);
+    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([2, 0, 0, 0, 0]), akagi.id);
 
     const enemies = [1501, 1502, 1503].map((id) => ENEMY_UNIT_TEMPLATES[id]);
     const originalAa = enemies.map((enemy) => enemy.aa);

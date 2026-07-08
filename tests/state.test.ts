@@ -590,37 +590,68 @@ describe("SQLite state store", () => {
     store.equipSlotItem(akagi.id, 2, bomber.id);
 
     const equipped = store.getSave().ships.find((ship) => ship.id === akagi.id)! as any;
-    expect(equipped.onSlot).toEqual([20, 0, 32, 0, 0]);
+    expect(equipped.onSlot).toEqual([20, 20, 0, 0, 0]);
 
     const beforeBauxite = store.getSave().materials.bauxite;
-    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([18, 0, 30, 0, 0]), akagi.id);
+    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([18, 18, 0, 0, 0]), akagi.id);
 
     const supplied = store.supplyShips([akagi.id]);
 
-    expect(supplied.ships[0].onSlot).toEqual([20, 0, 32, 0, 0]);
+    expect(supplied.ships[0].onSlot).toEqual([20, 20, 0, 0, 0]);
     expect(supplied.consumed.bauxite).toBe(20);
     expect(store.getSave().materials.bauxite).toBe(beforeBauxite - 20);
   });
 
-  it("compacts ordinary slots and moves aircraft counts when unequipping", () => {
+  it("compacts ordinary slots and refills full aircraft after unequipping", () => {
     store.registerAccount(15);
-    const akagi = store.createShip(277);
+    const shoukaku = store.createShip(466);
+    const fighters = [20, 20, 20, 20].map((masterId) => store.createSlotItem(masterId));
+
+    for (const [index, fighter] of fighters.entries()) {
+      store.equipSlotItem(shoukaku.id, index, fighter.id);
+    }
+
+    const equipped = store.getSave().ships.find((ship) => ship.id === shoukaku.id)!;
+    expect(equipped.slotIds).toEqual(fighters.map((fighter) => fighter.id).concat(-1));
+    expect(equipped.onSlot).toEqual([34, 21, 12, 9, 0]);
+
+    const unequipped = store.equipSlotItem(shoukaku.id, 2, -1)!;
+
+    expect(unequipped.slotIds).toEqual([fighters[0].id, fighters[1].id, fighters[3].id, -1, -1]);
+    expect(unequipped.onSlot).toEqual([34, 21, 12, 0, 0]);
+  });
+
+  it("preserves depleted aircraft counts when compacting unsupplied slots", () => {
+    store.registerAccount(15);
+    const shoukaku = store.createShip(466);
+    const fighters = [20, 20, 20, 20].map((masterId) => store.createSlotItem(masterId));
+
+    for (const [index, fighter] of fighters.entries()) {
+      store.equipSlotItem(shoukaku.id, index, fighter.id);
+    }
+    store.db.prepare("UPDATE ships SET onslot_json = ? WHERE id = ?").run(JSON.stringify([34, 21, 12, 7, 0]), shoukaku.id);
+
+    const unequipped = store.equipSlotItem(shoukaku.id, 2, -1)!;
+
+    expect(unequipped.slotIds).toEqual([fighters[0].id, fighters[1].id, fighters[3].id, -1, -1]);
+    expect(unequipped.onSlot).toEqual([34, 21, 7, 0, 0]);
+  });
+
+  it("fills the first available ordinary slot when equipping below gaps", () => {
+    store.registerAccount(15);
+    const shoukaku = store.createShip(466);
     const firstFighter = store.createSlotItem(20);
     const secondFighter = store.createSlotItem(20);
-    const thirdFighter = store.createSlotItem(20);
 
-    store.equipSlotItem(akagi.id, 0, firstFighter.id);
-    store.equipSlotItem(akagi.id, 2, secondFighter.id);
-    store.equipSlotItem(akagi.id, 3, thirdFighter.id);
+    const equippedLowerEmpty = store.equipSlotItem(shoukaku.id, 3, firstFighter.id)!;
 
-    const equipped = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
-    expect(equipped.slotIds).toEqual([firstFighter.id, -1, secondFighter.id, thirdFighter.id, -1]);
-    expect(equipped.onSlot).toEqual([20, 0, 32, 10, 0]);
+    expect(equippedLowerEmpty.slotIds).toEqual([firstFighter.id, -1, -1, -1, -1]);
+    expect(equippedLowerEmpty.onSlot).toEqual([34, 0, 0, 0, 0]);
 
-    const unequipped = store.equipSlotItem(akagi.id, 0, -1)!;
+    const equippedAfterFirst = store.equipSlotItem(shoukaku.id, 3, secondFighter.id)!;
 
-    expect(unequipped.slotIds).toEqual([secondFighter.id, thirdFighter.id, -1, -1, -1]);
-    expect(unequipped.onSlot).toEqual([20, 10, 0, 0, 0]);
+    expect(equippedAfterFirst.slotIds).toEqual([firstFighter.id, secondFighter.id, -1, -1, -1]);
+    expect(equippedAfterFirst.onSlot).toEqual([34, 21, 0, 0, 0]);
   });
 
   it("migrates version 4 saves by initializing current aircraft counts", () => {
@@ -645,7 +676,7 @@ describe("SQLite state store", () => {
     store = createStateStore({ databasePath });
     const migrated = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
 
-    expect(migrated.onSlot).toEqual([20, 0, 32, 0, 0]);
+    expect(migrated.onSlot).toEqual([20, 20, 0, 0, 0]);
   });
 
   it("migrates version 5 map progress into phase-aware state", () => {

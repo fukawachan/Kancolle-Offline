@@ -378,7 +378,8 @@ register("api_req_kaisou/slot_deprive", (input, context) => {
   const setShip = save.ships.find((ship) => ship.id === setShipId);
   const inferredItemId = slotItemIdAt(unsetShip, unsetIndex, unsetKind);
   const itemId = num(input.body.api_item_id, inferredItemId);
-  const displacedItemId = slotItemIdAt(setShip, setIndex, setKind);
+  const actualSetIndex = setKind === "extra" ? setIndex : firstAvailableOrdinarySlotIndex(setShip, setIndex);
+  const displacedItemId = slotItemIdAt(setShip, actualSetIndex, setKind);
   if (itemId <= 0) return apiError("Unknown slot item", 400);
   const validation = validateSlotEquip(save, context.resourceManifest, setShipId, setIndex, itemId, setKind);
   if (!validation.ok) return apiError(validation.message, 400);
@@ -1629,6 +1630,15 @@ function slotItemIdAt(ship: Ship | undefined, slotIndex: number, kind: "normal" 
   if (kind === "extra") return ship.exSlotId;
   const slots = [...ship.slotIds, -1, -1, -1, -1, -1].slice(0, 5);
   return slotIndex >= 0 && slotIndex < slots.length ? slots[slotIndex] : -1;
+}
+
+function firstAvailableOrdinarySlotIndex(ship: Ship | undefined, slotIndex: number) {
+  const targetIndex = Math.max(0, Math.min(4, Math.trunc(num(slotIndex, 0))));
+  const slots = ship ? [...ship.slotIds, -1, -1, -1, -1, -1].slice(0, 5) : [];
+  for (let index = 0; index <= targetIndex; index++) {
+    if ((slots[index] ?? -1) <= 0) return index;
+  }
+  return targetIndex;
 }
 
 function slotDepriveUnsetList(save: SaveState, itemId: number) {

@@ -1390,7 +1390,7 @@ describe("local kcsapi endpoints", () => {
 
     const depletedFuel = akagi.maxFuel - 3;
     const depletedAmmo = akagi.maxAmmo - 4;
-    const depletedOnSlot = [18, 0, 30, 0, 0];
+    const depletedOnSlot = [18, 18, 0, 0, 0];
     const cases = [0, 1, 2, 3].flatMap((kind) => [0, 1].map((onSlot) => ({ kind, onSlot })));
 
     for (const { kind, onSlot } of cases) {
@@ -1413,7 +1413,7 @@ describe("local kcsapi endpoints", () => {
       expect(chargedShip.api_fuel, `kind=${kind} onslot=${onSlot} fuel`).toBe(suppliesFuel ? akagi.maxFuel : depletedFuel);
       expect(chargedShip.api_bull, `kind=${kind} onslot=${onSlot} ammo`).toBe(suppliesAmmo ? akagi.maxAmmo : depletedAmmo);
       expect(chargedShip.api_onslot, `kind=${kind} onslot=${onSlot} planes`)
-        .toEqual(onSlot === 1 ? [20, 0, 32, 0, 0] : depletedOnSlot);
+        .toEqual(onSlot === 1 ? [20, 20, 0, 0, 0] : depletedOnSlot);
       expect(persistedShip.fuel).toBe(chargedShip.api_fuel);
       expect(persistedShip.ammo).toBe(chargedShip.api_bull);
       expect(persistedShip.onSlot).toEqual(chargedShip.api_onslot);
@@ -2218,13 +2218,14 @@ describe("local kcsapi endpoints", () => {
     const updatedShip = response.json().api_data;
 
     expect(updatedShip.api_ship_id).toBe(277);
-    expect(updatedShip.api_slot).toEqual([fighter1.id, -1, fighter2.id, -1, -1]);
-    expect(updatedShip.api_onslot).toEqual([20, 0, 32, 0, 0]);
+    expect(updatedShip.api_slot).toEqual([fighter1.id, fighter2.id, -1, -1, -1]);
+    expect(updatedShip.api_onslot).toEqual([20, 20, 0, 0, 0]);
 
     const ship2 = (await post("api_get_member/ship2")).json().api_data;
     const persistedAkagi = ship2.find((ship: any) => ship.api_id === akagi.id);
 
-    expect(persistedAkagi.api_onslot).toEqual([20, 0, 32, 0, 0]);
+    expect(persistedAkagi.api_slot).toEqual([fighter1.id, fighter2.id, -1, -1, -1]);
+    expect(persistedAkagi.api_onslot).toEqual([20, 20, 0, 0, 0]);
   });
 
   it("compacts ordinary slots when unequipping a front slot through slotset", async () => {
@@ -2239,7 +2240,41 @@ describe("local kcsapi endpoints", () => {
     const updatedShip = response.json().api_data;
 
     expect(updatedShip.api_slot).toEqual([fighters[1].id, fighters[2].id, fighters[3].id, -1, -1]);
-    expect(updatedShip.api_onslot).toEqual([20, 20, 10, 0, 0]);
+    expect(updatedShip.api_onslot).toEqual([20, 20, 32, 0, 0]);
+  });
+
+  it("returns target slot capacity when a full lower carrier slot compacts upward through slotset", async () => {
+    const shoukaku = store.createShip(466);
+    const fighters = [20, 20, 20, 20].map((masterId) => store.createSlotItem(masterId));
+
+    for (const [index, fighter] of fighters.entries()) {
+      await post("api_req_kaisou/slotset", { api_id: shoukaku.id, api_slot_idx: index, api_item_id: fighter.id });
+    }
+
+    const response = await post("api_req_kaisou/slotset", { api_id: shoukaku.id, api_slot_idx: 2, api_item_id: -1 });
+    const updatedShip = response.json().api_data;
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const persistedShoukaku = ship2.find((ship: any) => ship.api_id === shoukaku.id);
+
+    expect(updatedShip.api_slot).toEqual([fighters[0].id, fighters[1].id, fighters[3].id, -1, -1]);
+    expect(updatedShip.api_onslot).toEqual([34, 21, 12, 0, 0]);
+    expect(persistedShoukaku.api_slot).toEqual(updatedShip.api_slot);
+    expect(persistedShoukaku.api_onslot).toEqual([34, 21, 12, 0, 0]);
+  });
+
+  it("equips into the first available ordinary slot through slotset", async () => {
+    const shoukaku = store.createShip(466);
+    const fighter = store.createSlotItem(20);
+
+    const response = await post("api_req_kaisou/slotset", { api_id: shoukaku.id, api_slot_idx: 3, api_item_id: fighter.id });
+    const updatedShip = response.json().api_data;
+    const ship2 = (await post("api_get_member/ship2")).json().api_data;
+    const persistedShoukaku = ship2.find((ship: any) => ship.api_id === shoukaku.id);
+
+    expect(updatedShip.api_slot).toEqual([fighter.id, -1, -1, -1, -1]);
+    expect(updatedShip.api_onslot).toEqual([34, 0, 0, 0, 0]);
+    expect(persistedShoukaku.api_slot).toEqual(updatedShip.api_slot);
+    expect(persistedShoukaku.api_onslot).toEqual(updatedShip.api_onslot);
   });
 
   it("returns the client slot exchange payload shape and target slot aircraft counts", async () => {
@@ -2248,19 +2283,19 @@ describe("local kcsapi endpoints", () => {
     const fighter2 = store.createSlotItem(20);
 
     await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 0, api_item_id: fighter1.id });
-    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 2, api_item_id: fighter2.id });
+    await post("api_req_kaisou/slotset", { api_id: akagi.id, api_slot_idx: 1, api_item_id: fighter2.id });
 
     const response = await post("api_req_kaisou/slot_exchange_index", {
       api_id: akagi.id,
-      api_src_idx: 2,
-      api_dst_idx: 1
+      api_src_idx: 1,
+      api_dst_idx: 2
     });
     const data = response.json().api_data;
 
     expect(response.statusCode).toBe(200);
     expect(data.api_ship_data.api_id).toBe(akagi.id);
-    expect(data.api_ship_data.api_slot).toEqual([fighter1.id, fighter2.id, -1, -1, -1]);
-    expect(data.api_ship_data.api_onslot).toEqual([20, 20, 0, 0, 0]);
+    expect(data.api_ship_data.api_slot).toEqual([fighter1.id, -1, fighter2.id, -1, -1]);
+    expect(data.api_ship_data.api_onslot).toEqual([20, 0, 32, 0, 0]);
     expect(data.api_bauxite).toEqual(expect.any(Number));
   });
 
@@ -2273,7 +2308,7 @@ describe("local kcsapi endpoints", () => {
 
     const response = await post("api_req_kaisou/slot_deprive", {
       api_unset_ship: source.id,
-      api_unset_idx: 2,
+      api_unset_idx: 0,
       api_unset_slot_kind: 0,
       api_set_ship: target.id,
       api_set_idx: 1,
@@ -2286,9 +2321,38 @@ describe("local kcsapi endpoints", () => {
     expect(data.api_ship_data.api_unset_ship.api_slot).toEqual([-1, -1, -1, -1, -1]);
     expect(data.api_ship_data.api_unset_ship.api_onslot).toEqual([0, 0, 0, 0, 0]);
     expect(data.api_ship_data.api_set_ship.api_id).toBe(target.id);
-    expect(data.api_ship_data.api_set_ship.api_slot).toEqual([-1, fighter.id, -1, -1, -1]);
-    expect(data.api_ship_data.api_set_ship.api_onslot).toEqual([0, 20, 0, 0, 0]);
+    expect(data.api_ship_data.api_set_ship.api_slot).toEqual([fighter.id, -1, -1, -1, -1]);
+    expect(data.api_ship_data.api_set_ship.api_onslot).toEqual([20, 0, 0, 0, 0]);
     expect(data.api_bauxite).toEqual(expect.any(Number));
+  });
+
+  it("uses the actual first available target slot when depriving equipment into a gapped ship", async () => {
+    const source = store.createShip(466);
+    const target = store.createShip(466);
+    const movedFighter = store.createSlotItem(20);
+    const existingFighter = store.createSlotItem(20);
+
+    await post("api_req_kaisou/slotset", { api_id: source.id, api_slot_idx: 0, api_item_id: movedFighter.id });
+    store.db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?").run(
+      JSON.stringify([-1, -1, -1, existingFighter.id, -1]),
+      JSON.stringify([0, 0, 0, 9, 0]),
+      target.id
+    );
+
+    const response = await post("api_req_kaisou/slot_deprive", {
+      api_unset_ship: source.id,
+      api_unset_idx: 0,
+      api_unset_slot_kind: 0,
+      api_set_ship: target.id,
+      api_set_idx: 3,
+      api_set_slot_kind: 0
+    });
+    const data = response.json().api_data;
+
+    expect(response.statusCode).toBe(200);
+    expect(data.api_ship_data.api_set_ship.api_slot).toEqual([movedFighter.id, existingFighter.id, -1, -1, -1]);
+    expect(data.api_ship_data.api_set_ship.api_onslot).toEqual([34, 21, 0, 0, 0]);
+    expect(data.api_unset_list).toBeUndefined();
   });
 
   it("returns equipment preset records in the remodel client payload shape", async () => {
@@ -2937,7 +3001,7 @@ describe("local kcsapi endpoints", () => {
     expect(battleData.api_kouku).toMatchObject({
       api_plane_from: [[1], []],
       api_stage1: {
-        api_f_count: 52,
+        api_f_count: 40,
         api_f_lostcount: expect.any(Number),
         api_e_count: 0,
         api_e_lostcount: 0,
@@ -2960,9 +3024,9 @@ describe("local kcsapi endpoints", () => {
     await post("api_req_sortie/battleresult");
     const afterShips = (await post("api_get_member/ship2")).json().api_data;
     const akagiAfter = afterShips.find((ship: any) => ship.api_id === akagi.id);
-    expect(akagiAfter.api_onslot[0] + akagiAfter.api_onslot[2]).toBeLessThan(52);
+    expect(akagiAfter.api_onslot[0] + akagiAfter.api_onslot[1]).toBeLessThan(40);
 
-    const missingAircraft = 52 - akagiAfter.api_onslot[0] - akagiAfter.api_onslot[2];
+    const missingAircraft = 40 - akagiAfter.api_onslot[0] - akagiAfter.api_onslot[1];
     const beforeSupply = store.getSave();
     const charge = await post("api_req_hokyu/charge", {
       api_id_items: String(akagi.id),
@@ -2972,7 +3036,7 @@ describe("local kcsapi endpoints", () => {
     const chargeData = charge.json().api_data;
     const suppliedAkagi = chargeData.api_ship.find((ship: any) => ship.api_id === akagi.id);
 
-    expect(suppliedAkagi.api_onslot).toEqual([20, 0, 32, 0, 0]);
+    expect(suppliedAkagi.api_onslot).toEqual([20, 20, 0, 0, 0]);
     expect(store.getSave().materials.bauxite).toBe(beforeSupply.materials.bauxite - missingAircraft * 5);
     expect(chargeData.api_use_bou).toBe(1);
   });
