@@ -58,7 +58,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return reply.code(status).header("cache-control", "no-store").type(contentType).send(serialized);
   };
 
-  registerDebugRoutes(app, options.stateStore, sendApi);
+  registerDebugRoutes(app, options.stateStore, resourceManifest, sendApi);
 
   app.get("/", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(renderLauncher());
@@ -111,7 +111,10 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     return reply
       .type("application/javascript; charset=utf-8")
       .header("cache-control", "no-store")
-      .send(patchKcsMainJs(await readFile(path.join(options.cacheDir, "kcs2/js/main.js"), "utf8")));
+      .send(patchKcsMainJs(
+        await readFile(path.join(options.cacheDir, "kcs2/js/main.js"), "utf8"),
+        { activeEventAreaId: options.stateStore.getActiveEventAreaId() }
+      ));
   });
 
   app.get("/kcsapi/api_world/get_id/:viewerId/:server/:timestamp", async (_request, reply) => {

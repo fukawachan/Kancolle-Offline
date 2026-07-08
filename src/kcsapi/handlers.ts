@@ -78,6 +78,17 @@ import {
   remodelSlotDetailPayload,
   remodelSlotListPayload
 } from "./improvement.js";
+import {
+  eventBossNodeNo,
+  eventDefinition,
+  eventMapBgmMaster,
+  eventMapCellColor,
+  eventMapMasters,
+  eventRankDefinition,
+  eventRoutingMap,
+  eventRoutingNodeData,
+  eventSortieNodeData
+} from "../master/event-data.js";
 
 export type HandlerContext = {
   stateStore: StateStore;
@@ -101,7 +112,7 @@ const RECORD_SLOT_ITEM_DISPLAY_BONUS = 3;
 const MAX_FURNITURE_COUNT = 200;
 const MATERIAL_CAP = 1_000_000;
 
-register("api_start2/getData", (_input, context) => apiOk(masterDataWithResources(context.resourceManifest)));
+register("api_start2/getData", (_input, context) => apiOk(masterDataWithResources(context.resourceManifest, activeEventAreaId(context))));
 register("api_start2/get_option_setting", (_input, context) => {
   const options = context.stateStore.getSave().player.options;
   return apiOk(toOptionSetting(options));
@@ -764,7 +775,28 @@ register("api_req_sortie/goback_port", (_input, context) => {
   return apiOk(toPort(context.stateStore.getSave(), context.resourceManifest));
 });
 register("api_req_map/anchorage_repair", () => apiOk({ api_repair_flag: 0 }));
-register("api_req_map/select_eventmap_rank", () => apiOk({ api_select_rank: 0 }));
+register("api_req_map/select_eventmap_rank", (input, context) => {
+  const result = context.stateStore.selectEventMapRank(
+    num(input.body.api_maparea_id, 0),
+    num(input.body.api_map_no ?? input.body.api_mapinfo_no, 0),
+    num(input.body.api_rank, 3)
+  );
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  const rank = eventRankDefinition(result.eventMap, result.rank);
+  return apiOk({
+    api_maphp: {
+      api_gauge_num: 1,
+      api_gauge_type: 1,
+      api_max_maphp: rank.maxMapHp,
+      api_now_maphp: result.map.gauge
+    },
+    api_s_no: result.map.cleared,
+    api_m10: 0,
+    api_sally_flag: [...result.eventMap.sallyFlag],
+    api_air_base_decks: result.eventMap.airBaseDecks,
+    api_select_rank: result.rank
+  });
+});
 register("api_req_map/start_air_base", (input, context) => {
   const areaId = num(input.body.api_area_id ?? input.body.api_maparea_id, 1);
   const airBases = context.stateStore.openAirBaseArea(areaId);
@@ -997,12 +1029,18 @@ async function recordUnknown(input: HandlerInput, context: HandlerContext) {
   );
 }
 
-function masterDataWithResources(resourceManifest: ResourceManifest) {
+function activeEventAreaId(context: HandlerContext) {
+  return typeof context.stateStore.getActiveEventAreaId === "function"
+    ? context.stateStore.getActiveEventAreaId()
+    : null;
+}
+
+function masterDataWithResources(resourceManifest: ResourceManifest, activeEventAreaId: number | null = null) {
   const rawShips = buildShipMasters(resourceManifest);
   const shipIds = new Set(rawShips.map((ship) => ship.api_id));
   const ships = sanitizeShipRemodelTargets(rawShips, shipIds, resourceManifest);
   const slotItems = buildSlotMasters(resourceManifest);
-  const mapInfos = mapInfoMasters(resourceManifest);
+  const mapInfos = mapInfoMasters(resourceManifest, activeEventAreaId);
   return {
     ...masterData,
     api_mst_ship: ships,
@@ -1013,7 +1051,7 @@ function masterDataWithResources(resourceManifest: ResourceManifest) {
     api_mst_shipgraph: shipGraph(resourceManifest, ships),
     api_mst_furnituregraph: furnitureGraph(resourceManifest),
     api_mst_bgm: bgmMaster(resourceManifest),
-    api_mst_maparea: mapAreaMasters(mapInfos),
+    api_mst_maparea: mapAreaMasters(mapInfos, activeEventAreaId),
     api_mst_mapinfo: mapInfos,
     api_mst_mapbgm: mapBgmMasters(resourceManifest, mapInfos),
     api_mst_mapcell: mapCellMasters(resourceManifest, mapInfos)
@@ -1217,14 +1255,21 @@ function chartAdditionalInfo(save: SaveState) {
   };
 }
 
-function mapInfoMasters(resourceManifest: ResourceManifest) {
+function mapInfoMasters(resourceManifest: ResourceManifest, activeEventAreaId: number | null = null) {
   const cacheBackedIds = new Set(resourceManifest.map.thumbnail.keys());
-  return masterData.api_mst_mapinfo.filter((map) => cacheBackedIds.has(map.api_id));
+  const normalMaps = masterData.api_mst_mapinfo.filter((map) => cacheBackedIds.has(map.api_id));
+  return activeEventAreaId == null
+    ? normalMaps
+    : [...normalMaps, ...eventMapMasters(activeEventAreaId, resourceManifest)];
 }
 
-function mapAreaMasters(mapInfos: typeof masterData.api_mst_mapinfo) {
+function mapAreaMasters(mapInfos: typeof masterData.api_mst_mapinfo, activeEventAreaId: number | null = null) {
   const areaIds = new Set(mapInfos.map((map) => map.api_maparea_id));
-  return masterData.api_mst_maparea.filter((area) => areaIds.has(area.api_id));
+  const normalAreas = masterData.api_mst_maparea.filter((area) => areaIds.has(area.api_id));
+  const event = activeEventAreaId == null ? undefined : eventDefinition(activeEventAreaId);
+  return event && areaIds.has(event.areaId)
+    ? [...normalAreas, { api_id: event.areaId, api_name: event.name, api_type: 1 }]
+    : normalAreas;
 }
 
 function mapBgmMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
@@ -1232,12 +1277,14 @@ function mapBgmMasters(resourceManifest: ResourceManifest, mapInfos: typeof mast
   const defaultMap = existingBattleBgmPair(resourceManifest, [155, 2], [1, 2]);
   const defaultBoss = existingBattleBgmPair(resourceManifest, [156, 156], [2, 2]);
   return mapInfos.map((map) => ({
-    api_id: map.api_id,
-    api_maparea_id: map.api_maparea_id,
-    api_no: map.api_no,
-    api_moving_bgm: defaultMoving,
-    api_map_bgm: map.api_id === 11 ? defaultMap : existingBattleBgmPair(resourceManifest, [1, 2], defaultMap),
-    api_boss_bgm: map.api_id === 11 ? defaultBoss : existingBattleBgmPair(resourceManifest, [2, 2], defaultBoss)
+    ...(eventMapBgm(map) ?? {
+      api_id: map.api_id,
+      api_maparea_id: map.api_maparea_id,
+      api_no: map.api_no,
+      api_moving_bgm: defaultMoving,
+      api_map_bgm: map.api_id === 11 ? defaultMap : existingBattleBgmPair(resourceManifest, [1, 2], defaultMap),
+      api_boss_bgm: map.api_id === 11 ? defaultBoss : existingBattleBgmPair(resourceManifest, [2, 2], defaultBoss)
+    })
   }));
 }
 
@@ -1255,10 +1302,15 @@ function firstExistingBattleBgm(resourceManifest: ResourceManifest, ids: number[
   return [...resourceManifest.bgm.battle.keys()].filter((id) => id > 0).sort((a, b) => a - b)[0] ?? 1;
 }
 
+function eventMapBgm(map: { api_id: number; api_maparea_id: number; api_no: number }) {
+  const eventMap = eventDefinition(map.api_maparea_id)?.maps.find((candidate) => candidate.id === map.api_id);
+  return eventMap ? eventMapBgmMaster(eventMap) : null;
+}
+
 function mapCellMasters(resourceManifest: ResourceManifest, mapInfos: typeof masterData.api_mst_mapinfo) {
   return mapInfos.flatMap((map) => {
     const spots = mapSpots(resourceManifest, map.api_maparea_id, map.api_no);
-    const fallbackBossCellNo = sortieBossNodeNo(map.api_maparea_id, map.api_no) ?? lastCellNo(spots);
+    const fallbackBossCellNo = eventBossNodeNo(map.api_maparea_id, map.api_no) ?? sortieBossNodeNo(map.api_maparea_id, map.api_no) ?? lastCellNo(spots);
     return spots.map((spot) => ({
       api_id: map.api_id * 100 + spot.no,
       api_maparea_id: map.api_maparea_id,
@@ -1311,9 +1363,9 @@ function mapNode(
 ) {
   const spots = mapSpots(resourceManifest, areaId, mapNo);
   const lastMapCellNo = lastCellNo(spots);
-  const bossCellNo = sortieBossNodeNo(areaId, mapNo) ?? lastMapCellNo;
+  const bossCellNo = eventBossNodeNo(areaId, mapNo) ?? sortieBossNodeNo(areaId, mapNo) ?? lastMapCellNo;
   const currentNode = node > 0 ? node : firstSortieCellNo(spots);
-  const sortieNode = sortieNodeData(areaId, mapNo, currentNode);
+  const sortieNode = eventSortieNodeData(areaId, mapNo, currentNode) ?? sortieNodeData(areaId, mapNo, currentNode);
   const routingNode = routingNodeData(areaId, mapNo, currentNode);
   const colorNo = sortieNode?.colorNo ?? routingNode?.colorNo ?? mapCellColor(currentNode, bossCellNo);
   return {
@@ -1363,15 +1415,16 @@ function mapCellColor(cellNo: number, bossCellNo: number) {
 }
 
 function mapCellColorFor(areaId: number, mapNo: number, cellNo: number, bossCellNo: number) {
-  return sortieNodeData(areaId, mapNo, cellNo)?.colorNo
+  return eventMapCellColor(areaId, mapNo, cellNo)
+    ?? sortieNodeData(areaId, mapNo, cellNo)?.colorNo
     ?? routingNodeData(areaId, mapNo, cellNo)?.colorNo
     ?? mapCellColor(cellNo, bossCellNo);
 }
 
 function routingNodeData(areaId: number, mapNo: number, cellNo: number) {
-  const map = normalRoutingMap(areaId, mapNo);
+  const map = eventRoutingMap(areaId, mapNo) ?? normalRoutingMap(areaId, mapNo);
   const point = map?.edges.find((edge) => edge.no === cellNo)?.to;
-  return point ? map?.nodes?.[point] : undefined;
+  return eventRoutingNodeData(areaId, mapNo, cellNo) ?? (point ? map?.nodes?.[point] : undefined);
 }
 
 function recordedBattlePayload(input: HandlerInput, context: HandlerContext, endpoint: BattleEndpointKind = "sortieDay") {

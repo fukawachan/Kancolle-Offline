@@ -2862,6 +2862,87 @@ describe("local kcsapi endpoints", () => {
     expect(maps.map((map: any) => map.api_id)).not.toContain(56);
   });
 
+  it("exposes and plays the active 061 event maps through the normal game APIs", async () => {
+    const inactiveStart2 = (await post("api_start2/getData")).json().api_data;
+    expect(inactiveStart2.api_mst_mapinfo.map((map: any) => map.api_id)).not.toContain(611);
+
+    const activated = await app.inject({
+      method: "POST",
+      url: "/debug/api/events/active",
+      payload: { areaId: 61 }
+    });
+    expect(activated.statusCode).toBe(200);
+
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    expect(start2.api_mst_maparea).toEqual(
+      expect.arrayContaining([expect.objectContaining({ api_id: 61, api_type: 1 })])
+    );
+    expect(start2.api_mst_mapinfo).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ api_id: 611, api_maparea_id: 61, api_no: 1 }),
+        expect.objectContaining({ api_id: 612, api_maparea_id: 61, api_no: 2 }),
+        expect.objectContaining({ api_id: 613, api_maparea_id: 61, api_no: 3 })
+      ])
+    );
+    expect(start2.api_mst_mapinfo.map((map: any) => map.api_id)).not.toContain(614);
+
+    const selected = await post("api_req_map/select_eventmap_rank", {
+      api_maparea_id: 61,
+      api_map_no: 1,
+      api_rank: 3
+    });
+    expect(selected.statusCode).toBe(200);
+    expect(selected.json().api_data).toMatchObject({
+      api_select_rank: 3,
+      api_sally_flag: [1, 0, 0],
+      api_air_base_decks: 1,
+      api_maphp: {
+        api_gauge_num: 1,
+        api_gauge_type: 1,
+        api_max_maphp: expect.any(Number),
+        api_now_maphp: expect.any(Number)
+      }
+    });
+
+    const eventMap = (await post("api_get_member/mapinfo")).json().api_data.api_map_info
+      .find((map: any) => map.api_id === 611);
+    expect(eventMap).toMatchObject({
+      api_maparea_id: 61,
+      api_no: 1,
+      api_eventmap: {
+        api_selected_rank: 3,
+        api_max_maphp: expect.any(Number),
+        api_now_maphp: expect.any(Number)
+      }
+    });
+    const beforeGauge = eventMap.api_eventmap.api_now_maphp;
+
+    const start = await post("api_req_map/start", {
+      api_maparea_id: 61,
+      api_mapinfo_no: 1,
+      api_deck_id: 1
+    });
+    expect(start.statusCode).toBe(200);
+    expect(start.json().api_data).toMatchObject({ api_maparea_id: 61, api_mapinfo_no: 1 });
+
+    const session = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = 1")
+      .run(28, JSON.stringify({ ...session.state, point: "V" }));
+
+    const battle = await post("api_req_sortie/battle", { api_formation: 1 });
+    expect(battle.statusCode).toBe(200);
+    expect(battle.json().api_data.api_ship_ke.some((id: number) => id > 0)).toBe(true);
+
+    const result = await post("api_req_sortie/battleresult");
+    expect(result.statusCode).toBe(200);
+    expect(isVictoryRank(result.json().api_data.api_win_rank)).toBe(true);
+
+    const afterMap = (await post("api_get_member/mapinfo")).json().api_data.api_map_info
+      .find((map: any) => map.api_id === 611);
+    expect(afterMap.api_eventmap.api_now_maphp).toBeLessThan(beforeGauge);
+    expect((await post("api_get_member/ship2")).json().api_data[0].api_sally_area).toBe(1);
+  });
+
   it("serializes multi-stage map gauges using the current real stage", async () => {
     const initialMaps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
     expect(initialMaps.find((map: any) => map.api_id === 72)).toMatchObject({

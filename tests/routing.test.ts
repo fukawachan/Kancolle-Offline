@@ -405,6 +405,7 @@ function saveWithLos(): SaveState {
         ammo: 10,
         maxAmmo: 10,
         locked: 0,
+        sallyArea: 0,
         slotIds: [1, -1, -1, -1, -1],
         onSlot: [0, 0, 0, 0, 0],
         exSlotId: -1,
@@ -434,6 +435,7 @@ function saveWithLos(): SaveState {
     expeditionProgress: [],
     expeditionRuns: [],
     expeditionSettings: { fixedSeed: null, clockOffsetMs: 0, unlockAll: 0 },
+    eventSettings: { activeAreaId: null },
     recordStats: { battleWin: 0, battleLose: 0, practiceWin: 0, practiceLose: 0, missionCount: 0, missionSuccess: 0 },
     useItems: []
   };

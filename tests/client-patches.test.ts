@@ -17,4 +17,16 @@ describe("cached client compatibility patches", () => {
     expect(patched).toContain("__updateSlot__");
     expect(patched.match(/__updateSlot__/g)).toHaveLength(originalUpdateSlotCalls.length + 1);
   });
+
+  it("patches the cached client event area id when an event is active", async () => {
+    const source = await readFile(path.resolve("cache/kcs2/js/main.js"), "utf8");
+
+    const inactive = patchKcsMainJs(source, { activeEventAreaId: null });
+    const active = patchKcsMainJs(source, { activeEventAreaId: 61 });
+
+    expect(inactive).toContain("__KANCOLLE_LOCAL_EVENT_AREA_PATCH__");
+    expect(inactive).toContain("_0x401221[_0x27624d(0x1a1f)]=-0x1/*__KANCOLLE_LOCAL_EVENT_AREA_PATCH__*/");
+    expect(active).toContain("__KANCOLLE_LOCAL_EVENT_AREA_PATCH__");
+    expect(active).toContain("_0x401221[_0x27624d(0x1a1f)]=0x3d/*__KANCOLLE_LOCAL_EVENT_AREA_PATCH__*/");
+  });
 });

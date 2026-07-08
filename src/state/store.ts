@@ -17,6 +17,17 @@ import {
   terminalMapPhase,
   type MapPhaseCondition
 } from "../master/map-progress.js";
+import {
+  eventDefinition,
+  eventInitialMapGauge,
+  eventMapById,
+  eventMapClearRewards,
+  eventMapIds,
+  eventMapPhaseDefinitions,
+  eventRoutingMap,
+  eventTerminalMapPhase,
+  validateEventPackage
+} from "../master/event-data.js";
 import { normalRoutingMap } from "../master/routing-data.js";
 import { EXPEDITION_DEFINITIONS, EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { QUEST_BY_ID, QUEST_DEFINITIONS, type QuestDefinition, type QuestReward } from "../master/quest-data.js";
@@ -87,6 +98,7 @@ import type {
   ExpeditionProgress,
   ExpeditionRun,
   ExpeditionSettings,
+  EventSettings,
   FurnitureState,
   JsonObject,
   MapState,
@@ -195,7 +207,7 @@ const defaultOptions: PlayerOptions = {
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -329,6 +341,10 @@ export function createStateStore(options: StateStoreOptions) {
     getWorldId: () => getWorldId(db),
     registerAccount: (worldId: number) => registerAccount(db, worldId),
     getSave: () => getSave(db),
+    getActiveEventAreaId: () => getEventSettings(db).activeAreaId,
+    setActiveEventArea: (areaId: number | null) => setActiveEventArea(db, areaId),
+    resetEventProgress: (areaId: number) => resetEventProgress(db, areaId),
+    selectEventMapRank: (areaId: number, mapNo: number, rank: number) => selectEventMapRank(db, areaId, mapNo, rank),
     updateNickname: (nickname: string) => {
       db.prepare("UPDATE players SET nickname = ? WHERE id = 1").run(nickname || "Local Admiral");
       return getSave(db).player;
@@ -983,10 +999,17 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       const map = save.maps.find((item) => item.id === mapMasterId(areaId, mapNo));
       const deck = save.decks.find((item) => item.id === deckId);
-      const routingMap = normalRoutingMap(areaId, mapNo);
+      const routingMap = sortieRoutingMap(areaId, mapNo, getEventSettings(db).activeAreaId);
       if (!map || map.unlocked !== 1 || !deck || !routingMap) return null;
+      const eventMap = activeEventMapForSortie(db, areaId, mapNo);
+      if (eventMap) {
+        if (map.selectedRank <= 0) return null;
+        const lockResult = applyEventShipLocks(db, deck.shipIds, eventMap.sallyArea, map.selectedRank);
+        if (!lockResult.ok) return null;
+      }
       const seed = Number(`${Date.now()}`.slice(-8));
-      const fleet = buildRoutingFleet(save, deckId);
+      const nextSave = eventMap ? getSave(db) : save;
+      const fleet = buildRoutingFleet(nextSave, deckId);
       const phase = map.phase || 1;
       const initial = evaluateRoute(routingMap, {
         fleet,
@@ -994,7 +1017,7 @@ export function createStateStore(options: StateStoreOptions) {
         step: 0,
         phase,
         from: "Start",
-        playerLevel: save.player.level
+        playerLevel: nextSave.player.level
       });
       if (initial.kind !== "route") throw new Error(`Map ${routingMap.mapId} cannot start with active route selection`);
       db.prepare("DELETE FROM sortie_sessions").run();
@@ -1006,7 +1029,7 @@ export function createStateStore(options: StateStoreOptions) {
         routeStep: 1,
         visited: ["Start", initial.to],
         fleet,
-        playerLevel: save.player.level,
+        playerLevel: nextSave.player.level,
         phase
       }));
       return getSave(db).sortieSession;
@@ -1830,6 +1853,13 @@ function ensureExpeditionSettings(db: Database.Database) {
   `).run();
 }
 
+function ensureEventSettings(db: Database.Database) {
+  db.prepare(`
+    INSERT OR IGNORE INTO event_settings (id, active_area_id)
+    VALUES (1, NULL)
+  `).run();
+}
+
 function ensureRecordStats(db: Database.Database) {
   const row = db.prepare("SELECT COALESCE(SUM(completed_count), 0) AS completed FROM expedition_progress").get() as Row;
   const completed = Math.max(0, Math.trunc(safeNum(row.completed)));
@@ -1946,7 +1976,7 @@ function previewSortieRoute(db: Database.Database): RouteEvaluation | null {
   const save = getSave(db);
   const session = save.sortieSession;
   if (!session) return null;
-  const routingMap = normalRoutingMap(session.areaId, session.mapNo);
+  const routingMap = sortieRoutingMap(session.areaId, session.mapNo, save.eventSettings.activeAreaId);
   const point = typeof session.state.point === "string" ? session.state.point : "";
   if (!routingMap || !point || !routingMap.edges.some((edge) => edge.from === point)) return null;
   const fleet = session.state.fleet as unknown as RoutingFleet;
@@ -1974,7 +2004,7 @@ function advanceSortieRoute(db: Database.Database, selectedEdgeNo?: number) {
   if (!preview) return session;
 
   const point = String(session.state.point ?? "");
-  const routingMap = normalRoutingMap(session.areaId, session.mapNo)!;
+  const routingMap = sortieRoutingMap(session.areaId, session.mapNo, save.eventSettings.activeAreaId)!;
   let next = preview;
   if (preview.kind === "select") {
     if (selectedEdgeNo == null) throw new Error("api_cell_id is required at an active route selection");
@@ -2111,13 +2141,16 @@ function applyMapProgress(db: Database.Database, record: BattleRecord) {
   const map = db.prepare("SELECT * FROM maps WHERE id = ?").get(sortie.mapId) as Row | undefined;
   if (!map || Number(map.cleared) === 1) return;
 
-  const stages = mapPhaseDefinitions(sortie.mapId);
+  const selectedRank = Math.trunc(safeNum(map.selected_rank, 0));
+  const stages = eventMapById(sortie.mapId)
+    ? eventMapPhaseDefinitions(sortie.mapId, selectedRank)
+    : mapPhaseDefinitions(sortie.mapId);
   if (!stages) {
     if (!sortie.isBoss || !enemyFlagshipSunk(record)) return;
     const nextGauge = Math.max(0, Number(map.gauge) - 1);
     db.prepare("UPDATE maps SET cleared = ?, gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
       .run(nextGauge === 0 ? 1 : 0, nextGauge, nextGauge === 0 ? 2 : 1, sortie.mapId);
-    if (nextGauge === 0) awardMapClearReward(db, sortie.mapId);
+    if (nextGauge === 0) awardMapClearReward(db, sortie.mapId, selectedRank);
     return;
   }
 
@@ -2136,14 +2169,22 @@ function applyMapProgress(db: Database.Database, record: BattleRecord) {
   if (!nextStage) {
     db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = ?, phase_progress = 0 WHERE id = ?")
       .run(stages.length + 1, sortie.mapId);
-    awardMapClearReward(db, sortie.mapId);
+    awardMapClearReward(db, sortie.mapId, selectedRank);
     return;
   }
   db.prepare("UPDATE maps SET gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
     .run(nextStage.required, phase + 1, sortie.mapId);
 }
 
-function awardMapClearReward(db: Database.Database, mapId: number) {
+function awardMapClearReward(db: Database.Database, mapId: number, selectedRank = 0) {
+  const eventRewards = eventMapClearRewards(mapId, selectedRank);
+  if (eventRewards.length > 0) {
+    for (const reward of eventRewards) {
+      if (reward.kind === "useitem") addUseItem(db, reward.id, reward.count);
+      if (reward.kind === "material") addMaterials(db, { [reward.material]: reward.count });
+    }
+    return;
+  }
   addUseItem(db, MEDAL_USEITEM_ID, mapMedalRewardCount(mapId));
 }
 
@@ -2514,6 +2555,7 @@ function migrate(db: Database.Database) {
   if (currentVersion < 16) migrateToV16(db);
   if (currentVersion < 17) migrateToV17(db);
   if (currentVersion < 18) migrateToV18(db);
+  if (currentVersion < 19) migrateToV19(db);
   db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
   repairShipMaxValues(db);
   repairShipOnSlotValues(db);
@@ -2614,6 +2656,16 @@ function migrateToV18(db: Database.Database) {
     db.prepare("ALTER TABLE maps ADD COLUMN period_key TEXT NOT NULL DEFAULT ''").run();
   }
   refreshMapPeriods(db);
+}
+
+function migrateToV19(db: Database.Database) {
+  if (!columnExists(db, "maps", "selected_rank")) {
+    db.prepare("ALTER TABLE maps ADD COLUMN selected_rank INTEGER NOT NULL DEFAULT 0").run();
+  }
+  if (!columnExists(db, "ships", "sally_area")) {
+    db.prepare("ALTER TABLE ships ADD COLUMN sally_area INTEGER NOT NULL DEFAULT 0").run();
+  }
+  ensureEventSettings(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2848,7 +2900,7 @@ function repairMaps(db: Database.Database) {
     db.prepare("DELETE FROM maps WHERE id = 1").run();
   }
 
-  const supportedMapIds = new Set(masterData.api_mst_mapinfo.map((map) => map.api_id));
+  const supportedMapIds = new Set([...masterData.api_mst_mapinfo.map((map) => map.api_id), ...eventMapIds()]);
   const deleteUnsupported = db.prepare("DELETE FROM maps WHERE id = ?");
   for (const row of db.prepare("SELECT id FROM maps").all() as Row[]) {
     const mapId = Number(row.id);
@@ -2904,6 +2956,7 @@ function schemaVersion(db: Database.Database) {
 function resetSchema(db: Database.Database) {
   db.exec(`
     DROP TABLE IF EXISTS expedition_settings;
+    DROP TABLE IF EXISTS event_settings;
     DROP TABLE IF EXISTS pending_payitems;
     DROP TABLE IF EXISTS record_stats;
     DROP TABLE IF EXISTS preset_decks;
@@ -2978,6 +3031,7 @@ function createSchema(db: Database.Database) {
       ammo INTEGER NOT NULL,
       max_ammo INTEGER NOT NULL,
       locked INTEGER NOT NULL,
+      sally_area INTEGER NOT NULL DEFAULT 0,
       slot_ids_json TEXT NOT NULL,
       onslot_json TEXT NOT NULL,
       ex_slot_id INTEGER NOT NULL,
@@ -3057,6 +3111,7 @@ function createSchema(db: Database.Database) {
       unlocked INTEGER NOT NULL,
       cleared INTEGER NOT NULL,
       gauge INTEGER NOT NULL,
+      selected_rank INTEGER NOT NULL DEFAULT 0,
       phase INTEGER NOT NULL DEFAULT 1,
       phase_progress INTEGER NOT NULL DEFAULT 0,
       period_key TEXT NOT NULL DEFAULT ''
@@ -3129,6 +3184,10 @@ function createSchema(db: Database.Database) {
       clock_offset_ms INTEGER NOT NULL,
       unlock_all INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS event_settings (
+      id INTEGER PRIMARY KEY,
+      active_area_id INTEGER
+    );
     CREATE TABLE IF NOT EXISTS record_stats (
       id INTEGER PRIMARY KEY,
       battle_win INTEGER NOT NULL,
@@ -3149,6 +3208,73 @@ function hasAccount(db: Database.Database) {
 function getWorldId(db: Database.Database) {
   const row = db.prepare("SELECT world_id FROM players WHERE id = 1").get() as Row | undefined;
   return row ? Number(row.world_id) : 0;
+}
+
+function getEventSettings(db: Database.Database): EventSettings {
+  ensureEventSettings(db);
+  const row = db.prepare("SELECT active_area_id FROM event_settings WHERE id = 1").get() as Row | undefined;
+  const activeAreaId = row?.active_area_id == null ? null : Math.trunc(safeNum(row.active_area_id));
+  return { activeAreaId: activeAreaId && eventDefinition(activeAreaId) ? activeAreaId : null };
+}
+
+function setActiveEventArea(db: Database.Database, areaId: number | null) {
+  ensureEventSettings(db);
+  if (areaId == null || Math.trunc(safeNum(areaId)) <= 0) {
+    db.prepare("UPDATE event_settings SET active_area_id = NULL WHERE id = 1").run();
+    return { ok: true as const, activeAreaId: null };
+  }
+
+  const normalizedAreaId = Math.trunc(safeNum(areaId));
+  const validation = validateEventPackage(normalizedAreaId);
+  if (!validation.ok) return validation;
+
+  seedEventMaps(db, validation.event.areaId);
+  ensureEventAirBases(db, validation.event.areaId);
+  db.prepare("UPDATE event_settings SET active_area_id = ? WHERE id = 1").run(validation.event.areaId);
+  return { ok: true as const, activeAreaId: validation.event.areaId, event: validation.event };
+}
+
+function resetEventProgress(db: Database.Database, areaId: number) {
+  const event = eventDefinition(areaId);
+  if (!event) return { ok: false as const, error: `Event area ${areaId} has no local event package` };
+  const tx = db.transaction(() => {
+    seedEventMaps(db, event.areaId);
+    for (const map of event.maps) {
+      const row = db.prepare("SELECT selected_rank FROM maps WHERE id = ?").get(map.id) as Row | undefined;
+      const selectedRank = Math.max(1, Math.trunc(safeNum(row?.selected_rank, 3)));
+      db.prepare(`
+        UPDATE maps
+        SET unlocked = 1, cleared = 0, gauge = ?, selected_rank = ?, phase = 1, phase_progress = 0, period_key = 'once'
+        WHERE id = ?
+      `).run(eventInitialMapGauge(map.id, selectedRank), selectedRank, map.id);
+    }
+    db.prepare("UPDATE ships SET sally_area = 0 WHERE sally_area IN (?, ?, ?)")
+      .run(...event.maps.map((map) => map.sallyArea).slice(0, 3));
+    db.prepare("DELETE FROM sortie_sessions WHERE area_id = ?").run(event.areaId);
+    ensureEventAirBases(db, event.areaId);
+  });
+  tx();
+  return { ok: true as const, activeAreaId: getEventSettings(db).activeAreaId, maps: getSave(db).maps.filter((map) => map.areaId === event.areaId) };
+}
+
+function selectEventMapRank(db: Database.Database, areaId: number, mapNo: number, rank: number) {
+  const activeAreaId = getEventSettings(db).activeAreaId;
+  const eventMap = activeAreaId === Math.trunc(areaId) ? eventMapById(mapMasterId(areaId, mapNo)) : undefined;
+  if (!eventMap) return { ok: false as const, error: `Event map ${areaId}-${mapNo} is not active` };
+  const selectedRank = Math.max(1, Math.min(4, Math.trunc(safeNum(rank, 3))));
+  const gauge = eventInitialMapGauge(eventMap.id, selectedRank);
+  seedEventMaps(db, eventMap.areaId);
+  ensureEventAirBases(db, eventMap.areaId);
+  db.prepare(`
+    UPDATE maps
+    SET unlocked = 1, cleared = 0, gauge = ?, selected_rank = ?, phase = 1, phase_progress = 0, period_key = 'once'
+    WHERE id = ?
+  `).run(gauge, selectedRank, eventMap.id);
+  const save = getSave(db);
+  const map = save.maps.find((candidate) => candidate.id === eventMap.id);
+  return map
+    ? { ok: true as const, eventMap, map, rank: selectedRank }
+    : { ok: false as const, error: `Event map ${eventMap.id} is missing from save` };
 }
 
 function registerAccount(db: Database.Database, worldId: number): SaveState {
@@ -3218,6 +3344,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
     seedMissingMaps(db);
     seedExpeditionProgress(db);
     ensureExpeditionSettings(db);
+    ensureEventSettings(db);
     ensureRecordStats(db);
   });
   tx();
@@ -3239,6 +3366,7 @@ function getSave(db: Database.Database): SaveState {
   ensureRecordStats(db);
   ensurePresetSlotSettings(db);
   ensurePresetDeckSettings(db);
+  ensureEventSettings(db);
 
   return {
     player: mapPlayer(player),
@@ -3266,6 +3394,7 @@ function getSave(db: Database.Database): SaveState {
     expeditionSettings: mapExpeditionSettings(
       db.prepare("SELECT * FROM expedition_settings WHERE id = 1").get() as Row
     ),
+    eventSettings: getEventSettings(db),
     recordStats: mapRecordStats(db.prepare("SELECT * FROM record_stats WHERE id = 1").get() as Row),
     useItems: (db.prepare("SELECT * FROM use_items ORDER BY id").all() as Row[]).map(mapUseItem)
   };
@@ -3316,6 +3445,7 @@ function mapShip(row: Row): Ship {
     ammo: Number(row.ammo),
     maxAmmo: Number(row.max_ammo),
     locked: Number(row.locked),
+    sallyArea: Math.max(0, Math.trunc(safeNum(row.sally_area))),
     slotIds: parseJson<number[]>(row.slot_ids_json, [-1, -1, -1, -1, -1]),
     onSlot: normalizeFixed(parseJson<number[]>(row.onslot_json, EMPTY_ONSLOT), 5, 0),
     exSlotId: Number(row.ex_slot_id),
@@ -3516,6 +3646,7 @@ function mapMap(row: Row): MapState {
     unlocked: Number(row.unlocked),
     cleared: Number(row.cleared),
     gauge: Number(row.gauge),
+    selectedRank: Math.max(0, Math.trunc(safeNum(row.selected_rank))),
     phase: Number(row.phase ?? 1),
     phaseProgress: Number(row.phase_progress ?? 0),
     periodKey: String(row.period_key ?? currentMapPeriodKey(Number(row.id)))
@@ -4954,9 +5085,14 @@ function consumeBattleSupply(db: Database.Database, shipIds: number[] | undefine
 }
 
 function seedMissingMaps(db: Database.Database) {
-  const insert = db.prepare(
-    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, ?, 1, 0, ?)"
-  );
+  const hasSelectedRank = columnExists(db, "maps", "selected_rank");
+  const insert = hasSelectedRank
+    ? db.prepare(
+        "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, selected_rank, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, ?, 0, 1, 0, ?)"
+      )
+    : db.prepare(
+        "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, ?, 1, 0, ?)"
+      );
   for (const map of masterData.api_mst_mapinfo) {
     insert.run(
       map.api_id,
@@ -4966,4 +5102,48 @@ function seedMissingMaps(db: Database.Database) {
       currentMapPeriodKey(map.api_id)
     );
   }
+}
+
+function seedEventMaps(db: Database.Database, areaId: number) {
+  const event = eventDefinition(areaId);
+  if (!event) return;
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, selected_rank, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, 0, 0, 1, 0, 'once')"
+  );
+  for (const map of event.maps) insert.run(map.id, map.areaId, map.mapNo);
+}
+
+function ensureEventAirBases(db: Database.Database, areaId: number) {
+  const event = eventDefinition(areaId);
+  if (!event) return;
+  const count = Math.max(0, ...event.maps.map((map) => map.airBaseDecks));
+  for (let baseId = 1; baseId <= count; baseId += 1) ensureAirBase(db, event.areaId, baseId);
+}
+
+function activeEventMapForSortie(db: Database.Database, areaId: number, mapNo: number) {
+  return getEventSettings(db).activeAreaId === Math.trunc(areaId)
+    ? eventMapById(mapMasterId(areaId, mapNo))
+    : undefined;
+}
+
+function sortieRoutingMap(areaId: number, mapNo: number, activeEventAreaId: number | null) {
+  return activeEventAreaId === Math.trunc(areaId)
+    ? eventRoutingMap(areaId, mapNo) ?? normalRoutingMap(areaId, mapNo)
+    : normalRoutingMap(areaId, mapNo);
+}
+
+function applyEventShipLocks(db: Database.Database, shipIds: number[], sallyArea: number, selectedRank: number) {
+  const ids = shipIds.filter((shipId) => shipId > 0);
+  if (ids.length === 0) return { ok: false as const, error: "Deck has no ships" };
+  const placeholders = ids.map(() => "?").join(",");
+  const rows = db.prepare(`SELECT id, sally_area FROM ships WHERE id IN (${placeholders})`).all(...ids) as Row[];
+  const strictLocking = selectedRank >= 3;
+  const conflict = strictLocking
+    ? rows.find((row) => Math.trunc(safeNum(row.sally_area)) > 0 && Math.trunc(safeNum(row.sally_area)) !== sallyArea)
+    : undefined;
+  if (conflict) return { ok: false as const, error: `Ship ${conflict.id} has an incompatible sally area` };
+
+  const update = db.prepare("UPDATE ships SET sally_area = ? WHERE id = ? AND sally_area = 0");
+  for (const row of rows) update.run(sallyArea, Number(row.id));
+  return { ok: true as const };
 }

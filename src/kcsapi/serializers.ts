@@ -10,6 +10,13 @@ import {
   mapGaugeStage,
   mapPhaseDefinitions
 } from "../master/map-progress.js";
+import {
+  eventDefinition,
+  eventMapById,
+  eventMapMaster,
+  eventMapPhaseDefinitions,
+  eventRankDefinition
+} from "../master/event-data.js";
 import { effectiveShipSpeedValue } from "../master/ship-speed.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { normalizeDeckShipIds } from "../state/decks.js";
@@ -160,7 +167,7 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4) + ship.marriageLuckBonus, arrVal(master?.api_luck, 1) + equipSum("api_luck")],
     api_locked: ship.locked,
     api_locked_equip: 0,
-    api_sally_area: 0,
+    api_sally_area: ship.sallyArea,
     api_sp_effect_items: [],
     api_slot_ex: ship.exSlotId
   };
@@ -352,7 +359,8 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
     api_log: [],
     api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),
     api_parallel_quest_count: masterData.api_mst_const.api_parallel_quest_max.api_int_value,
-    api_combined_flag: save.player.combinedFleet
+    api_combined_flag: save.player.combinedFleet,
+    api_event_object: toEventObject(save)
   };
 }
 
@@ -440,18 +448,25 @@ export function toUnsetSlotItems(save: SaveState) {
 }
 
 export function toMapInfo(save: SaveState) {
-  return save.maps.map((map) => {
-    const master = masterData.api_mst_mapinfo.find((item) => item.api_id === map.id);
-    const required = mapGaugeRequirement(map.id, map.phase, master?.api_required_defeat_count);
+  const activeEventAreaId = save.eventSettings.activeAreaId;
+  return save.maps
+  .filter((map) => !eventMapById(map.id) || map.areaId === activeEventAreaId)
+  .map((map) => {
+    const eventMap = eventMapById(map.id);
+    const master = eventMap ? eventMapMaster(eventMap) : masterData.api_mst_mapinfo.find((item) => item.api_id === map.id);
+    const required = eventMap
+      ? eventRankDefinition(eventMap, map.selectedRank || 3).maxMapHp
+      : mapGaugeRequirement(map.id, map.phase, master?.api_required_defeat_count);
+    const phaseDefinitions = eventMap ? eventMapPhaseDefinitions(map.id, map.selectedRank || 3) : mapPhaseDefinitions(map.id);
     const gauge = required == null
       ? { api_gauge_num: 1, api_gauge_type: 0, api_required_defeat_count: null }
       : {
-          api_gauge_num: mapGaugeStage(map.id, map.phase),
+          api_gauge_num: eventMap ? 1 : mapGaugeStage(map.id, map.phase),
           api_gauge_type: 1,
           ...(map.cleared === 1
             ? {}
             : {
-                api_defeat_count: mapPhaseDefinitions(map.id)
+                api_defeat_count: phaseDefinitions
                   ? Math.min(required, Math.max(0, Math.trunc(map.phaseProgress)))
                   : Math.min(required, Math.max(0, required - Math.trunc(map.gauge))),
                 api_required_defeat_count: required
@@ -466,9 +481,41 @@ export function toMapInfo(save: SaveState) {
       api_maparea_id: map.areaId,
       api_no: map.mapNo,
       api_sally_flag: master?.api_sally_flag ?? [1, 0, 0],
-      api_eventmap: null
+      api_eventmap: eventMap
+        ? {
+            api_now_maphp: map.cleared === 1 ? 0 : Math.max(0, Math.trunc(map.gauge)),
+            api_max_maphp: required,
+            api_selected_rank: Math.max(0, Math.trunc(map.selectedRank)),
+            api_gauge_num: 1,
+            api_gauge_type: 1,
+            api_s_no: map.cleared === 1 ? 1 : 0,
+            api_m10: 0
+          }
+        : null
     };
   });
+}
+
+function toEventObject(save: SaveState) {
+  const activeAreaId = save.eventSettings.activeAreaId;
+  const event = activeAreaId == null ? undefined : eventDefinition(activeAreaId);
+  if (!event) return null;
+  return {
+    api_area_id: event.areaId,
+    api_name: event.name,
+    api_maps: event.maps.map((eventMap) => {
+      const map = save.maps.find((candidate) => candidate.id === eventMap.id);
+      return {
+        api_id: eventMap.id,
+        api_maparea_id: eventMap.areaId,
+        api_no: eventMap.mapNo,
+        api_selected_rank: map?.selectedRank ?? 0,
+        api_cleared: map?.cleared ?? 0,
+        api_now_maphp: map ? Math.max(0, Math.trunc(map.gauge)) : 0,
+        api_max_maphp: eventRankDefinition(eventMap, map?.selectedRank || 3).maxMapHp
+      };
+    })
+  };
 }
 
 function material(api_id: number, api_value: number) {

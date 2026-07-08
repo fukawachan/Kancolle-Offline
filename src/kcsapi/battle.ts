@@ -8,6 +8,10 @@ import {
   selectSortieEncounter,
   type SortieBattleRank
 } from "../master/sortie-data.js";
+import {
+  selectEventSortieDrop,
+  selectEventSortieEncounter
+} from "../master/event-data.js";
 import { normalizeDeckShipIds } from "../state/decks.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
 import { aaciPattern, selectGenericAaci, type AaciEquipmentSummary } from "./battle/aaci.js";
@@ -1595,6 +1599,12 @@ function battleResult(
     rank: rank as SortieBattleRank,
     seed: sortie.seed,
     enemyFleetKey: sortie.enemyFleetKey
+  }) ?? selectEventSortieDrop({
+    mapId: sortie.mapId,
+    node: sortie.node,
+    rank: rank as SortieBattleRank,
+    seed: sortie.seed,
+    enemyFleetKey: sortie.enemyFleetKey
   });
   return {
     rank,
@@ -1744,7 +1754,8 @@ function friendlyUnit(ship: Ship, slotItems: SlotItem[], position: number): Batt
 function sortieBattleContext(save: SaveState, seed: number): BattleSortieContext | undefined {
   const session = save.sortieSession;
   if (!session) return undefined;
-  const encounter = selectSortieEncounter(session.areaId, session.mapNo, session.node, seed);
+  const encounter = selectEventSortieEncounter(session.areaId, session.mapNo, session.node, seed)
+    ?? selectSortieEncounter(session.areaId, session.mapNo, session.node, seed);
   return encounter ? { ...encounter, seed } : undefined;
 }
 

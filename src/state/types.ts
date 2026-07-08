@@ -49,6 +49,7 @@ export type Ship = {
   ammo: number;
   maxAmmo: number;
   locked: number;
+  sallyArea: number;
   slotIds: number[];
   onSlot: number[];
   exSlotId: number;
@@ -216,9 +217,14 @@ export type MapState = {
   unlocked: number;
   cleared: number;
   gauge: number;
+  selectedRank: number;
   phase: number;
   phaseProgress: number;
   periodKey: string;
+};
+
+export type EventSettings = {
+  activeAreaId: number | null;
 };
 
 export type SortieSession = {
@@ -251,6 +257,7 @@ export type SaveState = {
   expeditionProgress: ExpeditionProgress[];
   expeditionRuns: ExpeditionRun[];
   expeditionSettings: ExpeditionSettings;
+  eventSettings: EventSettings;
   recordStats: RecordStats;
   useItems: UseItemInventory[];
 };

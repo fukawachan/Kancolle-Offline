@@ -195,6 +195,7 @@ export function renderDebugPanel(): string {
       <button id="tab-items" onclick="switchTab('items')">Items</button>
       <button id="tab-materials" onclick="switchTab('materials')">Materials</button>
       <button id="tab-expeditions" onclick="switchTab('expeditions')">Expeditions (63)</button>
+      <button id="tab-events" onclick="switchTab('events')">Events</button>
     </nav>
 
     <!-- Ships Tab -->
@@ -309,6 +310,20 @@ export function renderDebugPanel(): string {
       </div>
     </div>
 
+    <!-- Events Tab -->
+    <div id="panel-events" class="tab-panel">
+      <div class="section">
+        <div class="section-header">Active event area</div>
+        <div class="debug-controls">
+          <button onclick="activateEvent(61)">Enable 061</button>
+          <button onclick="deactivateEvent()">Disable event</button>
+          <button onclick="resetEvent(61)">Reset 061 progress</button>
+        </div>
+        <div id="event-summary" class="section-header"></div>
+        <div id="event-list" class="list"></div>
+      </div>
+    </div>
+
     <div id="status-bar"></div>
 
     <script>
@@ -344,6 +359,7 @@ export function renderDebugPanel(): string {
       searchUseItems();
       refreshMaterials();
       refreshExpeditions();
+      refreshEvents();
 
       // ---- Tab switching ----
       function switchTab(tab) {
@@ -357,6 +373,7 @@ export function renderDebugPanel(): string {
         if (tab === "items") { refreshUseItems(); searchUseItems(); }
         if (tab === "materials") refreshMaterials();
         if (tab === "expeditions") refreshExpeditions();
+        if (tab === "events") refreshEvents();
       }
 
       // ---- Ships ----
@@ -931,6 +948,89 @@ export function renderDebugPanel(): string {
           showStatus("Expedition progress reset.", "success");
           refreshExpeditions();
         } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      // ---- Events ----
+      async function eventRequest(url, body) {
+        const options = { cache: "no-store" };
+        if (body !== undefined) {
+          options.method = "POST";
+          options.headers = { "Content-Type": "application/json" };
+          options.body = JSON.stringify(body);
+        }
+        const response = await fetch(url, options);
+        const json = parseApi(await response.text());
+        if (json.api_result !== 1) throw new Error(json.api_result_msg || "Event debug request failed");
+        return json.api_data;
+      }
+
+      async function refreshEvents() {
+        const list = document.getElementById("event-list");
+        const summary = document.getElementById("event-summary");
+        const restoreScroll = rememberListScroll(list);
+        try {
+          const data = await eventRequest("/debug/api/events/status");
+          summary.textContent = "Active area: " + (data.activeAreaId == null ? "none" : data.activeAreaId) + " | Refresh the game page after changing this.";
+          list.innerHTML = "";
+          for (const event of data.candidates) {
+            const row = document.createElement("div");
+            row.className = "list-row";
+            const mapText = event.maps.map(map =>
+              map.areaId + "-" + map.mapNo +
+              " thumb=" + yesNo(map.hasThumbnail) +
+              " image=" + yesNo(map.hasImage) +
+              " info=" + yesNo(map.hasInfo) +
+              " spots=" + yesNo(map.hasSpots)
+            ).join(" | ");
+            row.innerHTML =
+              '<span class="info"><span class="name">' +
+              esc(event.name) + ' (area ' + event.areaId + ')' +
+              (event.active ? ' active' : '') +
+              '</span> <span class="meta">cache ' + yesNo(event.cacheComplete) +
+              ' | package ' + yesNo(event.packageComplete) +
+              ' | activatable ' + yesNo(event.activatable) +
+              ' | ' + esc(mapText) +
+              '</span></span>' +
+              '<span class="actions">' +
+              '<button class="btn-set" onclick="activateEvent(' + event.areaId + ')" ' + (event.activatable ? '' : 'disabled') + '>Enable</button>' +
+              '<button class="btn-small" onclick="resetEvent(' + event.areaId + ')">Reset</button>' +
+              '</span>';
+            list.appendChild(row);
+          }
+        } catch (err) {
+          list.innerHTML = '<div class="list-empty">' + esc(err.message) + '</div>';
+        } finally {
+          restoreScroll();
+        }
+      }
+
+      async function activateEvent(areaId) {
+        try {
+          await eventRequest("/debug/api/events/active", { areaId });
+          showStatus("Event " + areaId + " enabled. Refresh the game page.", "success");
+          refreshEvents();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      async function deactivateEvent() {
+        try {
+          await eventRequest("/debug/api/events/active", { areaId: null });
+          showStatus("Event disabled. Refresh the game page.", "success");
+          refreshEvents();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      async function resetEvent(areaId) {
+        if (!confirm("Reset event " + areaId + " progress and ship locks?")) return;
+        try {
+          await eventRequest("/debug/api/events/reset", { areaId });
+          showStatus("Event " + areaId + " progress reset.", "success");
+          refreshEvents();
+        } catch (err) { showStatus(err.message, "error"); }
+      }
+
+      function yesNo(value) {
+        return value ? "yes" : "no";
       }
 
       // ---- Status bar ----

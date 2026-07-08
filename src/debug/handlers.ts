@@ -1,8 +1,14 @@
 import { masterData } from "../master/data.js";
 import { EQUIP_TYPES, SHIPS, SLOT_ITEMS, SHIP_TYPES } from "../master/generated-data.js";
 import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
+import {
+  eventDefinition,
+  eventResourceStatus,
+  validateEventPackage
+} from "../master/event-data.js";
 import { apiError, apiOk } from "../kcsapi/envelope.js";
 import { toShip, toSlotItem } from "../kcsapi/serializers.js";
+import type { ResourceManifest } from "../resources/types.js";
 import type { StateStore } from "../state/store.js";
 
 // Slim summary types returned to the frontend
@@ -43,6 +49,55 @@ export type MasterListQuery = {
   stype?: number | string;
   type?: number | string;
 };
+
+export function handleEventStatus(stateStore: StateStore, resourceManifest: ResourceManifest) {
+  const activeAreaId = stateStore.hasAccount() ? stateStore.getActiveEventAreaId() : null;
+  return apiOk({
+    activeAreaId,
+    candidates: eventResourceStatus(resourceManifest, activeAreaId)
+  });
+}
+
+export function handleEventActivation(
+  params: { areaId?: unknown },
+  stateStore: StateStore,
+  resourceManifest: ResourceManifest
+) {
+  const rawAreaId = params.areaId;
+  if (rawAreaId == null || rawAreaId === "" || Number(rawAreaId) <= 0) {
+    const result = stateStore.setActiveEventArea(null);
+    return result.ok
+      ? apiOk({ activeAreaId: null, candidates: eventResourceStatus(resourceManifest, null), message: "Event disabled" })
+      : apiError(result.error, 400);
+  }
+
+  const areaId = Math.trunc(Number(rawAreaId));
+  const validation = validateEventPackage(areaId, resourceManifest);
+  if (!validation.ok) return apiError(validation.error, 400);
+  if (!eventDefinition(areaId)) return apiError(`Unknown event area ${areaId}`, 404);
+  const result = stateStore.setActiveEventArea(areaId);
+  if (!result.ok) return apiError(result.error, 400);
+  return apiOk({
+    activeAreaId: result.activeAreaId,
+    event: result.event ? { areaId: result.event.areaId, name: result.event.name, mapCount: result.event.maps.length } : null,
+    candidates: eventResourceStatus(resourceManifest, result.activeAreaId),
+    message: `Event area ${result.activeAreaId} enabled`
+  });
+}
+
+export function handleEventReset(params: { areaId?: unknown }, stateStore: StateStore) {
+  const areaId = Math.trunc(Number(params.areaId));
+  if (!Number.isFinite(areaId) || areaId <= 0) return apiError("Invalid areaId", 400);
+  const result = stateStore.resetEventProgress(areaId);
+  if (!result.ok) return apiError(result.error, 400);
+  return apiOk({
+    areaId,
+    activeAreaId: result.activeAreaId,
+    resetMaps: result.maps.map((map) => map.id),
+    maps: result.maps,
+    message: `Event area ${areaId} progress reset`
+  });
+}
 
 // Build a lookup for ship type names
 const shipTypeNameMap: Map<number, string> = new Map(

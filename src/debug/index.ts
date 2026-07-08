@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { apiError, apiOk } from "../kcsapi/envelope.js";
+import type { ResourceManifest } from "../resources/types.js";
 import type { StateStore } from "../state/store.js";
 import {
   handleListShipMasters,
@@ -21,12 +22,16 @@ import {
   handleForceCompleteExpedition,
   handleResetExpeditions,
   handleUnlockAllExpeditions,
+  handleEventActivation,
+  handleEventReset,
+  handleEventStatus,
 } from "./handlers.js";
 import { renderDebugPanel } from "./panel.js";
 
 export function registerDebugRoutes(
   app: FastifyInstance,
   stateStore: StateStore,
+  resourceManifest: ResourceManifest,
   sendApi: (reply: FastifyReply, payload: unknown) => ReturnType<FastifyReply["send"]>
 ): void {
   // HTML debug panel page
@@ -253,6 +258,36 @@ export function registerDebugRoutes(
       return sendApi(
         reply,
         handleForceCompleteExpedition((request.body ?? {}) as Record<string, unknown>, stateStore)
+      );
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.get("/debug/api/events/status", async (_request, reply) => {
+    try {
+      return sendApi(reply, handleEventStatus(stateStore, resourceManifest));
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.post("/debug/api/events/active", async (request, reply) => {
+    try {
+      return sendApi(
+        reply,
+        handleEventActivation((request.body ?? {}) as Record<string, unknown>, stateStore, resourceManifest)
+      );
+    } catch (err) {
+      return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));
+    }
+  });
+
+  app.post("/debug/api/events/reset", async (request, reply) => {
+    try {
+      return sendApi(
+        reply,
+        handleEventReset((request.body ?? {}) as Record<string, unknown>, stateStore)
       );
     } catch (err) {
       return sendApi(reply, apiError(err instanceof Error ? err.message : "Internal error", 500));

@@ -1,0 +1,107 @@
+{
+  "generatedAt": "2026-07-08T00:00:00.000Z",
+  "sources": {
+    "cache": "cache/kcs2/resources/map/061",
+    "kcnav": "https://tsunkit.net/nav/"
+  },
+  "events": [
+    {
+      "areaId": 61,
+      "name": "Local Event Area 061",
+      "maps": [
+        {
+          "id": 611,
+          "areaId": 61,
+          "mapNo": 1,
+          "name": "E-1",
+          "operation": "Event Operation E-1",
+          "infoText": "Local cached event map 061-1.",
+          "level": 5,
+          "sallyFlag": [1, 0, 0],
+          "sallyArea": 1,
+          "airBaseDecks": 1,
+          "bgm": { "moving": 154, "map": [155, 155], "boss": [156, 156] },
+          "phaseBreakpoints": [17, 20, 26],
+          "ranks": {
+            "1": { "maxMapHp": 1, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "2": { "maxMapHp": 2, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "3": { "maxMapHp": 2, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "4": { "maxMapHp": 3, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] }
+          },
+          "nodes": [
+            { "node": 1, "point": "A", "combat": false, "eventId": 2, "colorNo": 2 },
+            { "node": 2, "point": "B", "combat": false, "eventId": 3, "colorNo": 3 },
+            { "node": 3, "point": "C", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-C-1", "shipIds": [1501], "formation": 1, "weight": 1, "baseExp": 80 }] },
+            { "node": 4, "point": "D", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-D-1", "shipIds": [1501, 1501], "formation": 1, "weight": 1, "baseExp": 90 }] },
+            { "node": 5, "point": "E", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-E-1", "shipIds": [1501, 1502], "formation": 1, "weight": 1, "baseExp": 100 }] },
+            { "node": 9, "point": "I", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-I-1", "shipIds": [1501, 1501, 1502], "formation": 1, "weight": 1, "baseExp": 110 }] },
+            { "node": 11, "point": "K", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-K-1", "shipIds": [1502, 1502], "formation": 1, "weight": 1, "baseExp": 120 }] },
+            { "node": 17, "point": "Q", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-Q-1", "shipIds": [1502, 1502, 1503], "formation": 1, "weight": 1, "baseExp": 130 }] },
+            { "node": 19, "point": "S", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-S-1", "shipIds": [1502, 1503], "formation": 1, "weight": 1, "baseExp": 140 }] },
+            { "node": 20, "point": "T", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-T-1", "shipIds": [1503, 1503], "formation": 1, "weight": 1, "baseExp": 150 }] },
+            { "node": 26, "point": "U", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "611-U-1", "shipIds": [1503, 1504], "formation": 1, "weight": 1, "baseExp": 160 }] },
+            { "node": 28, "point": "V", "combat": true, "boss": true, "eventId": 5, "colorNo": 5, "encounters": [{ "key": "611-V-1", "shipIds": [1501], "formation": 1, "weight": 1, "baseExp": 200 }], "dropPool": [{ "shipId": 1, "shipName": "睦月", "shipType": "駆逐艦", "rankWeights": [10, 5, 0], "totalWeight": 15, "enemyWeights": {} }] }
+          ]
+        },
+        {
+          "id": 612,
+          "areaId": 61,
+          "mapNo": 2,
+          "name": "E-2",
+          "operation": "Event Operation E-2",
+          "infoText": "Local cached event map 061-2.",
+          "level": 7,
+          "sallyFlag": [1, 0, 0],
+          "sallyArea": 2,
+          "airBaseDecks": 1,
+          "bgm": { "moving": 154, "map": [155, 155], "boss": [156, 156] },
+          "phaseBreakpoints": [16, 25, 32],
+          "ranks": {
+            "1": { "maxMapHp": 1, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "2": { "maxMapHp": 2, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "3": { "maxMapHp": 2, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "4": { "maxMapHp": 3, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] }
+          },
+          "nodes": [
+            { "node": 1, "point": "A", "combat": false, "eventId": 2, "colorNo": 2 },
+            { "node": 4, "point": "D", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "612-D-1", "shipIds": [1501, 1502], "formation": 1, "weight": 1, "baseExp": 120 }] },
+            { "node": 9, "point": "I", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "612-I-1", "shipIds": [1502, 1502, 1503], "formation": 1, "weight": 1, "baseExp": 140 }] },
+            { "node": 13, "point": "M", "combat": true, "eventId": 5, "colorNo": 5, "encounters": [{ "key": "612-M-1", "shipIds": [1501], "formation": 1, "weight": 1, "baseExp": 180 }] },
+            { "node": 16, "point": "P", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "612-P-1", "shipIds": [1502, 1503], "formation": 1, "weight": 1, "baseExp": 150 }] },
+            { "node": 25, "point": "Y", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "612-Y-1", "shipIds": [1503, 1504], "formation": 1, "weight": 1, "baseExp": 160 }] },
+            { "node": 32, "point": "Z", "combat": true, "boss": true, "eventId": 5, "colorNo": 5, "encounters": [{ "key": "612-Z-1", "shipIds": [1501], "formation": 1, "weight": 1, "baseExp": 220 }], "dropPool": [{ "shipId": 2, "shipName": "如月", "shipType": "駆逐艦", "rankWeights": [10, 5, 0], "totalWeight": 15, "enemyWeights": {} }] }
+          ]
+        },
+        {
+          "id": 613,
+          "areaId": 61,
+          "mapNo": 3,
+          "name": "E-3",
+          "operation": "Event Operation E-3",
+          "infoText": "Local cached event map 061-3.",
+          "level": 9,
+          "sallyFlag": [1, 0, 0],
+          "sallyArea": 3,
+          "airBaseDecks": 2,
+          "bgm": { "moving": 154, "map": [155, 155], "boss": [156, 156] },
+          "phaseBreakpoints": [9, 25, 45],
+          "ranks": {
+            "1": { "maxMapHp": 1, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "2": { "maxMapHp": 2, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "3": { "maxMapHp": 2, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] },
+            "4": { "maxMapHp": 3, "rewards": [{ "kind": "useitem", "id": 57, "count": 1 }] }
+          },
+          "nodes": [
+            { "node": 1, "point": "A", "combat": false, "eventId": 2, "colorNo": 2 },
+            { "node": 3, "point": "C", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "613-C-1", "shipIds": [1502, 1502], "formation": 1, "weight": 1, "baseExp": 140 }] },
+            { "node": 7, "point": "G", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "613-G-1", "shipIds": [1502, 1503], "formation": 1, "weight": 1, "baseExp": 160 }] },
+            { "node": 9, "point": "I", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "613-I-1", "shipIds": [1503, 1503], "formation": 1, "weight": 1, "baseExp": 180 }] },
+            { "node": 25, "point": "Y", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "613-Y-1", "shipIds": [1503, 1504], "formation": 1, "weight": 1, "baseExp": 200 }] },
+            { "node": 45, "point": "Z1", "combat": true, "eventId": 4, "colorNo": 4, "encounters": [{ "key": "613-Z1-1", "shipIds": [1504, 1505], "formation": 1, "weight": 1, "baseExp": 220 }] },
+            { "node": 47, "point": "Z2", "combat": true, "boss": true, "eventId": 5, "colorNo": 5, "encounters": [{ "key": "613-Z2-1", "shipIds": [1501], "formation": 1, "weight": 1, "baseExp": 260 }], "dropPool": [{ "shipId": 9, "shipName": "吹雪", "shipType": "駆逐艦", "rankWeights": [10, 5, 0], "totalWeight": 15, "enemyWeights": {} }] }
+          ]
+        }
+      ]
+    }
+  ]
+}

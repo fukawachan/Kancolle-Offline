@@ -65,7 +65,7 @@ describe("debug inventory controls", () => {
     expect(response.body).toContain("function rememberListScroll(list)");
     expect(response.body).toContain("requestAnimationFrame");
     expect(response.body).toContain("Math.max(0, list.scrollHeight - list.clientHeight)");
-    expect(response.body.match(/const restoreScroll = rememberListScroll\(list\);/g) ?? []).toHaveLength(7);
+    expect(response.body.match(/const restoreScroll = rememberListScroll\(list\);/g) ?? []).toHaveLength(8);
   });
 
   it("lists owned ships with master display names", async () => {
