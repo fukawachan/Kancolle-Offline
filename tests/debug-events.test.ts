@@ -81,6 +81,25 @@ describe("event debug controls", () => {
     expect(map?.gauge).toBeGreaterThan(0);
   });
 
+  it("returns active event support expeditions when deactivating the event", async () => {
+    await app.inject({ method: "POST", url: "/debug/api/events/active", payload: { areaId: 61 } });
+    const first = store.createShip(9);
+    const second = store.createShip(10);
+    store.changeDeckShip(3, 0, first.id);
+    store.changeDeckShip(3, 1, second.id);
+    expect(store.startExpedition(3, 61033, "debug-deactivate-support").ok).toBe(true);
+
+    const deactivated = await app.inject({
+      method: "POST",
+      url: "/debug/api/events/active",
+      payload: { areaId: null }
+    });
+
+    expect(deactivated.statusCode).toBe(200);
+    expect(store.getSave().expeditionRuns.find((run) => run.deckId === 3)?.status).toBe("claimed");
+    expect(store.getSave().decks[2].missionState.state).toBe(0);
+  });
+
   it("renders an Events tab in the debug panel", async () => {
     const response = await app.inject({ method: "GET", url: "/debug" });
 

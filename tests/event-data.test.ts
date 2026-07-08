@@ -2,6 +2,8 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   eventDefinition,
+  eventSupportExpeditionDefinitions,
+  eventSupportExpeditionMasters,
   eventRoutingMap,
   selectEventSortieEncounter,
   validateEventPackage
@@ -40,5 +42,47 @@ describe("local event data package", () => {
         expect(encounter?.shipIds.length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("validates the 061 event support expedition package", () => {
+    const masters = eventSupportExpeditionMasters(61);
+    const definitions = eventSupportExpeditionDefinitions(61);
+
+    expect(masters.map((master) => master.api_id)).toEqual([61033, 61034]);
+    expect(definitions.map((definition) => definition.id)).toEqual([61033, 61034]);
+    expect(masters).toEqual([
+      expect.objectContaining({
+        api_id: 61033,
+        api_disp_no: "S1",
+        api_maparea_id: 61,
+        api_name: "前衛支援任務",
+        api_time: 15,
+        api_return_flag: 0
+      }),
+      expect.objectContaining({
+        api_id: 61034,
+        api_disp_no: "S2",
+        api_maparea_id: 61,
+        api_name: "艦隊決戦支援任務",
+        api_time: 30,
+        api_return_flag: 0
+      })
+    ]);
+    expect(definitions).toEqual([
+      expect.objectContaining({
+        id: 61033,
+        areaId: 61,
+        supportType: "route",
+        returnAllowed: false,
+        rewards: expect.objectContaining({ materials: [0, 0, 0, 0], items: [] })
+      }),
+      expect.objectContaining({
+        id: 61034,
+        areaId: 61,
+        supportType: "boss",
+        returnAllowed: false,
+        rewards: expect.objectContaining({ materials: [0, 0, 0, 0], items: [] })
+      })
+    ]);
   });
 });

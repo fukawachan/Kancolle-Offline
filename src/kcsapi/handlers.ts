@@ -41,6 +41,7 @@ import {
 import { battleEndpointMode } from "./battle/data/endpoint-modes.js";
 import { validateSlotEquip } from "./equipment-rules.js";
 import { apiError, apiOk, parseApiPayload } from "./envelope.js";
+import { expeditionMasters } from "./expedition.js";
 import { practiceRivalById, type PracticeRival } from "./practice.js";
 import {
   normalizePortBgmId,
@@ -1051,6 +1052,7 @@ function masterDataWithResources(resourceManifest: ResourceManifest, activeEvent
     api_mst_shipgraph: shipGraph(resourceManifest, ships),
     api_mst_furnituregraph: furnitureGraph(resourceManifest),
     api_mst_bgm: bgmMaster(resourceManifest),
+    api_mst_mission: expeditionMasters(activeEventAreaId),
     api_mst_maparea: mapAreaMasters(mapInfos, activeEventAreaId),
     api_mst_mapinfo: mapInfos,
     api_mst_mapbgm: mapBgmMasters(resourceManifest, mapInfos),

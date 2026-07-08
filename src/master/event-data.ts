@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { mapMasterId } from "./data.js";
 import type { MapPhaseDefinition } from "./map-progress.js";
 import type { RoutingMap } from "./routing.js";
+import { EXPEDITION_MASTERS, type ExpeditionDefinition, type ExpeditionMaster } from "./expedition-data.js";
 import type {
   SelectedSortieDrop,
   SelectedSortieEncounter,
@@ -57,7 +58,13 @@ export type EventMapDefinition = {
 export type EventDefinition = {
   areaId: number;
   name: string;
+  supportExpeditions?: readonly EventSupportExpeditionDefinition[];
   maps: readonly EventMapDefinition[];
+};
+
+export type EventSupportExpeditionDefinition = {
+  master: ExpeditionMaster;
+  definition: ExpeditionDefinition;
 };
 
 export type EventCandidateStatus = {
@@ -101,6 +108,9 @@ const EVENT_ROUTING_MAPS = new Map(EVENTS.flatMap((event) =>
 const EVENT_SORTIE_NODE_BY_MAP_AND_NODE = new Map(EVENTS.flatMap((event) =>
   event.maps.flatMap((map) => map.nodes.map((node) => [eventNodeKey(map.id, node.node), toSortieNode(map, node)] as const))
 ));
+const EVENT_SUPPORT_EXPEDITIONS = EVENTS.flatMap((event) => event.supportExpeditions ?? []);
+const EVENT_SUPPORT_MASTER_BY_ID = new Map(EVENT_SUPPORT_EXPEDITIONS.map((support) => [support.master.api_id, support.master] as const));
+const EVENT_SUPPORT_DEFINITION_BY_ID = new Map(EVENT_SUPPORT_EXPEDITIONS.map((support) => [support.definition.id, support.definition] as const));
 
 export function eventDefinitions() {
   return EVENTS;
@@ -125,6 +135,28 @@ export function eventMapIds(areaId?: number) {
 
 export function eventAreaIds() {
   return new Set(EVENTS.map((event) => event.areaId));
+}
+
+export function eventSupportExpeditionMasters(areaId?: number) {
+  return eventSupportExpeditions(areaId).map((support) => support.master);
+}
+
+export function eventSupportExpeditionDefinitions(areaId?: number) {
+  return eventSupportExpeditions(areaId).map((support) => support.definition);
+}
+
+export function eventSupportExpeditionMaster(id: number) {
+  return EVENT_SUPPORT_MASTER_BY_ID.get(Math.trunc(id));
+}
+
+export function eventSupportExpeditionDefinition(id: number) {
+  return EVENT_SUPPORT_DEFINITION_BY_ID.get(Math.trunc(id));
+}
+
+function eventSupportExpeditions(areaId?: number) {
+  return areaId == null
+    ? EVENT_SUPPORT_EXPEDITIONS
+    : eventDefinition(areaId)?.supportExpeditions ?? [];
 }
 
 export function eventMapMaster(map: EventMapDefinition) {
@@ -318,6 +350,31 @@ export function validateEventPackage(areaId: number, resourceManifest?: Resource
           return { ok: false as const, error: `Event map ${map.id} node ${node.node} has an empty enemy formation` };
         }
       }
+    }
+  }
+  const supportMissionIds = new Set<number>();
+  const normalMissionIds = new Set(EXPEDITION_MASTERS.map((mission) => mission.api_id));
+  for (const support of event.supportExpeditions ?? []) {
+    const master = support.master;
+    const definition = support.definition;
+    if (normalMissionIds.has(master.api_id)) {
+      return { ok: false as const, error: `Event support expedition ${master.api_id} conflicts with a normal expedition` };
+    }
+    if (master.api_id !== definition.id) {
+      return { ok: false as const, error: `Event support expedition ${master.api_id} has mismatched definition ${definition.id}` };
+    }
+    if (master.api_maparea_id !== event.areaId || definition.areaId !== event.areaId) {
+      return { ok: false as const, error: `Event support expedition ${master.api_id} has mismatched area` };
+    }
+    if (supportMissionIds.has(master.api_id)) {
+      return { ok: false as const, error: `Event support expedition ${master.api_id} is duplicated` };
+    }
+    supportMissionIds.add(master.api_id);
+    if (!definition.supportType || definition.returnAllowed || master.api_return_flag !== 0) {
+      return { ok: false as const, error: `Event support expedition ${master.api_id} has invalid support flags` };
+    }
+    if (definition.rewards.materials.some((amount) => amount !== 0) || definition.rewards.items.length > 0) {
+      return { ok: false as const, error: `Event support expedition ${master.api_id} must not grant rewards` };
     }
   }
   return { ok: true as const, event };

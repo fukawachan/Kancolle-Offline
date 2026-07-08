@@ -5,6 +5,12 @@ import {
   type ExpeditionShipGroup,
 } from "../master/expedition-data.js";
 import { masterData } from "../master/data.js";
+import {
+  eventSupportExpeditionDefinition,
+  eventSupportExpeditionDefinitions,
+  eventSupportExpeditionMaster,
+  eventSupportExpeditionMasters
+} from "../master/event-data.js";
 import type { SaveState, Ship } from "../state/types.js";
 import { toShip } from "./serializers.js";
 
@@ -73,16 +79,55 @@ const DAIHATSU_BONUS = new Map<number, number>([
   [526, 0.01],
 ]);
 
+export function expeditionMasters(activeEventAreaId: number | null = null) {
+  return activeEventAreaId == null
+    ? EXPEDITION_MASTERS
+    : [...EXPEDITION_MASTERS, ...eventSupportExpeditionMasters(activeEventAreaId)];
+}
+
+export function expeditionDefinitions(activeEventAreaId: number | null = null) {
+  return activeEventAreaId == null
+    ? EXPEDITION_DEFINITIONS
+    : [...EXPEDITION_DEFINITIONS, ...eventSupportExpeditionDefinitions(activeEventAreaId)];
+}
+
+export function allExpeditionDefinitions() {
+  return [...EXPEDITION_DEFINITIONS, ...eventSupportExpeditionDefinitions()];
+}
+
 export function expeditionDefinition(id: number) {
-  const definition = EXPEDITION_DEFINITIONS.find((item) => item.id === id);
+  const normalizedId = Math.trunc(id);
+  const definition = EXPEDITION_DEFINITIONS.find((item) => item.id === normalizedId)
+    ?? eventSupportExpeditionDefinition(normalizedId);
   if (!definition) throw new Error(`Unknown expedition ${id}`);
   return definition;
 }
 
 export function expeditionMaster(id: number) {
-  const master = EXPEDITION_MASTERS.find((item) => item.api_id === id);
+  const normalizedId = Math.trunc(id);
+  const master = EXPEDITION_MASTERS.find((item) => item.api_id === normalizedId)
+    ?? eventSupportExpeditionMaster(normalizedId);
   if (!master) throw new Error(`Unknown expedition ${id}`);
   return master;
+}
+
+export function supportExpeditionMissionIds() {
+  return allExpeditionDefinitions()
+    .filter((definition) => definition.supportType != null)
+    .map((definition) => definition.id);
+}
+
+export function supportExpeditionForSortie(
+  areaId: number,
+  isBoss: boolean,
+  activeEventAreaId: number | null = null
+) {
+  const supportType = isBoss ? "boss" : "route";
+  return expeditionDefinitions(activeEventAreaId)
+    .find((definition) =>
+      definition.areaId === Math.trunc(areaId) &&
+      definition.supportType === supportType
+    );
 }
 
 export function buildExpeditionSnapshot(

@@ -25,11 +25,13 @@ import {
   eventMapIds,
   eventMapPhaseDefinitions,
   eventRoutingMap,
+  eventSupportExpeditionMasters,
+  eventSupportExpeditionDefinitions,
   eventTerminalMapPhase,
   validateEventPackage
 } from "../master/event-data.js";
 import { normalRoutingMap } from "../master/routing-data.js";
-import { EXPEDITION_DEFINITIONS, EXPEDITION_MASTERS } from "../master/expedition-data.js";
+import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { QUEST_BY_ID, QUEST_DEFINITIONS, type QuestDefinition, type QuestReward } from "../master/quest-data.js";
 import {
   buildRoutingFleet,
@@ -54,9 +56,13 @@ import {
   shipTotalExpForLevel
 } from "../kcsapi/experience.js";
 import {
+  allExpeditionDefinitions,
   buildExpeditionSnapshot,
   expeditionDefinition,
+  expeditionMaster,
+  expeditionMasters,
   resolveExpedition,
+  supportExpeditionMissionIds,
   type ExpeditionOutcome,
   type ExpeditionRunSnapshot
 } from "../kcsapi/expedition.js";
@@ -957,11 +963,13 @@ export function createStateStore(options: StateStoreOptions) {
     recallExpedition: (deckId: number) => recallExpedition(db, deckId),
     forceCompleteExpedition: (deckId: number) => forceCompleteExpedition(db, deckId),
     recordSupportParticipation: (deckId: number) => {
+      const missionIds = supportExpeditionMissionIds();
+      if (missionIds.length === 0) return false;
       const result = db.prepare(`
         UPDATE expedition_runs
         SET support_count = support_count + 1
-        WHERE deck_id = ? AND mission_id IN (33, 34) AND status = 'active'
-      `).run(deckId);
+        WHERE deck_id = ? AND mission_id IN (${missionIds.map(() => "?").join(", ")}) AND status = 'active'
+      `).run(deckId, ...missionIds);
       return result.changes > 0;
     },
     finishSupportExpeditions: () => finishSupportExpeditions(db),
@@ -1095,6 +1103,8 @@ export function createStateStore(options: StateStoreOptions) {
 }
 
 function missionMemberState(db: Database.Database) {
+  const activeEventAreaId = getEventSettings(db).activeAreaId;
+  if (activeEventAreaId != null) seedEventSupportExpeditionProgress(db, activeEventAreaId);
   const progress = new Map(
     (db.prepare("SELECT * FROM expedition_progress").all() as Row[])
       .map(mapExpeditionProgress)
@@ -1103,7 +1113,7 @@ function missionMemberState(db: Database.Database) {
   const settings = getExpeditionSettings(db);
   const currentPeriod = expeditionPeriodKey(expeditionNow(db));
   return {
-    api_list_items: EXPEDITION_MASTERS.map((master) => {
+    api_list_items: expeditionMasters(activeEventAreaId).map((master) => {
       const item = progress.get(master.api_id);
       const completed = master.api_reset_type === 1
         ? item?.periodKey === currentPeriod && (item?.periodCount ?? 0) > 0
@@ -1300,11 +1310,23 @@ function forceCompleteExpedition(db: Database.Database, deckId: number) {
 }
 
 function finishSupportExpeditions(db: Database.Database) {
+  return finishExpeditionsByMissionIds(db, supportExpeditionMissionIds());
+}
+
+function finishEventSupportExpeditions(db: Database.Database, areaId: number) {
+  return finishExpeditionsByMissionIds(
+    db,
+    eventSupportExpeditionDefinitions(areaId).map((definition) => definition.id)
+  );
+}
+
+function finishExpeditionsByMissionIds(db: Database.Database, missionIds: number[]) {
+  if (missionIds.length === 0) return [];
   const rows = db.prepare(`
     SELECT deck_id
     FROM expedition_runs
-    WHERE mission_id IN (33, 34) AND status IN ('active', 'returning')
-  `).all() as Row[];
+    WHERE mission_id IN (${missionIds.map(() => "?").join(", ")}) AND status IN ('active', 'returning')
+  `).all(...missionIds) as Row[];
   const now = expeditionNow(db);
   const results: unknown[] = [];
   for (const row of rows) {
@@ -1364,7 +1386,7 @@ function completeExpeditionProgress(db: Database.Database, missionId: number) {
       .map((row) => Number(row.mission_id))
   );
   const unlock = db.prepare("UPDATE expedition_progress SET unlocked = 1 WHERE mission_id = ?");
-  for (const definition of EXPEDITION_DEFINITIONS) {
+  for (const definition of allExpeditionDefinitions()) {
     if (definition.prerequisiteIds.every((id) => completed.has(id))) unlock.run(definition.id);
   }
 }
@@ -1860,6 +1882,17 @@ function seedExpeditionProgress(db: Database.Database) {
   }
 }
 
+function seedEventSupportExpeditionProgress(db: Database.Database, areaId: number) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO expedition_progress
+      (mission_id, unlocked, completed_count, period_key, period_count)
+    VALUES (?, 1, 0, '', 0)
+  `);
+  for (const mission of eventSupportExpeditionMasters(areaId)) {
+    insert.run(mission.api_id);
+  }
+}
+
 function ensureExpeditionSettings(db: Database.Database) {
   db.prepare(`
     INSERT OR IGNORE INTO expedition_settings (id, fixed_seed, clock_offset_ms, unlock_all)
@@ -1935,7 +1968,11 @@ function nextExpeditionResetAt(now: number) {
 }
 
 function expeditionMasterName(id: number) {
-  return EXPEDITION_MASTERS.find((item) => item.api_id === id)?.api_name ?? `Expedition ${id}`;
+  try {
+    return expeditionMaster(id).api_name;
+  } catch {
+    return `Expedition ${id}`;
+  }
 }
 
 function emptyMissionState() {
@@ -3243,7 +3280,9 @@ function getEventSettings(db: Database.Database): EventSettings {
 
 function setActiveEventArea(db: Database.Database, areaId: number | null) {
   ensureEventSettings(db);
+  const previousActiveAreaId = getEventSettings(db).activeAreaId;
   if (areaId == null || Math.trunc(safeNum(areaId)) <= 0) {
+    if (previousActiveAreaId != null) finishEventSupportExpeditions(db, previousActiveAreaId);
     db.prepare("UPDATE event_settings SET active_area_id = NULL WHERE id = 1").run();
     return { ok: true as const, activeAreaId: null };
   }
@@ -3252,7 +3291,11 @@ function setActiveEventArea(db: Database.Database, areaId: number | null) {
   const validation = validateEventPackage(normalizedAreaId);
   if (!validation.ok) return validation;
 
+  if (previousActiveAreaId != null && previousActiveAreaId !== validation.event.areaId) {
+    finishEventSupportExpeditions(db, previousActiveAreaId);
+  }
   seedEventMaps(db, validation.event.areaId);
+  seedEventSupportExpeditionProgress(db, validation.event.areaId);
   ensureEventAirBases(db, validation.event.areaId);
   db.prepare("UPDATE event_settings SET active_area_id = ? WHERE id = 1").run(validation.event.areaId);
   return { ok: true as const, activeAreaId: validation.event.areaId, event: validation.event };
@@ -3261,8 +3304,10 @@ function setActiveEventArea(db: Database.Database, areaId: number | null) {
 function resetEventProgress(db: Database.Database, areaId: number) {
   const event = eventDefinition(areaId);
   if (!event) return { ok: false as const, error: `Event area ${areaId} has no local event package` };
+  finishEventSupportExpeditions(db, event.areaId);
   const tx = db.transaction(() => {
     seedEventMaps(db, event.areaId);
+    seedEventSupportExpeditionProgress(db, event.areaId);
     for (const map of event.maps) {
       const row = db.prepare("SELECT selected_rank FROM maps WHERE id = ?").get(map.id) as Row | undefined;
       const selectedRank = Math.max(1, Math.trunc(safeNum(row?.selected_rank, 3)));

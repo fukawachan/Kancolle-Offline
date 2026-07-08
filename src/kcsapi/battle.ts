@@ -43,6 +43,7 @@ import type {
   Side
 } from "./battle/types.js";
 import { isAircraftSlotItem } from "./serializers.js";
+import { supportExpeditionForSortie } from "./expedition.js";
 import {
   antiAirStage2Shootdown,
   aswAttackPower as resolveAswAttackPower,
@@ -2111,19 +2112,23 @@ function supportPhase(
   sortie: BattleSortieContext | undefined,
   enemy: BattleUnit[]
 ): NonNullable<BattleRecord["support"]> | undefined {
-  if (!sortie || save.sortieSession?.areaId !== 5) return undefined;
-  const missionId = sortie.isBoss ? 34 : 33;
+  const areaId = save.sortieSession?.areaId;
+  if (!sortie || areaId == null) return undefined;
+  const definition = supportExpeditionForSortie(areaId, sortie.isBoss, save.eventSettings.activeAreaId);
+  if (!definition) return undefined;
+  const missionId = definition.id;
   const run = save.expeditionRuns.find(
     (item) => item.status === "active" && item.missionId === missionId
   );
   if (!run) return undefined;
   const snapshot = run.snapshot as {
-    ships?: { id: number; masterId: number }[];
+    ships?: { id: number; masterId: number; condition?: number }[];
   };
   const shipIds = snapshot.ships?.map((ship) => ship.id) ?? [];
+  const supportShips = snapshot.ships ?? [];
   const supportUnits = friendlyUnits(save, shipIds);
   const rng = new BattleRng(run.seed + sortie.node * 31 + run.supportCount * 997);
-  const arrivalChance = sortie.isBoss ? 0.5 : 0.8;
+  const arrivalChance = supportArrivalChance(sortie.isBoss, supportShips);
   if (!rng.chance(arrivalChance) || supportUnits.length < 2) {
     return {
       deckId: run.deckId,
@@ -2134,9 +2139,7 @@ function supportPhase(
     };
   }
 
-  const carrierCount = supportUnits.filter((unit) => [7, 11, 18].includes(unit.shipType)).length;
-  const shellingCount = supportUnits.filter((unit) => [8, 9, 10, 12].includes(unit.shipType)).length;
-  const flag = carrierCount >= 2 ? 1 : shellingCount >= 2 ? 2 : 3;
+  const flag = supportAttackFlag(supportUnits);
   const damage = normalizeFixed(enemy.map(() => 0), 6, 0);
   const critical = normalizeFixed(enemy.map(() => 0), 6, 0);
 
@@ -2191,6 +2194,21 @@ function supportPhase(
     flag,
     info
   };
+}
+
+function supportArrivalChance(isBoss: boolean, ships: { condition?: number }[]) {
+  const conditions = ships.map((ship) => safeNum(ship.condition, 49));
+  const flagshipSparkled = (conditions[0] ?? 0) >= 50;
+  if (isBoss && flagshipSparkled) return 1;
+  const sparkledEscorts = conditions.slice(1).filter((condition) => condition >= 50).length;
+  return Math.min(0.9, 0.5 + (flagshipSparkled ? 0.15 : 0) + sparkledEscorts * 0.05);
+}
+
+function supportAttackFlag(supportUnits: BattleUnit[]) {
+  const carrierLikeCount = supportUnits.filter((unit) => [7, 11, 16, 17, 18].includes(unit.shipType)).length;
+  if (carrierLikeCount >= 3) return 1;
+  const torpedoSupportCount = supportUnits.filter((unit) => [2, 3, 4].includes(unit.shipType)).length;
+  return torpedoSupportCount >= 4 ? 3 : 2;
 }
 
 function enemyUnits(shipIds: readonly number[]) {

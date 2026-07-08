@@ -8,6 +8,114 @@
     {
       "areaId": 61,
       "name": "Local Event Area 061",
+      "supportExpeditions": [
+        {
+          "master": {
+            "api_id": 61033,
+            "api_disp_no": "S1",
+            "api_maparea_id": 61,
+            "api_name": "前衛支援任務",
+            "api_details": "イベント海域へ支援艦隊を出撃させ、<br>主力艦隊の進撃を援護せよ！",
+            "api_reset_type": 0,
+            "api_damage_type": 0,
+            "api_mission_type": 0,
+            "api_time": 15,
+            "api_deck_num": 2,
+            "api_difficulty": 1,
+            "api_use_fuel": 0.5,
+            "api_use_bull": 0.8,
+            "api_win_item1": [0, 0],
+            "api_win_item2": [0, 0],
+            "api_win_mat_level": [0, 0, 0, 0],
+            "api_return_flag": 0,
+            "api_sample_fleet": [8, 8, 2, 2, 0, 0]
+          },
+          "definition": {
+            "id": 61033,
+            "areaId": 61,
+            "prerequisiteIds": [],
+            "durationMinutes": 15,
+            "minimumShips": 2,
+            "flagshipLevel": 0,
+            "totalLevel": 0,
+            "requirementsText": "駆2",
+            "shipGroups": [{ "typeIds": [2], "count": 2, "flagship": false }],
+            "alternatives": [],
+            "statRequirements": {
+              "firepower": 0,
+              "antiAir": 0,
+              "antiSubmarine": 0,
+              "lineOfSight": 0
+            },
+            "drumCanRequirement": null,
+            "greatSuccessType": "support",
+            "resetType": 0,
+            "damageType": 0,
+            "returnAllowed": false,
+            "supportType": "route",
+            "costs": { "fuelRate": 0.5, "ammoRate": 0.8 },
+            "rewards": {
+              "admiralExp": 0,
+              "shipExp": 0,
+              "materials": [0, 0, 0, 0],
+              "items": []
+            }
+          }
+        },
+        {
+          "master": {
+            "api_id": 61034,
+            "api_disp_no": "S2",
+            "api_maparea_id": 61,
+            "api_name": "艦隊決戦支援任務",
+            "api_details": "イベント海域へ決戦支援を行う別動隊<br>を展開し、主力艦隊を援護せよ！",
+            "api_reset_type": 0,
+            "api_damage_type": 0,
+            "api_mission_type": 0,
+            "api_time": 30,
+            "api_deck_num": 2,
+            "api_difficulty": 1,
+            "api_use_fuel": 0.5,
+            "api_use_bull": 0.8,
+            "api_win_item1": [0, 0],
+            "api_win_item2": [0, 0],
+            "api_win_mat_level": [0, 0, 0, 0],
+            "api_return_flag": 0,
+            "api_sample_fleet": [8, 8, 8, 7, 2, 2]
+          },
+          "definition": {
+            "id": 61034,
+            "areaId": 61,
+            "prerequisiteIds": [],
+            "durationMinutes": 30,
+            "minimumShips": 2,
+            "flagshipLevel": 0,
+            "totalLevel": 0,
+            "requirementsText": "駆2",
+            "shipGroups": [{ "typeIds": [2], "count": 2, "flagship": false }],
+            "alternatives": [],
+            "statRequirements": {
+              "firepower": 0,
+              "antiAir": 0,
+              "antiSubmarine": 0,
+              "lineOfSight": 0
+            },
+            "drumCanRequirement": null,
+            "greatSuccessType": "support",
+            "resetType": 0,
+            "damageType": 0,
+            "returnAllowed": false,
+            "supportType": "boss",
+            "costs": { "fuelRate": 0.5, "ammoRate": 0.8 },
+            "rewards": {
+              "admiralExp": 0,
+              "shipExp": 0,
+              "materials": [0, 0, 0, 0],
+              "items": []
+            }
+          }
+        }
+      ],
       "maps": [
         {
           "id": 611,

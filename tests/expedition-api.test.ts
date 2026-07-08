@@ -52,6 +52,58 @@ describe("expedition kcsapi contract", () => {
     expect(data.api_list_items[0]).toEqual({ api_mission_id: 1, api_state: 1 });
   });
 
+  it("publishes active event support expeditions only while the event is enabled", async () => {
+    const inactiveStart2 = (await post("api_start2/getData")).json().api_data;
+    expect(inactiveStart2.api_mst_mission.map((mission: any) => mission.api_id)).not.toEqual(
+      expect.arrayContaining([61033, 61034])
+    );
+
+    const activated = store.setActiveEventArea(61);
+    expect(activated.ok).toBe(true);
+
+    const activeStart2 = (await post("api_start2/getData")).json().api_data;
+    expect(activeStart2.api_mst_mission).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          api_id: 61033,
+          api_disp_no: "S1",
+          api_maparea_id: 61,
+          api_name: "前衛支援任務",
+          api_time: 15,
+          api_use_fuel: 0.5,
+          api_use_bull: 0.8,
+          api_return_flag: 0,
+        }),
+        expect.objectContaining({
+          api_id: 61034,
+          api_disp_no: "S2",
+          api_maparea_id: 61,
+          api_name: "艦隊決戦支援任務",
+          api_time: 30,
+          api_use_fuel: 0.5,
+          api_use_bull: 0.8,
+          api_return_flag: 0,
+        }),
+      ])
+    );
+
+    const activeMissionState = (await post("api_get_member/mission")).json().api_data;
+    expect(activeMissionState.api_list_items).toHaveLength(65);
+    expect(activeMissionState.api_list_items).toEqual(
+      expect.arrayContaining([
+        { api_mission_id: 61033, api_state: 1 },
+        { api_mission_id: 61034, api_state: 1 },
+      ])
+    );
+
+    store.setActiveEventArea(null);
+    const deactivatedMissionState = (await post("api_get_member/mission")).json().api_data;
+    expect(deactivatedMissionState.api_list_items).toHaveLength(63);
+    expect(deactivatedMissionState.api_list_items.map((item: any) => item.api_mission_id)).not.toEqual(
+      expect.arrayContaining([61033, 61034])
+    );
+  });
+
   it("starts and settles a mission with the complete result model", async () => {
     const started = await post("api_req_mission/start", {
       api_deck_id: 2,
@@ -115,6 +167,21 @@ describe("expedition kcsapi contract", () => {
     expect(response.json().api_data).toEqual({
       api_mission: [2, 1, expect.any(Number), 0],
     });
+  });
+
+  it("rejects manual recall for event support expeditions", async () => {
+    store.setActiveEventArea(61);
+    await post("api_req_mission/start", {
+      api_deck_id: 2,
+      api_mission_id: 61033,
+      api_serial_cid: "event-support-recall",
+    });
+
+    const response = await post("api_req_mission/return_instruction", { api_deck_id: 2 });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().api_result).toBe(400);
+    expect(response.json().api_result_msg).toContain("cannot be recalled");
   });
 
   it("keeps expedition fleet ship models available during scoped ship_deck refreshes", async () => {
