@@ -763,6 +763,99 @@ describe("sortie battle simulation", () => {
     }
   });
 
+  it("uses enemy formation when resolving enemy daytime shelling", () => {
+    const yamato = store.createShip(911);
+    store.changeDeckShip(1, 0, yamato.id);
+    store.clearDeckFollowerShips(1);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withPatchedNodeEncounters(11, 1, { shipIds: [1501], formation: 1, weight: 1 }, () => {
+      withEnemyTemplate(1501, {
+        hp: 500,
+        armor: 300,
+        firepower: 170,
+        torpedo: 0,
+        accuracy: 999,
+        evasion: 0,
+        range: 4,
+        slots: [],
+        onSlot: []
+      }, () => {
+        const lineAhead = createSortieBattle(store.getSave(), { formation: 1 });
+        withPatchedNodeEncounters(11, 1, { shipIds: [1501], formation: 3, weight: 1 }, () => {
+          const ring = createSortieBattle(store.getSave(), { formation: 1 });
+
+          expect(lineAhead.payload.api_formation).toEqual([1, 1, 1]);
+          expect(ring.payload.api_formation).toEqual([1, 3, 1]);
+          expect(firstDamageBySide(lineAhead.payload.api_hougeki1, 1))
+            .toBeGreaterThan(firstDamageBySide(ring.payload.api_hougeki1, 1));
+        });
+      });
+    });
+  });
+
+  it("uses enemy formation when resolving enemy closing torpedoes", () => {
+    const yamato = store.createShip(911);
+    store.changeDeckShip(1, 0, yamato.id);
+    store.clearDeckFollowerShips(1);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withPatchedNodeEncounters(11, 1, { shipIds: [1501], formation: 1, weight: 1 }, () => {
+      withEnemyTemplate(1501, {
+        hp: 500,
+        armor: 300,
+        firepower: 0,
+        torpedo: 130,
+        accuracy: 999,
+        evasion: 0,
+        range: 1,
+        slots: [],
+        onSlot: []
+      }, () => {
+        const lineAhead = createSortieBattle(store.getSave(), { formation: 1 });
+        withPatchedNodeEncounters(11, 1, { shipIds: [1501], formation: 3, weight: 1 }, () => {
+          const ring = createSortieBattle(store.getSave(), { formation: 1 });
+
+          expect(lineAhead.payload.api_formation).toEqual([1, 1, 1]);
+          expect(ring.payload.api_formation).toEqual([1, 3, 1]);
+          expect(lineAhead.payload.api_raigeki?.api_fdam[0] ?? 0)
+            .toBeGreaterThan(ring.payload.api_raigeki?.api_fdam[0] ?? 0);
+        });
+      });
+    });
+  });
+
+  it("uses enemy formation when resolving enemy anti-air interception", () => {
+    const akagi = store.createShip(277);
+    const bomber = store.createSlotItem(23);
+    store.equipSlotItem(akagi.id, 2, bomber.id);
+    store.changeDeckShip(1, 0, akagi.id);
+    store.clearDeckFollowerShips(1);
+    store.db.prepare("UPDATE sortie_sessions SET seed = 0 WHERE id = 1").run();
+
+    withPatchedNodeEncounters(11, 1, { shipIds: [1501], formation: 1, weight: 1 }, () => {
+      withEnemyTemplate(1501, {
+        hp: 500,
+        armor: 300,
+        firepower: 0,
+        torpedo: 0,
+        aa: 100,
+        slots: [],
+        onSlot: []
+      }, () => {
+        const lineAhead = createSortieBattle(store.getSave(), { formation: 1 });
+        withPatchedNodeEncounters(11, 1, { shipIds: [1501], formation: 3, weight: 1 }, () => {
+          const ring = createSortieBattle(store.getSave(), { formation: 1 });
+
+          expect(lineAhead.payload.api_formation).toEqual([1, 1, 1]);
+          expect(ring.payload.api_formation).toEqual([1, 3, 1]);
+          expect(ring.payload.api_kouku?.api_stage2?.api_f_lostcount ?? 0)
+            .toBeGreaterThan(lineAhead.payload.api_kouku?.api_stage2?.api_f_lostcount ?? 0);
+        });
+      });
+    });
+  });
+
   it("uses target evasion when resolving daytime shelling hits", () => {
     const nagato = store.createShip(80);
     store.changeDeckShip(1, 0, nagato.id);
@@ -1699,4 +1792,52 @@ function setSortiePoint(store: StateStore, node: number, point: string) {
   const session = store.getSave().sortieSession!;
   store.db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = 1")
     .run(node, JSON.stringify({ ...session.state, point }));
+}
+
+function withEnemyTemplate(
+  enemyId: number,
+  patch: Partial<(typeof ENEMY_UNIT_TEMPLATES)[number]>,
+  callback: () => void
+) {
+  const original = {
+    ...ENEMY_UNIT_TEMPLATES[enemyId],
+    slots: [...ENEMY_UNIT_TEMPLATES[enemyId].slots],
+    onSlot: [...ENEMY_UNIT_TEMPLATES[enemyId].onSlot]
+  };
+  Object.assign(ENEMY_UNIT_TEMPLATES[enemyId], patch);
+  try {
+    callback();
+  } finally {
+    Object.assign(ENEMY_UNIT_TEMPLATES[enemyId], original);
+    if (original.accuracy == null) delete ENEMY_UNIT_TEMPLATES[enemyId].accuracy;
+    if (original.evasion == null) delete ENEMY_UNIT_TEMPLATES[enemyId].evasion;
+  }
+}
+
+function withPatchedNodeEncounters(
+  mapId: number,
+  nodeNo: number,
+  patch: { shipIds: number[]; formation: number; weight: number },
+  callback: () => void
+) {
+  const node = sortieNodes().find((item) => item.mapId === mapId && item.node === nodeNo);
+  if (!node) throw new Error(`missing sortie node ${mapId}:${nodeNo}`);
+  const originals = node.encounters.map((encounter) => ({
+    shipIds: [...encounter.shipIds],
+    formation: encounter.formation,
+    weight: encounter.weight
+  }));
+  try {
+    for (const encounter of node.encounters) Object.assign(encounter as any, patch);
+    callback();
+  } finally {
+    node.encounters.forEach((encounter, index) => {
+      Object.assign(encounter as any, originals[index]);
+    });
+  }
+}
+
+function firstDamageBySide(hougeki: { api_at_eflag: number[]; api_damage: number[][] }, side: number) {
+  const index = hougeki.api_at_eflag.findIndex((eflag) => eflag === side);
+  return index >= 0 ? hougeki.api_damage[index]?.[0] ?? 0 : 0;
 }

@@ -53,6 +53,16 @@ describe("offline normal-map sortie data", () => {
     }
   });
 
+  it("keeps 3-5 D encounters in ring formation", () => {
+    const node = sortieNodes().find((item) => item.mapId === 35 && item.point === "D");
+    if (!node) throw new Error("missing 3-5 D node");
+
+    expect(node.encounters.length).toBeGreaterThan(0);
+    expect(node.encounters.map((encounter) => encounter.formation)).toEqual(
+      Array(node.encounters.length).fill(3)
+    );
+  });
+
   it("assigns normal and boss colors to every duplicate 1-3 edge", () => {
     for (const nodeNo of [3, 5, 6, 11, 12]) {
       expect(sortieNodeData(1, 3, nodeNo)).toMatchObject({
