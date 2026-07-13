@@ -532,6 +532,30 @@ describe("local Fastify server", () => {
     expect(response.body.slice(0, 8)).toBe("\uFFFDPNG\r\n\u001a\n");
   });
 
+  it("serves a normal enemy banner when the cached client requests missing damaged Northern Princess art", async () => {
+    const app = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: store,
+      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/banner_dmg/1588_5301.png?version=114"
+    });
+    const unknown = await app.inject({
+      method: "GET",
+      url: "/kcs2/resources/ship/banner_dmg/9999_0000.png?version=114"
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("image/png");
+    expect(response.rawPayload).toEqual(
+      await readFile(path.resolve("cache/kcs2/resources/ship/banner/1588_4260.png"))
+    );
+    expect(unknown.statusCode).toBe(404);
+  });
+
   it("serves official special-remodel resources from the extra cache before generated fallbacks", async () => {
     const extraCacheDir = path.join(tempDir, "cache-extra");
     const fullX2Dir = path.join(extraCacheDir, "kcs2/resources/ship/sp_remodel/full_x2");

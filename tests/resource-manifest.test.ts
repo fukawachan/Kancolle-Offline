@@ -197,6 +197,65 @@ describe("cached resource manifest", () => {
     });
   });
 
+  it("falls back from missing enemy damaged art without replacing cached player damaged art", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    const northernPrincessResources = [
+      [1587, "2761", "6459", "7950", "bcvjduazbvue"],
+      [1588, "4260", "6708", "1081", "jtokvqdkiidv"],
+      [1589, "8125", "2218", "3523", "yqxjpfvbrghk"],
+      [1590, "5326", "8642", "1621", "xsjvtttdqhwy"]
+    ] as const;
+
+    for (const [id, bannerFrame, banner3Frame, fullFrame, filename] of northernPrincessResources) {
+      const paddedId = String(id).padStart(4, "0");
+      expect(manifest.ship.bannerDamaged.has(id)).toBe(false);
+      expect(manifest.ship.fullDamaged.has(id)).toBe(false);
+      expect(resolveMappedResource(`/kcs2/resources/ship/banner_dmg/${paddedId}_0000.png`, manifest)).toMatchObject({
+        id,
+        frame: bannerFrame,
+        pathname: `/kcs2/resources/ship/banner/${paddedId}_${bannerFrame}.png`
+      });
+      expect(resolveMappedResource(`/kcs2/resources/ship/banner3_dmg/${paddedId}_0000.png`, manifest)).toMatchObject({
+        id,
+        frame: banner3Frame,
+        pathname: `/kcs2/resources/ship/banner3/${paddedId}_${banner3Frame}.png`
+      });
+      expect(
+        resolveMappedResource(`/kcs2/resources/ship/full_dmg/${paddedId}_0000_${filename}.png`, manifest)
+      ).toMatchObject({
+        id,
+        frame: fullFrame,
+        filename,
+        pathname: `/kcs2/resources/ship/full/${paddedId}_${fullFrame}_${filename}.png`
+      });
+    }
+
+    expect(resolveMappedResource("/kcs2/resources/ship/banner_dmg/1588_5301.png", manifest)).toMatchObject({
+      id: 1588,
+      frame: "4260",
+      pathname: "/kcs2/resources/ship/banner/1588_4260.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/ship/banner_g_dmg/1588_0000.png", manifest)).toMatchObject({
+      id: 1588,
+      frame: "1847",
+      pathname: "/kcs2/resources/ship/banner_g_dmg/1588_1847.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/ship/banner_dmg/0006_0000.png", manifest)).toMatchObject({
+      id: 6,
+      frame: "4708",
+      pathname: "/kcs2/resources/ship/banner_dmg/0006_4708.png"
+    });
+    expect(
+      resolveMappedResource("/kcs2/resources/ship/full_dmg/0006_0000_kksiqffpclxh.png", manifest)
+    ).toMatchObject({
+      id: 6,
+      frame: "8980",
+      pathname: "/kcs2/resources/ship/full_dmg/0006_8980_kksiqffpclxh.png"
+    });
+    expect(resolveMappedResource("/kcs2/resources/ship/banner_dmg/9999_0000.png", manifest)).toBeUndefined();
+  });
+
   it("falls back from missing slot remodel art to a cached image for the equipment type", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
 

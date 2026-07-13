@@ -18,6 +18,31 @@ type SlotMasterForResourceFallback = {
 };
 
 const SLOT_RESOURCE_KINDS = "card|card_t|btxt_flat|item_on|item_up|remodel";
+const SHIP_SIMPLE_IMAGE_KINDS = [
+  "album_status",
+  "banner",
+  "banner_dmg",
+  "banner_g_dmg",
+  "banner2",
+  "banner2_dmg",
+  "banner2_g_dmg",
+  "banner3",
+  "banner3_dmg",
+  "banner3_g_dmg",
+  "card",
+  "card_dmg",
+  "character_full",
+  "character_full_dmg",
+  "character_up",
+  "character_up_dmg",
+  "power_up",
+  "power_up_dmg",
+  "remodel",
+  "remodel_dmg",
+  "supply_character",
+  "supply_character_dmg"
+] as const;
+const SHIP_SIMPLE_IMAGE_KIND_PATTERN = SHIP_SIMPLE_IMAGE_KINDS.join("|");
 const SLOT_REMODEL_TYPE_FALLBACKS = new Map<number, number>([
   [56, 6],
   [58, 8],
@@ -63,11 +88,9 @@ export function voiceFileName(shipId: number, voiceNo: number): string {
 }
 
 export function resolveMappedResource(pathname: string, manifest: ResourceManifest): FileResource | undefined {
-  const ship = pathname.match(/^\/kcs2\/resources\/ship\/full\/(\d{4})_(\d{4})_[^/]+\.png$/i);
-  if (ship) {
-    const resource = manifest.ship.full.get(Number(ship[1]));
-    if (resource && (resource.frame === ship[2] || !ship[2])) return resource;
-    return resource;
+  const shipFull = pathname.match(/^\/kcs2\/resources\/ship\/(full|full_dmg)\/(\d{4})_(\d{4})_[^/]+\.png$/i);
+  if (shipFull) {
+    return resolveShipImageResource(manifest, shipFull[1], Number(shipFull[2]));
   }
 
   const spRemodelPng = pathname.match(
@@ -82,10 +105,11 @@ export function resolveMappedResource(pathname: string, manifest: ResourceManife
     return manifest.ship.spRemodel.animationKey.get(Number(spRemodelAnimation[1]));
   }
 
-  const shipImage = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card|character_up|character_up_dmg|power_up|power_up_dmg)\/(\d{4})_(\d{4})\.png$/i);
+  const shipImage = pathname.match(
+    new RegExp(`^/kcs2/resources/ship/(${SHIP_SIMPLE_IMAGE_KIND_PATTERN})/(\\d{4})_(\\d{4})\\.png$`, "i")
+  );
   if (shipImage) {
-    const collection = shipCollection(manifest, shipImage[1]);
-    return collection?.get(Number(shipImage[2]));
+    return resolveShipImageResource(manifest, shipImage[1], Number(shipImage[2]));
   }
 
   const slot = pathname.match(new RegExp(`^/kcs2/resources/slot/(${SLOT_RESOURCE_KINDS})/(\\d{4})_(\\d{4})\\.png$`, "i"));
@@ -141,10 +165,26 @@ function emptyManifest(): ResourceManifest {
     ship: {
       albumStatus: new Map(),
       banner: new Map(),
+      bannerDamaged: new Map(),
+      bannerGrayDamaged: new Map(),
+      banner2: new Map(),
+      banner2Damaged: new Map(),
+      banner2GrayDamaged: new Map(),
+      banner3: new Map(),
+      banner3Damaged: new Map(),
+      banner3GrayDamaged: new Map(),
       card: new Map(),
+      cardDamaged: new Map(),
+      characterFull: new Map(),
+      characterFullDamaged: new Map(),
       characterUp: new Map(),
       characterUpDamaged: new Map(),
       full: new Map(),
+      fullDamaged: new Map(),
+      remodel: new Map(),
+      remodelDamaged: new Map(),
+      supplyCharacter: new Map(),
+      supplyCharacterDamaged: new Map(),
       spRemodel: {
         silhouette: new Map(),
         fullX2: new Map(),
@@ -241,21 +281,23 @@ function addShipResource(manifest: ResourceManifest, cacheDir: string, pathname:
     return;
   }
 
-  const full = pathname.match(/^\/kcs2\/resources\/ship\/full\/(\d{4})_(\d{4})_([a-z]+)\.png$/i);
+  const full = pathname.match(/^\/kcs2\/resources\/ship\/(full|full_dmg)\/(\d{4})_(\d{4})_([a-z]+)\.png$/i);
   if (full) {
-    manifest.ship.full.set(
-      Number(full[1]),
+    shipCollection(manifest, full[1])?.set(
+      Number(full[2]),
       resource(cacheDir, pathname, meta, {
-        id: Number(full[1]),
-        frame: full[2],
+        id: Number(full[2]),
+        frame: full[3],
         extension: "png",
-        filename: full[3]
+        filename: full[4]
       })
     );
     return;
   }
 
-  const image = pathname.match(/^\/kcs2\/resources\/ship\/(album_status|banner|card|character_up|character_up_dmg)\/(\d{4})_(\d{4})\.png$/i);
+  const image = pathname.match(
+    new RegExp(`^/kcs2/resources/ship/(${SHIP_SIMPLE_IMAGE_KIND_PATTERN})/(\\d{4})_(\\d{4})\\.png$`, "i")
+  );
   if (!image) return;
 
   const collection = shipCollection(manifest, image[1]);
@@ -290,14 +332,84 @@ function shipCollection(manifest: ResourceManifest, rawKind: string) {
       return manifest.ship.albumStatus;
     case "banner":
       return manifest.ship.banner;
+    case "banner_dmg":
+      return manifest.ship.bannerDamaged;
+    case "banner_g_dmg":
+      return manifest.ship.bannerGrayDamaged;
+    case "banner2":
+      return manifest.ship.banner2;
+    case "banner2_dmg":
+      return manifest.ship.banner2Damaged;
+    case "banner2_g_dmg":
+      return manifest.ship.banner2GrayDamaged;
+    case "banner3":
+      return manifest.ship.banner3;
+    case "banner3_dmg":
+      return manifest.ship.banner3Damaged;
+    case "banner3_g_dmg":
+      return manifest.ship.banner3GrayDamaged;
     case "card":
       return manifest.ship.card;
+    case "card_dmg":
+      return manifest.ship.cardDamaged;
+    case "character_full":
+      return manifest.ship.characterFull;
+    case "character_full_dmg":
+      return manifest.ship.characterFullDamaged;
     case "character_up":
     case "power_up":
       return manifest.ship.characterUp;
     case "character_up_dmg":
     case "power_up_dmg":
       return manifest.ship.characterUpDamaged;
+    case "full":
+      return manifest.ship.full;
+    case "full_dmg":
+      return manifest.ship.fullDamaged;
+    case "remodel":
+      return manifest.ship.remodel;
+    case "remodel_dmg":
+      return manifest.ship.remodelDamaged;
+    case "supply_character":
+      return manifest.ship.supplyCharacter;
+    case "supply_character_dmg":
+      return manifest.ship.supplyCharacterDamaged;
+    default:
+      return undefined;
+  }
+}
+
+function resolveShipImageResource(manifest: ResourceManifest, rawKind: string, id: number) {
+  const kind = rawKind.toLowerCase();
+  const direct = shipCollection(manifest, kind)?.get(id);
+  if (direct) return direct;
+
+  switch (kind) {
+    case "banner_dmg":
+      return manifest.ship.banner.get(id) ?? manifest.ship.bannerGrayDamaged.get(id);
+    case "banner_g_dmg":
+      return manifest.ship.bannerDamaged.get(id) ?? manifest.ship.banner.get(id);
+    case "banner2_dmg":
+      return manifest.ship.banner2.get(id) ?? manifest.ship.banner2GrayDamaged.get(id);
+    case "banner2_g_dmg":
+      return manifest.ship.banner2Damaged.get(id) ?? manifest.ship.banner2.get(id);
+    case "banner3_dmg":
+      return manifest.ship.banner3.get(id) ?? manifest.ship.banner3GrayDamaged.get(id);
+    case "banner3_g_dmg":
+      return manifest.ship.banner3Damaged.get(id) ?? manifest.ship.banner3.get(id);
+    case "card_dmg":
+      return manifest.ship.card.get(id);
+    case "character_full_dmg":
+      return manifest.ship.characterFull.get(id);
+    case "character_up_dmg":
+    case "power_up_dmg":
+      return manifest.ship.characterUp.get(id);
+    case "full_dmg":
+      return manifest.ship.full.get(id);
+    case "remodel_dmg":
+      return manifest.ship.remodel.get(id);
+    case "supply_character_dmg":
+      return manifest.ship.supplyCharacter.get(id);
     default:
       return undefined;
   }

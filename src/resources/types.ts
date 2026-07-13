@@ -23,10 +23,26 @@ export type FileResource = {
 export type ShipResourceManifest = {
   albumStatus: Map<number, FileResource>;
   banner: Map<number, FileResource>;
+  bannerDamaged: Map<number, FileResource>;
+  bannerGrayDamaged: Map<number, FileResource>;
+  banner2: Map<number, FileResource>;
+  banner2Damaged: Map<number, FileResource>;
+  banner2GrayDamaged: Map<number, FileResource>;
+  banner3: Map<number, FileResource>;
+  banner3Damaged: Map<number, FileResource>;
+  banner3GrayDamaged: Map<number, FileResource>;
   card: Map<number, FileResource>;
+  cardDamaged: Map<number, FileResource>;
+  characterFull: Map<number, FileResource>;
+  characterFullDamaged: Map<number, FileResource>;
   characterUp: Map<number, FileResource>;
   characterUpDamaged: Map<number, FileResource>;
   full: Map<number, FileResource>;
+  fullDamaged: Map<number, FileResource>;
+  remodel: Map<number, FileResource>;
+  remodelDamaged: Map<number, FileResource>;
+  supplyCharacter: Map<number, FileResource>;
+  supplyCharacterDamaged: Map<number, FileResource>;
   spRemodel: ShipSpecialRemodelResourceManifest;
 };
 
