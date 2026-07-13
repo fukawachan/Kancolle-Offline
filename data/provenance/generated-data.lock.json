@@ -143,18 +143,18 @@
     },
     {
       "id": "sortie",
-      "generatedAt": "2026-07-12T14:07:08.808Z",
+      "generatedAt": "2026-07-13T08:49:29.274Z",
       "artifact": {
         "path": "src/master/sortie-data.generated.json",
-        "sha256": "a9d3ec9a51a8e6fdd5e04f6142de7c2bf13e2cbed3936f0809fcb0242fa80134",
-        "bytes": 10004687
+        "sha256": "54dd741631914485d6f7fdbf3d5dce92a01e19d3c598d5e15db95be8812d7a4d",
+        "bytes": 10258649
       },
       "generator": "scripts/generate-sortie-data.mjs",
       "codeInputs": [
         {
           "path": "scripts/generate-sortie-data.mjs",
-          "sha256": "00d51418f53810a6db744595cca5f90137712281932fa1ad832f7868a26d7e2c",
-          "bytes": 22482
+          "sha256": "576411e5c206753c5fa348ba0e5dfcc259ed85b6329dac867e6afa689009d1fe",
+          "bytes": 40984
         },
         {
           "path": "scripts/lib/frozen-source.mjs",
@@ -164,8 +164,8 @@
       ],
       "sourceLock": {
         "path": "data/snapshots/sortie/sources.lock.json",
-        "sha256": "eecb48253672eb640de1547eb0cb3b5e8cb79082a56d2b37eca4ba2a42cd1604",
-        "bytes": 289882
+        "sha256": "a282d8429745fe590c50525ec5d6543ed2b63b713898fd422d4479de27dea511",
+        "bytes": 303695
       },
       "rebuildCommand": [
         "node",

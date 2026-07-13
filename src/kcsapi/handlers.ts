@@ -835,13 +835,27 @@ register("api_req_map/next", (input, context) => {
     return apiError(error instanceof Error ? error.message : "Invalid sortie route selection", 400, {}, 400);
   }
 });
-register("api_req_sortie/battle", (input, context) => apiOk(recordedBattlePayload(input, context, endpointKind("api_req_sortie/battle"))));
-register("api_req_battle_midnight/battle", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
-register("api_req_battle_midnight/sp_midnight", (input, context) => apiOk(recordedNightBattlePayload(input, context)));
-register("api_req_sortie/night_to_day", (input, context) => apiOk(recordedBattlePayload(input, context, endpointKind("api_req_sortie/night_to_day"))));
-register("api_req_sortie/airbattle", (input, context) => apiOk(airBattlePayload(input, context, endpointKind("api_req_sortie/airbattle"))));
-register("api_req_sortie/ld_airbattle", (input, context) => apiOk(airBattlePayload(input, context, endpointKind("api_req_sortie/ld_airbattle"))));
-register("api_req_sortie/ld_shooting", (input, context) => apiOk(recordedBattlePayload(input, context, endpointKind("api_req_sortie/ld_shooting"))));
+register("api_req_sortie/battle", (input, context) => sortieBattleResponse(
+  () => recordedBattlePayload(input, context, endpointKind("api_req_sortie/battle"))
+));
+register("api_req_battle_midnight/battle", (input, context) => sortieBattleResponse(
+  () => recordedNightBattlePayload(input, context)
+));
+register("api_req_battle_midnight/sp_midnight", (input, context) => sortieBattleResponse(
+  () => recordedNightBattlePayload(input, context)
+));
+register("api_req_sortie/night_to_day", (input, context) => sortieBattleResponse(
+  () => recordedBattlePayload(input, context, endpointKind("api_req_sortie/night_to_day"))
+));
+register("api_req_sortie/airbattle", (input, context) => sortieBattleResponse(
+  () => airBattlePayload(input, context, endpointKind("api_req_sortie/airbattle"))
+));
+register("api_req_sortie/ld_airbattle", (input, context) => sortieBattleResponse(
+  () => airBattlePayload(input, context, endpointKind("api_req_sortie/ld_airbattle"))
+));
+register("api_req_sortie/ld_shooting", (input, context) => sortieBattleResponse(
+  () => recordedBattlePayload(input, context, endpointKind("api_req_sortie/ld_shooting"))
+));
 register("api_req_sortie/battleresult", (_input, context) => {
   const applied = context.stateStore.applySortieBattleResult();
   if (applied.record) return apiOk(battleResultPayload(applied.record as unknown as BattleRecord));
@@ -1614,6 +1628,17 @@ function recordedNightBattlePayload(input: HandlerInput, context: HandlerContext
   const night = createNightBattle(record);
   context.stateStore.updateSortieBattle(night.record as unknown as Record<string, unknown>);
   return night.payload;
+}
+
+function sortieBattleResponse(buildPayload: () => Record<string, unknown>) {
+  try {
+    return apiOk(buildPayload());
+  } catch (error) {
+    if (error instanceof Error && error.message === "Sortie battle has no versioned experience data") {
+      return apiError(error.message, 400, {}, 400);
+    }
+    throw error;
+  }
 }
 
 function recordedPracticeBattlePayload(input: HandlerInput, context: HandlerContext) {

@@ -4,6 +4,7 @@ import {
   DEEP_SEA_SLOT_MASTERS,
   ENEMY_UNIT_TEMPLATES,
   fallbackEnemyShipIds,
+  sortieAdmiralExperience,
   selectSortieDrop,
   selectSortieEncounter,
   type EnemyUnitTemplate,
@@ -3334,10 +3335,15 @@ function battleResult(
     : [...friendly].sort((a, b) => b.damageDealt - a.damageDealt || a.position - b.position)[0]?.position ?? 1;
   const baseExp = mode === "practice" && practice
     ? practiceBaseShipExp(practice.enemyShipLevels, rank, practiceSeededBonus(practice.seed))
-    : sortie?.baseExp ?? legacySortieBaseExp(rank);
+    : requireSortieExperience(sortie).baseExp;
   const memberExp = mode === "practice" && practice
     ? practiceMemberExp(practice.playerLevel, practice.enemyLevel, rank)
-    : baseExp * 2;
+    : sortieAdmiralExperience(
+        requireSortieExperience(sortie).experienceProfile,
+        requireSortieExperience(sortie).isBoss,
+        rank,
+        baseExp
+      );
   const dropRank = rank === "S" || rank === "A" || rank === "B" ? rank : null;
   const drop = mode === "practice" || !sortie || !dropRank ? null : selectSortieDrop({
     mapId: sortie.mapId,
@@ -3373,8 +3379,11 @@ function resultFleetState(units: BattleUnit[]) {
   };
 }
 
-function legacySortieBaseExp(rank: BattleResultRecord["rank"]) {
-  return rank === "S" ? 40 : rank === "A" ? 35 : rank === "B" ? 30 : 20;
+function requireSortieExperience(sortie: BattleSortieContext | undefined) {
+  if (!sortie || !Number.isInteger(sortie.baseExp) || sortie.baseExp <= 0 || !sortie.experienceProfile) {
+    throw new Error("Sortie battle has no versioned experience data");
+  }
+  return sortie;
 }
 
 function friendlyUnits(save: SaveState, shipIds: number[]) {

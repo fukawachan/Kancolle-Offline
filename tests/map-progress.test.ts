@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSortieBattle } from "../src/kcsapi/battle.js";
+import { sortieNodes } from "../src/master/sortie-data.js";
 import { createStateStore } from "../src/state/store.js";
 
 describe("normal-map battle progression", () => {
@@ -321,6 +322,13 @@ function settleAt(
     transportSPoints?: number;
   }
 ) {
+  // Experience is now encounter-bound and no longer has a rank fallback, so
+  // build the fixture at the requested combat node before overriding damage.
+  const fixtureNode = sortieNodes().find((node) => node.mapId === input.mapId && node.point === input.point)?.node
+    ?? sortieNodes().find((node) => node.mapId === input.mapId && node.combat)?.node
+    ?? input.node;
+  store.db.prepare("UPDATE sortie_sessions SET area_id = ?, map_no = ?, node = ? WHERE id = 1")
+    .run(Math.floor(input.mapId / 10), input.mapId % 10, fixtureNode);
   const battle = createSortieBattle(store.getSave(), { formation: 1 });
   const record = {
     ...battle.record,
@@ -334,7 +342,7 @@ function settleAt(
         seed: 1
       }),
       mapId: input.mapId,
-      node: input.node,
+      node: fixtureNode,
       point: input.point,
       isBoss: input.isBoss,
       ...(input.transportSPoints == null

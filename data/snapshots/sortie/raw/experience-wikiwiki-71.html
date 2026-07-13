@@ -1,0 +1,1603 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head prefix="og: https://ogp.me/ns# fb: https://ogp.me/ns/fb# article: https://ogp.me/ns/article#">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=980">
+
+    <meta name="description" content="艦隊これくしょん -艦これ- 攻略 Wiki*">
+        <meta property="og:url" content="https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="南西海域/7-1 - 艦隊これくしょん -艦これ- 攻略 Wiki*" />
+    <meta property="og:description" content="艦隊これくしょん -艦これ- 攻略 Wiki*" />
+    <meta property="og:site_name" content="艦隊これくしょん -艦これ- 攻略 Wiki*" />
+    <meta property="og:image" content="https://cdn.wikiwiki.jp/to/w/common/image/wikiwiki_ogp.png?v=4" />
+    <title>南西海域/7-1 - 艦隊これくしょん -艦これ- 攻略 Wiki*</title>
+
+    <link rel="alternate" href="/kancolle/::cmd/mixirss" type="application/rss+xml" title="RSS" />
+
+    <link rel="icon" href="https://cdn.wikiwiki.jp/to/w/common/user-favicon.ico?v=4"/>
+    <link rel="stylesheet" href="https://cdn.wikiwiki.jp/to/w/common/assets/dist/wikiwiki-dbc3538ca778dc7fcfbe.min.css" type="text/css">
+<link rel="stylesheet" href="https://cdn.wikiwiki.jp/to/w/common/assets/dist/wikiwiki-ex1-ca7abd155d2d8393da00.min.css" type="text/css">
+<link rel="stylesheet" href="https://cdn.wikiwiki.jp/to/w/common/assets/dist/wikiwiki-ex2-787d5d5f913a969fe5ea.min.css" type="text/css">
+<link rel="stylesheet" href="https://cdn.wikiwiki.jp/to/w/common/assets/dist/skin-official-81ebeecb646b6428a08f.min.css" type="text/css">
+    
+    <script type="text/javascript" src="https://cdn.wikiwiki.jp/to/w/common/assets/dist/ad-1bf004520fc167abbea6.min.js"></script>
+    <script>
+    var wi_stay = (function () {
+        var wi_data_raw = localStorage.getItem('browsingStatistics');
+        var wi_data = wi_data_raw ? (JSON.parse(wi_data_raw) || {}) : {};
+        var stay = Number(wi_data.stay);
+        if (isNaN(stay)) {
+            stay = 0;
+        }
+        return stay;
+    })();
+    var wi_data_raw = localStorage.getItem('usageStatistics');
+    var wi_data =     wi_data_raw ? (JSON.parse(wi_data_raw) || {}) : {};
+    var wi_edit =     String(wi_data.edit || 0);
+    var wi_freeze =   String(wi_data.freeze || 0);
+    var wi_comment =  String(wi_data.comment || 0);
+    var wi_group = String(wi_data.group || "N");
+    var wi_smsAuth = wi_data.smsAuth || false;
+    var wi_hasPosted = wi_data.hasPosted || false;
+    var wi_agreement = String(wi_data.agreementStatus || "false");
+    if (document.referrer.length !== 0) {
+        var wi_uri = new URL(document.referrer);
+        var wi_referer = wi_uri.hostname;
+    } else {
+        var wi_referer = "unknown";
+    }
+
+    // Chromium系判定
+    function isChromium() {
+        var ua = navigator.userAgent;
+        // Edge, Opera, Chrome, Chromium, Brave など
+        return /\b(Chrome|Chromium|Edg|OPR|Brave)\b/.test(ua) && !/Silk|UCBrowser|SamsungBrowser|CriOS|FxiOS|OPiOS|EdgiOS/.test(ua);
+    }
+
+    var wi_ismobile;
+    var wi_device;
+    if (isChromium() && navigator.userAgentData) {
+        wi_ismobile = navigator.userAgentData.mobile;
+        if (wi_ismobile) {
+            if (navigator.userAgentData.platform === "Android") {
+                wi_device = "and";
+            } else {
+                wi_device = "ios";
+            }
+        } else {
+            wi_device = "pc";
+        }
+    } else {
+        wi_ismobile = !!navigator.userAgent.match(/iPhone|Android.+Mobile/);
+        if (navigator.userAgent.match(/Android.+Mobile/)) {
+            wi_device = "and";
+        } else if (navigator.userAgent.match(/iPhone/)) {
+            wi_device = "ios";
+        } else {
+            wi_device = "pc";
+        }
+    }
+
+    var wi_isportrait = window.matchMedia("(orientation: portrait)").matches;
+    var wi_isinbound = wi_referer.includes(window.location.hostname) ? false : true;
+    var wi_random100 = Math.floor(Math.random() * (100 - 1) + 1);
+    var wi_random110 = Math.floor(Math.random() * 10) + 1;
+    var wi_isread_yet = true;
+    var wi_location_hash = location.hash || false;
+</script>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-3Y8FN9EFS7"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-3Y8FN9EFS7', {
+        'content_group': 'kancolle',
+        'user_properties': {
+            'user_group':     wi_group,
+            'user_agreement': wi_agreement,
+            'edit_count':     wi_edit,
+            'comment_count':  wi_comment,
+            'sms_auth':       String(wi_smsAuth)
+        }
+    });
+    gtag('config', 'G-574T4EBBPP');
+
+</script>
+
+<script>
+    window.wikiFq = createWikiFq();
+</script>
+<script>
+    var wi_recref = recordReferrerDomain();
+</script>
+
+<script>
+const visitData_20241117 = (() => {
+const RESET_INTERVAL_MINUTES = 30;
+const now = Date.now();
+const resetIntervalMs = RESET_INTERVAL_MINUTES * 60 * 1000;
+const storageKey = "internalVisitData";
+let data = JSON.parse(localStorage.getItem(storageKey)) || { count: 0, lastVisit: now };
+if (now - data.lastVisit > resetIntervalMs) data = { count: 0, lastVisit: now };
+if (document.referrer && new URL(document.referrer).hostname === window.location.hostname) {
+data = { count: data.count + 1, lastVisit: now };
+localStorage.setItem(storageKey, JSON.stringify(data));
+}
+return data;
+})();
+
+const int_conditions = [
+wi_ismobile,
+wi_group === 'N',
+wi_agreement === 'false',
+!wi_isinbound,
+visitData_20241117.count === 1,
+];
+
+const int_conditions_pc = [
+    !wi_ismobile,
+    wi_group === 'N',
+    wi_agreement === 'false',
+    !wi_isinbound,
+    visitData_20241117.count === 1,
+];
+</script>
+<script>
+(function () {
+  const FLAG = "iminst_pc";
+  const url = new URL(location.href);
+
+  if (url.searchParams.get(FLAG) === "1") {
+    url.searchParams.delete(FLAG);
+    history.replaceState(null, "", url.toString());
+    return;
+  }
+
+  if (Array.isArray(int_conditions_pc) && int_conditions_pc.every(Boolean)) {
+    url.searchParams.set(FLAG, "1");
+    location.href = url.toString();
+  }
+})();
+</script>
+<script>
+(function(){
+  const FLAG="fluxinst_sp";
+  const url=new URL(location.href);
+
+  if(url.searchParams.get(FLAG)==="1"){
+    url.searchParams.delete(FLAG);
+    history.replaceState(null,"",url.toString());
+    return;
+  }
+
+  if(
+    Array.isArray(int_conditions) &&
+    int_conditions.every(Boolean) &&
+    (wi_device==="ios" || wi_device==="and")
+  ){
+    url.searchParams.set(FLAG,"1");
+    location.href=url.toString();
+  }
+})();
+</script>
+
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-KQ52VZ3');</script>
+<!-- End Google Tag Manager -->
+
+
+<script async="async" src="https://flux-cdn.com/client/ukiuki/flux_wikiwiki_AS_TM_AT.min.js"></script>
+<script type="text/javascript">
+    var pbjs = pbjs || {};
+    pbjs.que = pbjs.que || [];
+</script>
+<script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+<script>
+var googletag = googletag || {};
+googletag.cmd = googletag.cmd || [];
+
+var wi_adslot_rectangle = [[300,250],[1,1]];
+var wi_adslot = [[300,250],[1,1]];
+if (document.documentElement.clientWidth > 406) {
+  wi_adslot_rectangle = [[300,250],[336,280],[1,1]];
+  wi_adslot = [[468,60],[300,250],[1,1]];
+}
+
+window.defineSlotFlux = [];
+if (wi_ismobile && wi_isportrait) {
+  defineSlotFlux.push({"slotID": "div-gpt-ad-1563441919648-0", "sizes": [[320, 100], [320, 50]], "slotName":"WIKIWIKI_SP_OVERLAY"});
+}
+    if (wi_isinbound && wi_ismobile && wi_group == "N" && wi_agreement === "false") {
+      defineSlotFlux.push({"slotID": "div-gpt-ad-1563430750445-0", "sizes": [[300,250]], "slotName":"WIKIWIKI_SP_INBOUND"});
+    } else if (wi_isinbound && wi_group == "N" && wi_agreement === "false") {
+      defineSlotFlux.push({"slotID": "div-gpt-ad-1567409776345-0", "sizes": [[300,250]], "slotName":"WIKIWIKI_PC_INBOUND"});
+      defineSlotFlux.push({"slotID": "div-gpt-ad-1658802281376-0", "sizes": [[300,250]], "slotName":"WIKIWIKI_PC_INBOUND_RIGHT"});
+    }
+  if (wi_ismobile) {
+    defineSlotFlux.push({"slotID": "div-gpt-ad-1567408559923-0", "sizes": [[300,250]], "slotName":"WIKIWIKI_SP_SECOND"});
+  } else {
+    defineSlotFlux.push({"slotID": "div-gpt-ad-1567408559923-0", "sizes": [[300,250]], "slotName":"WIKIWIKI_PC_BOTTOM_LEFT"});
+    defineSlotFlux.push({"slotID": "div-gpt-ad-1658912377789-0", "sizes": [[300,250]], "slotName":"WIKIWIKI_PC_BOTTOM_RIGHT"});
+  }
+</script>
+<script type="text/javascript">
+if (defineSlotFlux.length) {
+    var readyBids = {
+        prebid: false,
+        google: false
+    };
+    var failSafeTimeout = 3e3; // 3秒でフェイルセーフ発動
+    var launchAdServer = function () {
+        if (!readyBids.prebid) {
+            return;
+        }
+        requestAdServer();
+    };
+    var requestAdServer = function () {
+        if (!readyBids.google) {
+            readyBids.google = true;
+            googletag.cmd.push(function () {
+                pbjs.que.push(function () {
+                    pbjs.setTargetingForGPTAsync();
+                });
+                googletag.pubads().refresh();
+            });
+        }
+    };
+}
+</script>
+<script>
+googletag.cmd.push(function() {
+    if (wi_ismobile && wi_isportrait) {
+        googletag.defineSlot('/19033742/WIKIWIKI_SP_OVERLAY',[[320,100],[320,50],[1,1]],'div-gpt-ad-1563441919648-0').addService(googletag.pubads());
+    }
+    if (wi_isinbound && wi_ismobile && wi_group == "N" && wi_agreement === "false") {
+      googletag.defineSlot('/19033742/WIKIWIKI_SP_INBOUND',[[300,250]],
+        'div-gpt-ad-1563430750445-0').setCollapseEmptyDiv(true).addService(googletag.pubads());
+    } else if (wi_isinbound && wi_group == "N" && wi_agreement === "false") {
+      googletag.defineSlot('/19033742/WIKIWIKI_PC_INBOUND',[[336,280],[300,250]],
+        'div-gpt-ad-1567409776345-0').setCollapseEmptyDiv(true).addService(googletag.pubads());
+      googletag.defineSlot('/19033742/WIKIWIKI_PC_INBOUND_RIGHT',[[336,280],[300,250]],
+        'div-gpt-ad-1658802281376-0').setCollapseEmptyDiv(true).addService(googletag.pubads());
+    }
+    if (wi_ismobile) {
+        googletag.defineSlot('/19033742/WIKIWIKI_SP_SECOND',[[300,250]],
+        'div-gpt-ad-1567408559923-0').addService(googletag.pubads());
+    } else {
+        googletag.defineSlot('/19033742/WIKIWIKI_PC_BOTTOM_LEFT',[[336,280],[300,250]],
+        'div-gpt-ad-1567408559923-0').addService(googletag.pubads());
+        googletag.defineSlot('/19033742/WIKIWIKI_PC_BOTTOM_RIGHT',[[336,280],[300,250]],
+        'div-gpt-ad-1658912377789-0').addService(googletag.pubads());
+    }
+    googletag.pubads().setTargeting("gpolicy","sunny");
+    googletag.pubads().setTargeting("site","kancolle");
+    googletag.pubads().collapseEmptyDivs();
+    googletag.pubads().enableSingleRequest();
+    googletag.pubads().addEventListener('slotRenderEnded', function(event) {
+        var slot = event.slot;
+        if (document.getElementById(slot.getSlotElementId()) != null){
+            var slotElm = document.getElementById(slot.getSlotElementId());
+            if (slotElm && slotElm.className === 'overlay-ad-wrapper') {
+                var overlayRenderedEvent = document.createEvent('Event');
+                overlayRenderedEvent.initEvent('overlay-ad-rendered', true, true);
+                slotElm.dispatchEvent(overlayRenderedEvent);
+            }
+        }
+    });
+    googletag.pubads().enableLazyLoad({
+        fetchMarginPercent: 50,   // 0.5画面分まできたらリクエスト
+        renderMarginPercent: 50,  // 0.5画面分まできたら描画
+        mobileScaling: 2.0        // モバイルはスクロールが早いため2倍（1.0画面分）にする
+    });
+    if (defineSlotFlux.length) {googletag.pubads().disableInitialLoad();};
+    googletag.enableServices();
+    if (defineSlotFlux.length) {
+        pbjs.que.push(function () {
+            pbFlux.prebidBidder();
+        });
+    }
+});
+</script>
+
+
+<script type="text/javascript">
+if (defineSlotFlux.length) {
+    // set failsafe timeout
+    setTimeout(function () {
+        requestAdServer();
+    }, failSafeTimeout);
+}
+</script>
+
+<script>
+googletag.cmd.push(function() {
+  googletag.pubads()
+    .setTargeting("wi_agreement",     String(wi_data.agreementStatus || "false"))
+    .setTargeting("wi_group",     String(wi_data.group || "N"))
+    .setTargeting("wi_comment",   wi_comment.length.toString())
+    .setTargeting("wi_edit",      wi_edit.length.toString())
+    .setTargeting("wi_freeze",    wi_freeze.length.toString())
+    .setTargeting("wi_smsAuth",   String(wi_data.smsAuth || false))
+    .setTargeting("wi_hasPosted", String(wi_data.hasPosted || false))
+    .setTargeting("wi_referer",   String(wi_referer || "unknown"))
+    .setTargeting("wi_random110", String(wi_random110 || "0"))
+    .setTargeting("wi_hour", ('0' + new Date().getHours()).slice(-2));
+});
+</script>
+
+<script>
+googletag.cmd.push(function() {
+  googletag.pubads()
+    .setTargeting("wi_rating_in_01","true");
+});
+</script>
+<style>
+.pc-caption-ad-default {
+    margin-top:20px;
+    display:flex;
+    justify-content:flex-start;
+    gap: 10px 5px;
+    min-height:280px;
+    position: sticky;
+    z-index: 3;
+    top: 45px;
+}
+
+.pc-caption-ad-center{
+    margin-top:20px;
+    display:flex;
+    justify-content:center;
+    gap: 10px 5px;
+    min-height:280px;
+    position: sticky;
+    z-index: 3;
+    top: 45px;
+}
+.pc-caption-ad-mobile{
+    margin-top:20px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:center;
+    min-height:331px;
+    position: sticky;
+    z-index: 3;
+    top: 45px;
+}
+.pc-caption-ad-mobile-300x600{
+    margin-top:20px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:center;
+    min-height:331px;
+}
+.default-advertisement {
+    background-color: transparent;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 576 512'%3E%3C!--!Font Awesome Pro 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2024 Fonticons, Inc.--%3E%3Cpath d='M16 48l0 416 544 0 0-416L16 48zM0 32l16 0 544 0 16 0 0 16 0 416 0 16-16 0L16 480 0 480l0-16L0 48 0 32zM320 280a56 56 0 1 0 112 0 56 56 0 1 0 -112 0zm56-72c22.6 0 42.8 10.4 56 26.7l0-66.7 0-8 16 0 0 8 0 112 0 64 0 8-16 0 0-8 0-18.7c-13.2 16.3-33.4 26.7-56 26.7c-39.8 0-72-32.2-72-72s32.2-72 72-72zM183.1 160l5.2 0 7.3 0 5.2 0 2.1 4.8L284.2 352l-17.4 0-20.8-48-107.8 0-20.8 48-17.4 0L181 164.8l2.1-4.8zM145 288l94 0L192 179.7 145 288z' fill='%23BBB'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 25px 25px;
+}
+
+@media (max-width: 500px) {
+  .caption-flybox:has(iframe[id^="google_ads_iframe_"]) {
+    position: relative;
+    min-height: 450px;
+  }
+}
+</style>
+
+
+<script>
+googletag.cmd.push(function() {
+    const pcCaptionPaths = [
+        '/19033742/WIKIWIKI_PC_CAPTION',
+        '/19033742/WIKIWIKI_PC_CAPTION_SIDE_BY',
+        '/19033742/WIKIWIKI_PC_CAPTION_20TH',
+        '/19033742/WIKIWIKI_CAPTION_B'
+    ];
+
+    const spCaptionPaths = [
+        '/19033742/WIKIWIKI_SP_CAPTION',
+        '/19033742/WIKIWIKI_SP_CAPTION_300x600'
+    ];
+
+    googletag.pubads().addEventListener('slotRenderEnded', function(event) {
+        const slotElement = document.getElementById(event.slot.getSlotElementId());
+        const parent = slotElement?.parentNode;
+
+        if (parent && !event.isEmpty) {
+            if (pcCaptionPaths.includes(event.slot.getAdUnitPath())) {
+                parent.classList.add(parent.clientWidth < 769 ? "pc-caption-ad-center" : "pc-caption-ad-default");
+            } else if (spCaptionPaths.includes(event.slot.getAdUnitPath())) {
+                if (event.slot.getAdUnitPath() === '/19033742/WIKIWIKI_SP_CAPTION_300x600') {
+                    parent.classList.add("pc-caption-ad-mobile-300x600");
+                } else {
+                    parent.classList.add("pc-caption-ad-mobile");
+                }
+            }
+        }
+    });
+
+    googletag.pubads().addEventListener('slotOnload', function(event) {
+        const slotElement = document.getElementById(event.slot.getSlotElementId());
+        slotElement?.parentNode?.classList.remove("default-advertisement");
+    });
+});
+</script>
+
+<link rel="preload" as="script" href="https://pdn.adingo.jp/p.js">
+<link rel="preconnect" href="https://sh.adingo.jp" crossorigin="use-credentials">
+    <link rel="canonical" href="https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1">
+    <style>
+@media screen and (min-width: 820px) {
+  .container-wrapper {
+    min-width: 980px;
+    max-width: none;
+  }
+}
+</style>
+<style>
+  body {
+      font-family: Verdana, Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+      font-size: 12px;
+  }
+</style>
+<style>
+  @media screen and (max-width: 819px), print and (max-width: 180mm) {
+    body {
+        font-size: 13px;
+    }
+  }
+</style>
+        <script>
+        window.globalParamsContainer = {"smsAuthParams":{"actionTrollingDefenceCheck":"\/kancolle\/::cmd\/trolling_defence_pass","actionSubmitNumber":"\/p\/sms-auth\/code\/request","actionSubmitCode":"\/p\/sms-auth\/code\/activate","cookieName":"authkey"},"editAssistantImgSrc":{"face_smile":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/smile.png?v=4","face_bigsmile":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/bigsmile.png?v=4","face_huh":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/huh.png?v=4","face_oh":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/oh.png?v=4","face_wink":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/wink.png?v=4","face_sad":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/sad.png?v=4","face_worried":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/worried.png?v=4","face_tear":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/tear.png?v=4","face_tere":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/tere.png?v=4","face_shock":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/shock.png?v=4","face_heart":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/heart.png?v=4","face_star":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/star.gif?v=4","face_hatena":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/hatena.gif?v=4","face_tip":"https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/face\/tip.gif?v=4"},"experimentalFeature":false};
+    </script>
+</head>
+<body class="">
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-KQ52VZ3"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<style>
+/* 1 */
+@media (max-width: 500px) {
+    body {
+        margin-bottom: 129px !important;
+        transition: margin-bottom 0.4s ease-in-out;
+    }
+    body:has(#div-gpt-ad-1563441919648-0 iframe[height="50"]) {
+        margin-bottom: 79px !important;
+    }
+}
+
+/* 2 */
+#overlay-anchor-wrapper {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    width: 100%;
+    z-index: 99998;
+    pointer-events: none;
+    transform: translateY(100%);
+    transition: transform 0.4s ease-in-out 10s;
+}
+
+body:has(#div-gpt-ad-1563441919648-0 iframe) #overlay-anchor-wrapper {
+    transform: translateY(0);
+    transition: transform 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.6s;
+}
+
+/* 3 */
+#pc-overlay-ad-parent-container {
+    contain: layout style;
+    content-visibility: auto;
+
+    width: 100%;
+    background-color: var(--h2-background-color, #ffffff) !important;
+    padding-top: 5px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.1);
+    pointer-events: auto;
+
+    max-height: 105px;
+    height: auto;
+    transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: visible !important;
+}
+
+#pc-overlay-ad-parent-container:has(iframe[height="50"]) {
+    max-height: 60px;
+}
+
+/* 4 */
+#pc-overlay-ad-close-button {
+    position: absolute;
+    top: -24px;
+    right: 12px;
+    width: 38px; height: 24px;
+    background-color: var(--h2-background-color, #ffffff) !important;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 99999;
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 0;
+    transform: translateY(5px);
+    transition: opacity 0.6s ease-out 10s, transform 0.6s ease-out 10s;
+}
+
+body:has(#div-gpt-ad-1563441919648-0 iframe) #pc-overlay-ad-close-button {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.6s ease-out 1.8s, transform 0.6s ease-out 1.8s;
+}
+
+#pc-overlay-ad-close-button svg {
+    width: 14px; height: 14px;
+    fill: var(--h2-text-color, #666666) !important;
+}
+
+/* 5 */
+#ad-close-trigger { display: none; }
+
+#ad-close-trigger:checked ~ #overlay-anchor-wrapper {
+    transform: translateY(100%) !important;
+    opacity: 0;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 1, 1), opacity 0.4s cubic-bezier(0.4, 0, 1, 1) !important;
+    pointer-events: none;
+}
+
+body:has(#ad-close-trigger:checked) {
+    margin-bottom: 0 !important;
+}
+
+/* 6 */
+.overlay-ad-container { 
+    display: flex; justify-content: center; align-items: center; 
+    min-height: 50px; position: relative; 
+}
+.overlay-ad-container::before { 
+    content: ""; position: absolute; width: 320px; height: 100%; 
+    border-radius: 4px; z-index: 0;
+    animation: quietPulse 3s infinite; 
+}
+@keyframes quietPulse { 0%, 100% { background-color: transparent; } 50% { background-color: rgba(0, 0, 0, 0.04); } }
+
+#div-gpt-ad-1563441919648-0 { position: relative; z-index: 1; display: flex; justify-content: center; width: 100%; }
+#div-gpt-ad-1563441919648-0 iframe {
+    animation: fadeInQuick 0.5s ease-in-out 0.2s both !important;
+    background: var(--h2-background-color, #ffffff);
+}
+@keyframes fadeInQuick { from { opacity: 0; } to { opacity: 1; } }
+</style>
+
+<input type="checkbox" id="ad-close-trigger">
+<div id="overlay-anchor-wrapper" class="hidden-switch-class">
+    <label for="ad-close-trigger" id="pc-overlay-ad-close-button">
+        <svg viewBox="0 0 384 512"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192 301.3 297.4 406.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256 342.6 150.6z"/></svg>
+    </label>
+<div id="pc-overlay-ad-parent-container" class="hidden-switch-class">
+    <div id="pc-overlay-ad-container-hidden" class="overlay-ad-container">
+        <div id="pc-overlay-ad-container">
+            <div id='div-gpt-ad-1563441919648-0' class="overlay-ad-wrapper"></div>
+        </div>
+    </div>
+</div>
+</div>
+<noscript>
+    <div class="noscript-alert">
+        <i class="fa-solid fa-exclamation-triangle"></i>
+        ブラウザの JavaScript がオフ（ブロックまたは許可しない）に設定されているため、このページは正常に機能しません。
+    </div>
+</noscript>
+<div class="container-wrapper">
+
+    <div class="container clearfix">
+                    <div id="header" class="default-header">
+                <a href="/kancolle/">    <img id="logo" src="https://cdn.wikiwiki.jp/to/w/common/image/pukiwiki.svg?v=4" width="70" height="70" title="艦隊これくしょん -艦これ- 攻略 Wiki*" alt="Logo"></a>                <br />
+                <a href="/kancolle/" title="艦隊これくしょん -艦これ- 攻略 Wiki*"><span class="title2">艦隊これくしょん -艦これ- 攻略 Wiki*</span></a>
+            </div>
+            </div>
+
+    <div class="container clearfix">
+        <div class="navibar-container-all">
+            <div class="navibar-container navibar-desktop">
+                <div id="navigator">[ <a href="/kancolle/">ホーム</a> ]
+
+[ <a href="/kancolle/::cmd/newpage?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">新規</a> | <a href="/kancolle/::cmd/edit?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">編集</a> | <a href="/kancolle/::cmd/attach?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">添付</a> ]
+
+[ <a href="/kancolle/::cmd/list" rel="nofollow">一覧</a> | <a href="/kancolle/RecentChanges" rel="nofollow">最終更新</a> | <a href="/kancolle/::cmd/diff?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">差分</a> | <a href="/kancolle/::cmd/backup?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">バックアップ</a> ]
+
+[ <a href="/kancolle/::cmd/freeze?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">凍結</a> | <a href="/kancolle/::cmd/template?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">複製</a> | <a href="/kancolle/::cmd/rename?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow">名前変更</a> ]
+
+[ <a href="/kancolle/::cmd/help" rel="nofollow">ヘルプ</a> ]</div>            </div>
+            <div class="navibar-container navibar-mobile">
+                <div id="navigator">[ <a href="/kancolle/">ホーム</a> ]
+
+[ <a id="menu-in-nav" href="#menubar" class="menu-in-nav">Menu<i class="fa-solid fa-arrow-alt-down"></i></a> | <a href="/kancolle/RecentChanges" rel="nofollow">最終更新</a> ]</div>            </div>
+            <div class="toolbox toolbox-searchbar">
+                <form action="/kancolle/::cmd/search" method="get">
+                    <input type="search"  name="word" value="" size="16" placeholder="サイト内検索">
+                    <input type="hidden" name="type" value="AND">
+                    <input type="submit" value="検索">
+                </form>
+            </div>
+        </div>
+        <hr />
+            <div id="responsive-navigation"></div>
+    <div style="display: none;">
+        <div id="edit-menu" class="system-ui">
+            <div id="edit-menu-items">
+                <ul><li><a href="/kancolle/::cmd/newpage?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar new'></span> 新規</a></li><li><a href="/kancolle/::cmd/edit?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar edit'></span> 編集</a></li><li><a href="/kancolle/::cmd/attach?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar upload'></span> 添付</a></li></ul>
+<ul><li><a href="/kancolle/::cmd/list" rel="nofollow"><span class='system-icon toolbar list'></span> 一覧</a></li><li><a href="/kancolle/RecentChanges" rel="nofollow"><span class='system-icon toolbar recent'></span> 最終更新</a></li><li><a href="/kancolle/::cmd/diff?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar diff'></span> 差分</a></li><li><a href="/kancolle/::cmd/backup?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar backup'></span> バックアップ</a></li></ul>
+<ul><li><a href="/kancolle/::cmd/freeze?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar freeze'></span> 凍結</a></li><li><a href="/kancolle/::cmd/template?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar copy'></span> 複製</a></li><li><a href="/kancolle/::cmd/rename?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" rel="nofollow"><span class='system-icon toolbar rename'></span> 名前変更</a></li></ul>
+<ul><li><a href="/kancolle/::cmd/help" rel="nofollow"><span class='system-icon toolbar help'></span> ヘルプ</a></li></ul>
+
+            </div>
+        </div>
+    </div>    </div>
+
+    <div id="contents" class="columns-container three-columns-container container clearfix has-left-column">
+
+        <div class="column-center clearfix">
+            <div class="clearfix">
+                <div id="breadcrumbs" class="system-ui">
+                    <div id="topicpath"><a href="/kancolle/" title="FrontPage"><i class="fa-solid fa-home" style="margin-left: 6px; display: inline-block; min-width: 1.2em;"></i></a> &gt; <a href="/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F" title="南西海域">南西海域</a> &gt; 7-1</div>                </div>
+                <div id="system-icon-container" class="system-ui">
+                                        <span id="share-button-root"></span>                    <span id="admin-contact-root" class="single-system-icon"></span>
+                    <div id="load-panel-root"></div>
+                    <span id="admin-login" class="single-system-icon">
+                        
+<a class="admin-login-status" href="/kancolle/::cmd/admin_login?return_to=%2Fkancolle%2F%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" title="未ログイン">
+    <i class="fa-solid fa-cog"></i>
+</a>
+                    </span>
+                </div>
+            </div>
+
+            <div id="body">
+                                
+                <div id="title">
+                                            <h1 class="title">南西海域/7-1</h1>
+                                                                <div id="lastmodified">
+                            Last-modified: 2026-07-11 (土) 11:10:56                                                            <span class="lastmodified-file-itself tooltip" data-tooltip-content="このページ自体の更新: 2026-06-28 (日) 22:52:30"><i class="fa-solid fa-file-signature"></i></span>
+                                                    </div>
+                                    </div>
+
+                
+<div id="inbound-ad-container">
+  <!-- /19033742/WIKIWIKI_PC_INBOUND -->
+  <div id='div-gpt-ad-1567409776345-0'></div>
+  <!-- /19033742/WIKIWIKI_PC_INBOUND_RIGHT -->
+  <div id='div-gpt-ad-1658802281376-0'></div>
+  <!-- /19033742/WIKIWIKI_SP_INBOUND -->
+  <div id='div-gpt-ad-1563430750445-0' class="hidden-switch-class"></div>
+</div>
+
+<style>
+.pc-inbound-ad-default {
+    margin-top:40px;
+    margin-bottom:40px;
+    display:flex;
+    justify-content:flex-start;
+    gap: 10px 5px;
+    min-height:280px;
+}
+.pc-inbound-ad-center{
+    margin-top:40px;
+    margin-bottom:40px;
+    display:flex;
+    justify-content:center;
+    gap: 10px 5px;
+    min-height:280px;
+    position: relative;
+}
+.pc-inbound-ad-mobile{
+    margin-top:20px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:center;
+    min-height:280px;
+}
+.pc-inbound-ad-close-button {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 20px;
+    height: 20px;
+    background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"%3E%3C!--! Font Awesome Pro 6.6.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2024 Fonticons, Inc. --%3E%3Cpath class="fa-secondary" opacity=".4" d="M281.4 390.6L304 413.3 349.3 368l-22.6-22.6L237.3 256l89.4-89.4L349.3 144 304 98.7l-22.6 22.6L192 210.7l-89.4-89.4L80 98.7 34.7 144l22.6 22.6L146.7 256 57.4 345.4 34.7 368 80 413.3l22.6-22.6L192 301.3l89.4 89.4z" fill="%23888"/%3E%3C/svg%3E') no-repeat center;
+    background-size: contain;
+    cursor: pointer;
+}
+</style>
+
+<script>
+(function () {
+    const co = document.getElementById('inbound-ad-container');
+    const inboundPaths = [
+        '/19033742/WIKIWIKI_PC_INBOUND',
+        '/19033742/WIKIWIKI_PC_INBOUND_RIGHT'
+    ];
+
+    if (wi_isinbound && wi_group === "N" && wi_agreement === "false") {
+        if (wi_ismobile) {
+            co.classList.add("pc-inbound-ad-mobile","default-advertisement");
+        } else {
+            const width = co.clientWidth;
+            const adClass = width < 683 || (width >= 683 && width < 900) ? ["pc-inbound-ad-center","default-advertisement"] : ["pc-inbound-ad-default"];
+            co.classList.add(...adClass);
+
+            if (adClass.includes("pc-inbound-ad-center")) {
+                googletag.cmd.push(function() {
+                    googletag.pubads().addEventListener('slotOnload', function(event) {
+                        if (inboundPaths.includes(event.slot.getAdUnitPath())) {
+                            let closeButton = co.querySelector(".pc-inbound-ad-close-button");
+                            if (!closeButton) {
+                                closeButton = document.createElement("div");
+                                closeButton.classList.add("pc-inbound-ad-close-button");
+                                closeButton.onclick = () => co.style.display = "none";
+                                co.appendChild(closeButton);
+                            }
+                        }
+                    });
+                });
+            }
+        }
+    }
+})();
+</script>
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8989645915312923" crossorigin="anonymous"></script>
+
+<div id="adsense-body-top-wrap" class="hidden-switch-class"
+     style="width:100%;height:100px;margin:10px 0;display:flex;justify-content:center;align-items:center;overflow:hidden; overflow-anchor:none;">
+  <ins id="adsense-body-top" class="adsbygoogle"
+       data-ad-client="ca-pub-8989645915312923"
+       data-ad-slot=""
+       data-full-width-responsive="false"></ins>
+</div>
+
+<script>
+const adsense_body_top_conditions = [
+    wi_group === 'N',
+    wi_agreement === 'false',
+    !wi_isinbound,
+];
+
+if (adsense_body_top_conditions.every(Boolean)) {
+(function(){
+  var wrap = document.getElementById('adsense-body-top-wrap');
+  var el   = document.getElementById('adsense-body-top');
+  if (!wrap || !el) return;
+
+  var wrapW = Math.floor(wrap.getBoundingClientRect().width);
+  if (wrapW < 320) { wrap.style.display='none'; return; }
+
+  var CANDIDATES = [[970,90],[728,90],[320,100],[320,50]];
+  var size = null;
+  for (var i=0;i<CANDIDATES.length;i++){ if (CANDIDATES[i][0] <= wrapW){ size = CANDIDATES[i]; break; } }
+  if (!size){ wrap.style.display='none'; return; }
+
+  var finalW = Math.min(size[0], wrapW);
+  el.style.width  = finalW + 'px';
+  el.style.height = size[1] + 'px';
+  el.setAttribute('data-ad-slot', (size[0] >= 728) ? '3530569285' : '2676668520');
+
+  (adsbygoogle = window.adsbygoogle || []).push({});
+})();
+} else {
+  document.getElementById('adsense-body-top-wrap').remove();
+}
+</script>
+                <div class="search-words small" style="display: none;">
+    <div class="small">これらのキーワードがハイライトされています：<ul class="search-words-words"></ul></div>
+    <hr class="full_hr">
+</div>
+                <div id="content">
+                                        <div class="h-scrollable"><table><tbody><tr><th style="width:100px;">難度</th><td colspan="2">☆☆☆☆☆</td></tr><tr><th style="width:100px;">作戦名</th><td colspan="2">ブルネイ泊地沖哨戒</td></tr><tr><th style="width:100px;">作戦内容</th><td colspan="2">燃料の豊かなブルネイ泊地近海に敵潜水艦の跳梁が見られる。<br class="spacer">これを捜索制圧し、重要拠点である同泊地周辺の安全を図れ！</td></tr><tr><th style="width:100px;">主な出現アイテム</th><td style="width:550px;">燃料</td><td rowspan="3"><a href="https://cdn.wikiwiki.jp/to/w/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/::attach/map2nd7-1.jpg?rev=512ed3e9a9993ea4fa55a52f9f23cb37&amp;t=20180821044842" title="ブルネイ泊地沖" data-lightbox="imageset"><img src="https://cdn.wikiwiki.jp/to/w/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/::ref/map2nd7-1.jpg.webp?rev=512ed3e9a9993ea4fa55a52f9f23cb37&amp;t=20180821044842" alt="ブルネイ泊地沖" title="ブルネイ泊地沖" width="342" height="174" style="min-width: 300px;"  loading="lazy"></a><br class="spacer"><span style="font-size:8px">クリックで拡大</span></td></tr><tr><th style="width:100px;">戦力HPゲージ</th><td style="width:550px;">ボス艦隊旗艦の撃沈で1/3減少（与ダメージでは減少しない）<br class="spacer">3回撃沈で海域クリア<br class="spacer"></td></tr><tr><th style="width:100px;"><a href="/kancolle/BGM" title="BGM" class="rel-wiki-page">戦闘BGM変化</a></th><td style="width:550px;">海域マップ：「捷号決戦前夜」<br class="spacer">道中戦闘：「新編「海上護衛隊」抜錨！」<br class="spacer">ボス昼戦：「敵地侵入！」<br class="spacer">ボス夜戦：「モドレナイノ」</td></tr><tr><th style="width:100px;">備考</th><td style="width:550px;">・出撃条件：<a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area4" title="南西諸島海域" class="rel-wiki-page">2-4.沖ノ島海域</a>クリア<br class="spacer">・対潜マスについて：<br class="spacer">　D、F、H：潜水艦エフェクトあり・燃料8%消費、弾薬消費せず<br class="spacer">　K (ボス)：潜水艦エフェクトあり・燃料弾薬ともに20%消費</td><td style="text-align:center;"><a href="#Contents"><strong>【目次】へ▲</strong></a><br class="spacer"><br class="spacer"><span class="wikicolor" style="color:#eaf4ff">＜ 前の海域へ・・・・・</span><a href="#area2"><strong>次の海域へ ＞</strong></a><br class="spacer"><br class="spacer"><a href="#drop1"><strong>ドロップへ▽</strong></a><span class="wikicolor" style="color:#eaf4ff">・・・</span><a href="#tactics1"><strong>攻略情報へ▼</strong></a><span class="wikicolor" style="color:#eaf4ff">・・・</span><a href="#comment1"><strong>情報提供へ▽</strong></a></td></tr></tbody></table></div>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">ルート分岐法則</div>
+    <div class="fold-content visible-on-open"><p><span class="wikicolor" style="color:red"><span style="font-size:14px">※「軽巡級」は公式 軽巡級タブ 準拠（<ins>軽巡+練巡<strong>+雷巡</strong></ins>）</span></span>です<a id="notetext_1"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;2022/11/13以前、ルート分岐条件において(軽巡+練巡)を軽巡級としていた。（練巡は軽巡条件の代替になれる事が多いが、雷巡は別途 ルート分岐条件で扱われる事が多いためと思われる）&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_1&quot;&gt;脚注 *1 へ&lt;/a&gt;&lt;/div&gt;">*1</a></p>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open"><strong>注意すべき艦種表記一覧</strong></div>
+    <div class="fold-content visible-on-open"><p><strong>注意すべき艦種表記一覧</strong></p>
+<div class="h-scrollable"><table><thead><tr><th colspan="2">ルート分岐表記</th><th>該当艦種</th><th>備考</th></tr></thead><tbody><tr><th rowspan="3">戦艦級</th><th rowspan="2">戦艦</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#BC_BattleCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">高速戦艦</a></td><td><a href="/kancolle/%D0%93%D0%B0%D0%BD%D0%B3%D1%83%D1%82" title="Гангут" class="rel-wiki-page">Гангут</a>を含む。他は<a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#BC_BattleCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">戦艦（高速/巡洋）</a>と同じ</td></tr><tr><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#BB_Battleship" title="艦娘名一覧（艦種別）" class="rel-wiki-page">(低速)戦艦</a></td><td><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#BB_Battleship" title="艦娘名一覧（艦種別）" class="rel-wiki-page">戦艦（低速）</a>と同じ</td></tr><tr><th>航空戦艦</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#BBV_AviationBattleship" title="艦娘名一覧（艦種別）" class="rel-wiki-page">航空戦艦</a></td><td>改装航空戦艦含む</td></tr><tr><th rowspan="3">空母系</th><th rowspan="2">正規空母</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CV_StandardAircraftCarrier" title="艦娘名一覧（艦種別）" class="rel-wiki-page">正規空母</a></td><td></td></tr><tr><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CVB_ArmoredAircraftCarrier" title="艦娘名一覧（艦種別）" class="rel-wiki-page">装甲空母</a></td><td></td></tr><tr><th>軽空母</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CVL_LightAircraftCarrier" title="艦娘名一覧（艦種別）" class="rel-wiki-page">軽空母</a></td><td>特設護衛空母は <span class="wikicolor" style="color:red"><strong>補給艦</strong> 扱い</span>。</td></tr><tr><th rowspan="2">重巡級</th><th>重巡</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CA_HeavyCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">重巡洋艦</a></td><td></td></tr><tr><th>航巡</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CAV_AviationCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">航空巡洋艦</a></td><td>改装航空巡洋艦、特殊改装航空巡洋艦含む</td></tr><tr><th rowspan="3"><span class="wikicolor" style="color:red">軽巡級</span></th><th>軽巡</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CL_LightCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">軽巡洋艦</a></td><td>軽(航空)巡洋艦、防空巡洋艦、兵装実験軽巡、重改装軽巡洋艦、巡洋艦含む</td></tr><tr><th>練巡</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CT_TrainingCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">練習巡洋艦</a></td><td>練習特務艦含む</td></tr><tr><th><span class="wikicolor" style="color:red">雷巡</span></th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#CLT_TorpedoCruiser" title="艦娘名一覧（艦種別）" class="rel-wiki-page">重雷装巡洋艦</a></td><td></td></tr><tr><th colspan="2">海防艦</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Sec_EscortShip" title="艦娘名一覧（艦種別）" class="rel-wiki-page">海防艦</a></td><td>海防戦艦を含む</td></tr><tr><th rowspan="2" colspan="2">潜水艦</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#SS_Submarine" title="艦娘名一覧（艦種別）" class="rel-wiki-page">潜水艦</a></td><td></td></tr><tr><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#SSV_SubmarineAircraftCarrier" title="艦娘名一覧（艦種別）" class="rel-wiki-page">潜水空母</a></td><td></td></tr><tr><th colspan="2">潜水母艦</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#AS_SubmarineTender" title="艦娘名一覧（艦種別）" class="rel-wiki-page">潜水母艦</a></td><td>潜水空母ではない</td></tr><tr><th colspan="2">補給艦</th><td style="background-color:#dff;"><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#AO_FleetOiler" title="艦娘名一覧（艦種別）" class="rel-wiki-page">補給艦</a></td><td>特務艦、灯台補給船、南極観測船、特設護衛空母、砕氷艦、雑役艦、給糧艦含む</td></tr></tbody></table></div>
+</div>
+</div>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open"><strong>ルート分岐での戦艦について</strong></div>
+    <div class="fold-content visible-on-open"><p><strong>ルート分岐での戦艦について</strong></p>
+<ul class="list1"><li>ゲーム画面上では戦艦とひとくくりにされているが、内部データでは「高速戦艦」と「それ以外の戦艦（＝(低速)戦艦）」に分けられていると思われる<a id="notetext_2"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;艦これ改の内部データでは「巡洋戦艦」と「戦艦」に分けられている&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_2&quot;&gt;脚注 *2 へ&lt;/a&gt;&lt;/div&gt;">*2</a><br />
+具体的には以下のように分類されている。（特記しない場合、改や改二、第三改装も含む）
+<div class="h-scrollable"><table><thead><tr><th>表記</th><th>艦名</th><th>備考</th></tr></thead><tbody><tr><th style="text-align:center;">高速戦艦</th><td style="text-align:left;"><a href="/kancolle/%D0%93%D0%B0%D0%BD%D0%B3%D1%83%D1%82" title="Гангут" class="rel-wiki-page">Гангут</a>、<a href="/kancolle/%E9%87%91%E5%89%9B" title="金剛" class="rel-wiki-page">金剛</a>、<a href="/kancolle/%E6%AF%94%E5%8F%A1" title="比叡" class="rel-wiki-page">比叡</a>、<a href="/kancolle/%E6%A6%9B%E5%90%8D" title="榛名" class="rel-wiki-page">榛名</a>、<a href="/kancolle/%E9%9C%A7%E5%B3%B6" title="霧島" class="rel-wiki-page">霧島</a>、<a href="/kancolle/%E5%A4%A7%E5%92%8C%E6%94%B9%E4%BA%8C" title="大和改二" class="rel-wiki-page">大和改二</a>、<a href="/kancolle/Bismarck" title="Bismarck" class="rel-wiki-page">Bismarck</a>、<a href="/kancolle/Conte%20di%20Cavour%E6%94%B9" title="Conte di Cavour改" class="rel-wiki-page">Conte di Cavour改</a>、<a href="/kancolle/Littorio" title="Littorio" class="rel-wiki-page">Littorio</a>、<a href="/kancolle/Roma" title="Roma" class="rel-wiki-page">Roma</a><br class="spacer"><a href="/kancolle/Washington" title="Washington" class="rel-wiki-page">Washington</a>、<a href="/kancolle/South%20Dakota" title="South Dakota" class="rel-wiki-page">South Dakota</a>、<a href="/kancolle/Massachusetts" title="Massachusetts" class="rel-wiki-page">Massachusetts</a>、<a href="/kancolle/Iowa" title="Iowa" class="rel-wiki-page">Iowa</a>、<a href="/kancolle/Richelieu" title="Richelieu" class="rel-wiki-page">Richelieu</a>、<a href="/kancolle/Jean%20Bart" title="Jean Bart" class="rel-wiki-page">Jean Bart</a></td><td style="text-align:left;"><a href="/kancolle/%D0%93%D0%B0%D0%BD%D0%B3%D1%83%D1%82" title="Гангут" class="rel-wiki-page">Гангут</a>は内部データ的には高速戦艦に分類されている。</td></tr><tr><th style="text-align:center;">(低速)戦艦</th><td style="text-align:left;"><a href="/kancolle/%E6%89%B6%E6%A1%91" title="扶桑" class="rel-wiki-page">扶桑</a>、<a href="/kancolle/%E5%B1%B1%E5%9F%8E" title="山城" class="rel-wiki-page">山城</a>、<a href="/kancolle/%E4%BC%8A%E5%8B%A2" title="伊勢" class="rel-wiki-page">伊勢</a>、<a href="/kancolle/%E6%97%A5%E5%90%91" title="日向" class="rel-wiki-page">日向</a>、<a href="/kancolle/%E9%95%B7%E9%96%80" title="長門" class="rel-wiki-page">長門</a>、<a href="/kancolle/%E9%99%B8%E5%A5%A5" title="陸奥" class="rel-wiki-page">陸奥</a>、<a href="/kancolle/%E5%A4%A7%E5%92%8C" title="大和" class="rel-wiki-page">大和</a>、<a href="/kancolle/%E6%AD%A6%E8%94%B5" title="武蔵" class="rel-wiki-page">武蔵</a><br class="spacer"><a href="/kancolle/Conte%20di%20Cavour" title="Conte di Cavour" class="rel-wiki-page">Conte di Cavour</a>、<a href="/kancolle/Colorado" title="Colorado" class="rel-wiki-page">Colorado</a>、<a href="/kancolle/Maryland" title="Maryland" class="rel-wiki-page">Maryland</a>、<a href="/kancolle/Warspite" title="Warspite" class="rel-wiki-page">Warspite</a>、<a href="/kancolle/Valiant" title="Valiant" class="rel-wiki-page">Valiant</a>、<a href="/kancolle/Nelson" title="Nelson" class="rel-wiki-page">Nelson</a></td><td style="text-align:left;"><a href="/kancolle/%E6%89%B6%E6%A1%91" title="扶桑" class="rel-wiki-page">扶桑</a>、<a href="/kancolle/%E5%B1%B1%E5%9F%8E" title="山城" class="rel-wiki-page">山城</a>、<a href="/kancolle/%E4%BC%8A%E5%8B%A2" title="伊勢" class="rel-wiki-page">伊勢</a>、<a href="/kancolle/%E6%97%A5%E5%90%91" title="日向" class="rel-wiki-page">日向</a>は改と改二を含まない。<br class="spacer"><a href="/kancolle/%E5%A4%A7%E5%92%8C%E6%94%B9%E4%BA%8C%E9%87%8D" title="大和改二重" class="rel-wiki-page">大和改二重</a>も含まない。</td></tr></tbody></table></div>
+<br /></li></ul>
+<ul class="list1"><li>「(低速)戦艦を含むとX」などと書いてある場合、艦種で判定しているので速力は関係ない。</li>
+<li>海防戦艦には「戦艦」というワードが含まれるが、艦種としての戦艦を意味しない。</li></ul>
+</div>
+</div>
+
+<p><span class="wikicolor" style="color:Red">※条件は上に書いてあるものが優先</span></p>
+<div class="h-scrollable"><table><tbody><tr><th>分岐点</th><th>ルート</th><th>移動条件</th></tr><tr><td rowspan="3" style="width:60px;">出撃</td><td style="width:60px;">B</td><td rowspan="3" style="width:450px;">潜水艦を含む場合<br class="spacer"><span class="wikicolor" style="color:#eaf4ff">_</span>・(戦艦級+空母系)1隻以上でBマス または Dマスのランダム<br class="spacer"><span class="wikicolor" style="color:#eaf4ff">_</span>・5隻以上の編成でBマス または Dマスのランダム<br class="spacer"><span class="wikicolor" style="color:#eaf4ff">_</span>・4隻以下の編成でランダム<br class="spacer">(戦艦級+空母系)1隻以上でB<br class="spacer">6隻編成でB<br class="spacer">5隻編成 または 補給艦を含むとD<br class="spacer">4隻以下の編成でF</td></tr><tr><td style="width:60px;">D</td></tr><tr><td style="width:60px;">F</td></tr><tr><td rowspan="2" style="width:60px;">B</td><td style="width:60px;">A</td><td rowspan="2" style="width:450px;">(戦艦級+正規空母)1隻以上でA<br class="spacer">軽空母2隻以上でA<br class="spacer">重巡級3隻以上でA<br class="spacer">(駆逐+海防)2隻以上でC<br class="spacer">それ以外はランダム</td></tr><tr><td style="width:60px;">C</td></tr><tr><td style="width:60px;">C</td><td style="width:60px;">E</td><td style="width:450px;">固定</td></tr><tr><td rowspan="2" style="width:60px;">D</td><td style="width:60px;">C</td><td rowspan="2" style="width:450px;">軽巡1隻 かつ 駆逐4隻でE<br class="spacer">駆逐1隻以上 かつ 海防3隻以上でE<br class="spacer">補給1隻以上 かつ 海防3隻以上でE<br class="spacer">(駆逐+海防)5隻でE<br class="spacer">(駆逐+海防)4隻の場合<br class="spacer"><span class="wikicolor" style="color:#eaf4ff">_</span>・練巡を含むとE<br class="spacer"><span class="wikicolor" style="color:#eaf4ff">_</span>・補給艦を含むとE<br class="spacer"><span class="wikicolor" style="color:#eaf4ff">_</span>・水母を含むとランダム<br class="spacer">それ以外はC</td></tr><tr><td style="width:60px;">E</td></tr><tr><td rowspan="3" style="width:60px;">H</td><td style="width:60px;">I</td><td rowspan="3" style="width:450px;">軽巡1隻以上 かつ 駆逐4隻以上でK<br class="spacer">駆逐1隻以上 かつ 海防3隻以上でK<br class="spacer">補給1隻以上でIまたはKのランダム？<br class="spacer">(戦艦級+空母系)2隻以上でJ<br class="spacer">(戦艦級+空母系)1隻でランダム<br class="spacer">それ以外はランダム<br class="spacer">（Iマス:Jマス:Kマス=20~25%?:5~10%?:70~75%?）</td></tr><tr><td style="width:60px;">J</td></tr><tr><td style="width:60px;">K</td></tr></tbody></table></div>
+<p><br class="spacer">※これらのルート分岐法則を転載する場合は、出撃データ等ソースへの繋がりを保つため、出典を用いてください。(ルート分岐法則更新日: 2020/03/07)</p>
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+</div>
+</div>
+<p><a class="anchor" name ="enemy1"></a></p>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">敵編成</div>
+    <div class="fold-content visible-on-open"><p><strong>敵編成</strong></p>
+<div class="h-scrollable"><table><tbody><tr><th>出現場所</th><th>パターン</th><th>EXP</th><th>出現艦船</th><th>陣形</th><th><a href="/kancolle/%E8%88%AA%E7%A9%BA%E6%88%A6#AirSupremacy" title="航空戦" class="rel-wiki-page">敵制空値</a></th><th>優勢</th><th>確保</th></tr><tr><td>A：<a href="/kancolle/%E8%B3%87%E6%9D%90#Whirlpool" title="資材" class="rel-wiki-page">うずしお</a></td><td></td><td></td><td>うずしお（弾薬）基本喪失割合:35%, 実際の喪失割合:28%<a id="notetext_3"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;1戦目後に通過するため&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_3&quot;&gt;脚注 *3 へ&lt;/a&gt;&lt;/div&gt;">*3</a>（喪失上限値:確認不可能<a id="notetext_4"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;このマスを通れる弾薬の消費量が最大の&lt;a href=&quot;/kancolle/%E6%AD%A6%E8%94%B5%E6%94%B9%E4%BA%8C&quot; title=&quot;武蔵改二&quot; class=&quot;rel-wiki-page&quot;&gt;武蔵改二&lt;/a&gt;(電探搭載艦0、未ケッコン)で-98される。&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_4&quot;&gt;脚注 *4 へ&lt;/a&gt;&lt;/div&gt;">*4</a>）<br class="spacer">（電探0:-28%, 電探1:-21%, 電探2:-16.8%, 電探3:-14%, 電探4:-12.6%, 電探5:-11.76%, 電探6:-11.2%）</td><td></td><td></td><td></td><td></td></tr><tr><td rowspan="3">B：<br class="spacer">敵通商破壊侵入艦隊</td><td>パターン1</td><td>200</td><td><a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%8D%E7%B4%9Aelite" title="重巡ネ級elite" class="rel-wiki-page">重巡ネ級elite</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%8D%E7%B4%9Aelite" title="重巡ネ級elite" class="rel-wiki-page">重巡ネ級elite</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%84%E7%B4%9Aelite" title="軽巡ツ級elite" class="rel-wiki-page">軽巡ツ級elite</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td>単縦<br class="spacer">単横</td><td></td><td></td><td></td></tr><tr><td>パターン2</td><td>200</td><td><a href="/kancolle/%E8%BB%BD%E6%AF%8D%E3%83%8C%E7%B4%9Aflagship" title="軽母ヌ級flagship" class="rel-wiki-page">軽母ヌ級flagship</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%AA%E7%B4%9Aflagship" title="重巡リ級flagship" class="rel-wiki-page">重巡リ級flagship</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%9B%E7%B4%9Aflagship" title="軽巡ホ級flagship" class="rel-wiki-page">軽巡ホ級flagship</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td rowspan="2">複縦<br class="spacer">輪形</td><td>23</td><td>35</td><td>69</td></tr><tr><td>パターン3</td><td>210</td><td><a href="/kancolle/%E8%BB%BD%E6%AF%8D%E3%83%8C%E7%B4%9Aflagship" title="軽母ヌ級flagship" class="rel-wiki-page">軽母ヌ級flagship</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%AA%E7%B4%9Aflagship" title="重巡リ級flagship" class="rel-wiki-page">重巡リ級flagship</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%AA%E7%B4%9Aflagship" title="重巡リ級flagship" class="rel-wiki-page">重巡リ級flagship</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%9B%E7%B4%9Aflagship" title="軽巡ホ級flagship" class="rel-wiki-page">軽巡ホ級flagship</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td>23</td><td>35</td><td>69</td></tr><tr><td rowspan="3">C：<br class="spacer">敵通商破壊侵入 高速機動部隊</td><td>パターン1</td><td>230</td><td><a href="/kancolle/%E7%A9%BA%E6%AF%8D%E3%83%B2%E7%B4%9Aflagship#b" title="空母ヲ級flagship" class="rel-wiki-page">空母ヲ級flagship（艦載機白）</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%8D%E7%B4%9Aelite" title="重巡ネ級elite" class="rel-wiki-page">重巡ネ級elite</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%84%E7%B4%9Aelite" title="軽巡ツ級elite" class="rel-wiki-page">軽巡ツ級elite</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td rowspan="3">複縦<br class="spacer">輪形</td><td><strong>84</strong></td><td><strong>126</strong></td><td><strong>252</strong></td></tr><tr><td>パターン2</td><td>250</td><td><a href="/kancolle/%E7%A9%BA%E6%AF%8D%E3%83%B2%E7%B4%9Aflagship#b" title="空母ヲ級flagship" class="rel-wiki-page">空母ヲ級flagship（艦載機白）</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%8D%E7%B4%9Aelite" title="重巡ネ級elite" class="rel-wiki-page">重巡ネ級elite</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%8D%E7%B4%9Aelite" title="重巡ネ級elite" class="rel-wiki-page">重巡ネ級elite</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%84%E7%B4%9Aelite" title="軽巡ツ級elite" class="rel-wiki-page">軽巡ツ級elite</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td><strong>84</strong></td><td><strong>126</strong></td><td><strong>252</strong></td></tr><tr><td>パターン3</td><td>270</td><td><a href="/kancolle/%E7%A9%BA%E6%AF%8D%E3%83%B2%E7%B4%9Aflagship#b" title="空母ヲ級flagship" class="rel-wiki-page">空母ヲ級flagship（艦載機白）</a>、<a href="/kancolle/%E6%88%A6%E8%89%A6%E3%82%BF%E7%B4%9Aflagship" title="戦艦タ級flagship" class="rel-wiki-page">戦艦タ級flagship</a>、<a href="/kancolle/%E9%87%8D%E5%B7%A1%E3%83%8D%E7%B4%9Aelite" title="重巡ネ級elite" class="rel-wiki-page">重巡ネ級elite</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%84%E7%B4%9Aelite" title="軽巡ツ級elite" class="rel-wiki-page">軽巡ツ級elite</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td><strong>84</strong></td><td><strong>126</strong></td><td><strong>252</strong></td></tr><tr><td rowspan="4">D：<span class="wikicolor" style="color:Blue"><strong>対潜戦</strong></span><br class="spacer">深海潜水艦隊 II群</td><td>パターン1</td><td>150</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td rowspan="3">梯形<br class="spacer">単横</td><td></td><td></td><td></td></tr><tr><td>パターン2</td><td>170</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン3</td><td>190</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9Aelite" title="潜水カ級elite" class="rel-wiki-page">潜水カ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン4</td><td>200</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9Aelite" title="潜水カ級elite" class="rel-wiki-page">潜水カ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9Aelite" title="潜水カ級elite" class="rel-wiki-page">潜水カ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td>梯形</td><td></td><td></td><td></td></tr><tr><td>E：アイテム獲得</td><td></td><td></td><td>燃料+10～20(5刻み):ドラム缶(+2) 大発系<a id="notetext_5"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;「&lt;a href=&quot;/kancolle/%E7%89%B9%E5%A4%A7%E7%99%BA%E5%8B%95%E8%89%87%EF%BC%8B%E6%88%A6%E8%BB%8A%E7%AC%AC11%E9%80%A3%E9%9A%8A&quot; title=&quot;特大発動艇＋戦車第11連隊&quot; class=&quot;rel-wiki-page&quot;&gt;特大発動艇＋戦車第11連隊&lt;/a&gt;」は対象外&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_5&quot;&gt;脚注 *5 へ&lt;/a&gt;&lt;/div&gt;">*5</a>(+3)</td><td></td><td></td><td></td><td></td></tr><tr><td rowspan="5">F：<span class="wikicolor" style="color:Blue"><strong>対潜戦</strong></span><br class="spacer">深海潜水艦隊 III群</td><td>パターン1</td><td>120</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td rowspan="4">梯形<br class="spacer">単横</td><td></td><td></td><td></td></tr><tr><td>パターン2</td><td>150</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン3</td><td>170</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン4</td><td>180</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン5</td><td>190</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a></td><td>梯形</td><td></td><td></td><td></td></tr><tr><td rowspan="3">G：<br class="spacer">敵哨戒部隊</td><td>パターン1</td><td>150</td><td><a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%82%A4%E7%B4%9A" title="駆逐イ級" class="rel-wiki-page">駆逐イ級</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%82%A4%E7%B4%9A" title="駆逐イ級" class="rel-wiki-page">駆逐イ級</a></td><td>単縦<br class="spacer">単横</td><td></td><td></td><td></td></tr><tr><td>パターン2</td><td>170</td><td><a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%82%A4%E7%B4%9A" title="駆逐イ級" class="rel-wiki-page">駆逐イ級</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%82%A4%E7%B4%9A" title="駆逐イ級" class="rel-wiki-page">駆逐イ級</a></td><td rowspan="2">単縦<br class="spacer">複縦</td><td></td><td></td><td></td></tr><tr><td>パターン3</td><td>190</td><td><a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%9B%E7%B4%9Aflagship" title="軽巡ホ級flagship" class="rel-wiki-page">軽巡ホ級flagship</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a>、<a href="/kancolle/%E9%A7%86%E9%80%90%E3%83%AD%E7%B4%9A%E5%BE%8C%E6%9C%9F%E5%9E%8B" title="駆逐ロ級後期型" class="rel-wiki-page">駆逐ロ級後期型</a></td><td></td><td></td><td></td></tr><tr><td rowspan="5">H：<span class="wikicolor" style="color:Blue"><strong>対潜戦</strong></span><br class="spacer">深海潜水艦隊 I群</td><td>パターン1</td><td>150</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td rowspan="4">梯形<br class="spacer">単横</td><td></td><td></td><td></td></tr><tr><td>パターン2</td><td>160</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン3</td><td>170</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン4</td><td>190</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a></td><td></td><td></td><td></td></tr><tr><td>パターン5</td><td>200</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9A" title="潜水ヨ級" class="rel-wiki-page">潜水ヨ級</a></td><td>梯形</td><td></td><td></td><td></td></tr><tr><td>I：アイテム獲得</td><td></td><td></td><td>燃料+30～50(5刻み?):ドラム缶(+2) 大発系<a id="notetext_6"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;「&lt;a href=&quot;/kancolle/%E7%89%B9%E5%A4%A7%E7%99%BA%E5%8B%95%E8%89%87%EF%BC%8B%E6%88%A6%E8%BB%8A%E7%AC%AC11%E9%80%A3%E9%9A%8A&quot; title=&quot;特大発動艇＋戦車第11連隊&quot; class=&quot;rel-wiki-page&quot;&gt;特大発動艇＋戦車第11連隊&lt;/a&gt;」は対象外&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_6&quot;&gt;脚注 *6 へ&lt;/a&gt;&lt;/div&gt;">*6</a>(+3)</td><td></td><td></td><td></td><td></td></tr><tr><td>J：戦闘なし</td><td></td><td></td><td>敵影を見ず。（戦闘回避）</td><td></td><td></td><td></td><td></td></tr><tr><td rowspan="3"><strong><span class="wikicolor" style="color:Red">K：ボス<a id="notetext_7"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;対潜戦だが通常消費になる&lt;br class=&quot;spacer&quot;&gt;出現比はパターン1:2:3≒20%:30%:50%&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_7&quot;&gt;脚注 *7 へ&lt;/a&gt;&lt;/div&gt;">*7</a><br class="spacer">深海潜水艦隊集団 旗艦戦隊</span></strong></td><td>パターン1</td><td>330</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aflagship" title="潜水ソ級flagship" class="rel-wiki-page">潜水ソ級flagship</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9A" title="潜水カ級" class="rel-wiki-page">潜水カ級</a></td><td rowspan="3">梯形</td><td></td><td></td><td></td></tr><tr><td>パターン2</td><td>360</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aflagship" title="潜水ソ級flagship" class="rel-wiki-page">潜水ソ級flagship</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9Aelite" title="潜水カ級elite" class="rel-wiki-page">潜水カ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%AB%E7%B4%9Aelite" title="潜水カ級elite" class="rel-wiki-page">潜水カ級elite</a></td><td></td><td></td><td></td></tr><tr><td>パターン3</td><td>390</td><td><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aflagship" title="潜水ソ級flagship" class="rel-wiki-page">潜水ソ級flagship</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a>、<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%83%A8%E7%B4%9Aelite" title="潜水ヨ級elite" class="rel-wiki-page">潜水ヨ級elite</a></td><td></td><td></td><td></td></tr></tbody></table></div>
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+</div>
+</div>
+<p><a class="anchor" name ="drop1"></a></p>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">ドロップ</div>
+    <div class="fold-content visible-on-open"><p>ドロップ<br class="spacer">ドロップ報告がないマスはグレーで示されています。<br class="spacer">入手機会の比較的少ない艦は<span class="wikicolor" style="color:Red">赤字</span>で示されています。<br />
+編集先は<a href="/kancolle/%E5%87%BA%E6%92%83%E3%83%89%E3%83%AD%E3%83%83%E3%83%97/7-1" title="出撃ドロップ/7-1" class="rel-wiki-page">こちら</a>。</p>
+<div class="h-scrollable"><table><thead><tr><td style="text-align:left; width:40px;"></td><td style="width:130px;">戦艦級</td><td style="width:130px;">航空母艦</td><td style="width:130px;">重巡級</td><td style="width:210px;">軽巡級</td><td style="width:300px;">駆逐艦</td><td style="width:130px;">海防艦</td><td style="width:90px;">潜水艦</td><td style="width:120px;">補助艦艇</td></tr></thead><tbody><tr><td style="text-align:left; width:40px;">B</td><td style="width:130px;"></td><td style="width:130px;">鳳翔 龍驤<br class="spacer">祥鳳</td><td style="width:130px;"></td><td style="width:210px;">球磨 多摩 木曾<br class="spacer">長良 五十鈴 名取 由良<br class="spacer">川内 神通 那珂<br class="spacer"><span class="wikicolor" style="color:Red">夕張</span></td><td style="width:300px;">睦月 如月 皐月 文月 長月 菊月 三日月 望月<br class="spacer">吹雪 白雪 初雪 深雪 叢雲 磯波<br class="spacer">綾波 敷波 朧 曙 漣 潮<br class="spacer">陽炎 不知火 黒潮</td><td style="width:130px;"></td><td style="width:90px;"></td><td style="width:120px;"></td></tr><tr><td style="text-align:left; width:40px;">C</td><td style="width:130px;"></td><td style="width:130px;">鳳翔 龍驤<br class="spacer">祥鳳</td><td style="width:130px;">最上</td><td style="width:210px;">球磨 多摩 北上 <span class="wikicolor" style="color:Red">大井</span> 木曾<br class="spacer">長良 五十鈴 名取 由良 <span class="wikicolor" style="color:Red">鬼怒 阿武隈</span><br class="spacer">川内 神通 那珂<br class="spacer"><span class="wikicolor" style="color:Red">夕張</span></td><td style="width:300px;">睦月 如月 皐月 文月 長月 菊月 三日月 望月<br class="spacer">吹雪 白雪 初雪 深雪 叢雲 磯波<br class="spacer">綾波 敷波 朧 曙 漣 潮<br class="spacer">陽炎 不知火 黒潮 <span class="wikicolor" style="color:Red">親潮</span></td><td style="width:130px;"></td><td style="width:90px;"><span class="wikicolor" style="color:Red">伊168<br class="spacer">伊19<br class="spacer">伊58</span></td><td style="width:120px;"><span class="wikicolor" style="color:Red">大鯨</span></td></tr><tr><td>D</td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td></tr><tr><td>F</td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td></tr><tr><td>G</td><td></td><td>鳳翔 龍驤<br class="spacer">祥鳳</td><td>最上</td><td>球磨 多摩 北上 <span class="wikicolor" style="color:Red">大井</span> 木曾<br class="spacer">長良 五十鈴 名取 由良 <span class="wikicolor" style="color:Red">鬼怒 阿武隈</span><br class="spacer">川内 神通 那珂<br class="spacer"><span class="wikicolor" style="color:Red">夕張</span></td><td>睦月 如月 皐月 文月 長月 菊月 三日月 望月<br class="spacer">吹雪 白雪 初雪 深雪 叢雲 磯波<br class="spacer">綾波 敷波 朧 曙 漣 潮<br class="spacer">陽炎 不知火 黒潮</td><td></td><td><span class="wikicolor" style="color:Red">伊19<br class="spacer">伊58</span></td><td></td></tr><tr><td>H</td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td><td style="background-color:gray;"></td></tr><tr><td><strong><span class="wikicolor" style="color:Red">K<br class="spacer">ボス</span></strong></td><td>金剛 比叡 榛名 霧島</td><td>祥鳳 <span class="wikicolor" style="color:Red">瑞鳳</span></td><td>古鷹 加古<br class="spacer">青葉 <span class="wikicolor" style="color:Red">衣笠</span><br class="spacer">妙高 那智 足柄 羽黒<br class="spacer">高雄 愛宕 摩耶 鳥海<br class="spacer">最上 <span class="wikicolor" style="color:Red">三隈 鈴谷 熊野</span><br class="spacer">利根 筑摩</td><td>天龍 龍田<br class="spacer">球磨 多摩 木曾<br class="spacer">長良 五十鈴 名取 由良<br class="spacer">川内 那珂</td><td>睦月 如月 皐月 文月 長月 菊月 三日月 望月<br class="spacer">吹雪 白雪 初雪 深雪 叢雲 磯波<br class="spacer">綾波 敷波 <span class="wikicolor" style="color:Red">狭霧</span> 朧 曙 漣 潮<br class="spacer">暁 響 雷 電<br class="spacer">初春 子日 若葉 初霜<br class="spacer">白露 時雨 村雨 夕立 五月雨 涼風<br class="spacer">朝潮 大潮 満潮 荒潮 霰 霞<br class="spacer">陽炎 不知火 黒潮 <span class="wikicolor" style="color:Red">嵐 萩風</span></td><td></td><td><span class="wikicolor" style="color:Red">伊168<br class="spacer">伊8<br class="spacer">伊19<br class="spacer">伊58</span></td><td>千歳 千代田</td></tr></tbody></table></div>
+
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+</div>
+</div>
+<h3 id="h3_content_1_0" >7-1に関する攻略情報  <a class="anchor_super" name ="tactics1"></a> <a class="anchor_super" href="/kancolle/::cmd/edit?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1&id=tactics1" rel='nofollow'><span class="system-icon paraedit" title="Edit"></span></a></h3>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">この海域について</div>
+    <div class="fold-content visible-on-open"><h2 id="h2_content_10_0" >マップ概要</h2>
+
+<h3 id="h3_content_11_0" ><strong>マップ全般について</strong></h3>
+
+<ul class="list1"><li><strong>EOを除く通常海域ではじめて戦力ゲージが設定されている海域</strong><a id="notetext_8"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;1期では4-4がはじめての戦力ゲージが設定されている海域だった&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_8&quot;&gt;脚注 *8 へ&lt;/a&gt;&lt;/div&gt;">*8</a><br />
+これまでの海域では、ボス艦隊旗艦を沈められなくてもB勝利以上をとれば突破できたが、この海域はボス艦隊旗艦を撃沈する必要がある。
+<ul class="list2"><li>本海域をクリアすることで、<a href="/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F/4-2" title="西方海域/4-2" class="rel-wiki-page">4-2</a>及び<a href="/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-2" title="南西海域/7-2" class="rel-wiki-page">7-2</a>が開放される。<br />
+編成次第だが、周回メリットの大きい海域の開放につながるので、<strong>長期の放置は得策ではない</strong><a id="notetext_9"  class="note_super tooltip"
+            data-tooltip-content="&lt;p&gt;一回の出撃で補給艦を5隻も狩れる4-2、レベリングに有用な&lt;a href=&quot;/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F/4-4&quot; title=&quot;西方海域/4-4&quot; class=&quot;rel-wiki-page&quot;&gt;4-4&lt;/a&gt;や&lt;a href=&quot;/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-3&quot; title=&quot;南方海域/5-3&quot; class=&quot;rel-wiki-page&quot;&gt;5-3&lt;/a&gt;、ウィークリー任務に絡む&lt;a href=&quot;/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-2&quot; title=&quot;南方海域/5-2&quot; class=&quot;rel-wiki-page&quot;&gt;5-2&lt;/a&gt;&lt;/p&gt;&lt;div style=&quot;text-align: right;&quot;&gt;&lt;a href=&quot;#notefoot_9&quot;&gt;脚注 *9 へ&lt;/a&gt;&lt;/div&gt;">*9</a><br />
+できることなら、司令部レベルが低いうちに突破しておきたいところ。</li></ul></li></ul>
+<ul class="list1"><li>本マップは、イベント海域序盤にありがちな<a href="/kancolle/%E5%AF%BE%E6%BD%9C%E6%94%BB%E6%92%83" title="対潜攻撃" class="rel-wiki-page">対潜マップ</a>に道中水雷戦が絡んだマップ。
+<ul class="list2"><li>ただし分岐条件から、6隻編成や空母・戦艦を入れていると確定で大回りになり、大損害になりやすい。<br />
+よって、<strong>対潜可能艦4～5隻での攻略が主</strong>となる。<br />
+<ins>間違っても、単縦陣固定になる3隻以下では出撃しないように</ins>
+<ul class="list3"><li>5隻で挑む場合(DEGHKルート)は、軽巡1+駆逐4が主流。</li>
+<li>4隻で挑む場合(FGHKルート)は、軽巡2+駆逐2や雷巡2+軽巡1+駆逐1など。</li>
+<li>なお、海防艦は分岐判定上、駆逐艦とは別の扱いとなる。<br />
+編成に入れる際は、ルート情報をよく確認すること。</li></ul></li></ul></li></ul>
+<ul class="list1"><li><a href="/kancolle/%E5%AF%BE%E6%BD%9C%E6%94%BB%E6%92%83#oasw" title="対潜攻撃" class="rel-wiki-page">対潜先制爆雷攻撃</a>可能なラインにさえ届いていれば、ボスマス含め対潜マスはほぼ無傷で攻略できる。
+<ul class="list2"><li>一方、Gマスの水雷戦で単縦陣を引いてしまうと、<a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>からの雷撃で事故が起こる可能性がある。<br />
+特に、駆逐艦が被弾すると大破率がかなり高い。<br />
+支援艦隊も出せないので、対潜装備オンリーはリスクが高い。</li>
+<li>初めてこの海域に足を踏み入れる新人提督が、先制対潜艦を4~5隻もそろえるのは厳しいものがあるのも事実。<br />
+しかし、<strong>全艦先制対潜艦で揃えられなくともクリア自体は可能なので、ここに記されていることを参考に戦力を整えよう</strong>。<br />
+先制対潜艦の準備は、後半の難関海域やイベント海域攻略の先行投資にもなるため無駄にはならない。</li></ul></li></ul>
+<h3 id="h3_content_12_0" ><strong>攻略について</strong></h3>
+
+<ul class="list1"><li>ルートとしては、4隻編成、5隻編成のどちらも一長一短。
+<ul class="list2"><li>4隻編成の場合、雷巡も組み込めるためGマスの戦闘の事故率を下げられる反面、ボス前の羅針盤を固定化できない点がネック。
+<ul class="list3"><li>2種シナジーと先制雷撃は欲しいので、雷巡は改二であることが望ましい。<br />
+この場合は、改二雷巡2隻と他2隻の編成となるか。</li></ul></li>
+<li>5隻編成の場合、ボス前羅針盤を固定化できる一方、Gマスはもちろん一戦目から出る<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>も先制手数の限られるうちは怖い。
+<ul class="list3"><li>こちらで挑むなら、素火力の高い<a href="/kancolle/%E5%A4%95%E7%AB%8B%E6%94%B9%E4%BA%8C" title="夕立改二" class="rel-wiki-page">夕立改二</a>(必要レベル55)はぜひ編成したい。<br />
+残る2隻は少しでもレベルの高い艦を編成しよう。</li></ul></li></ul></li></ul>
+<ul class="list2"><li>鬼門となるGマスではこちらも相手も最大5隻同士での戦闘になる。そのため、雷撃を防ぐなら1人1隻無力化する必要がある。<br />
+最大2隻出現する軽巡flagshipは、並の駆逐艦の攻撃では中破にさえ達しない事の方が多いため、安定を求めるなら高火力艦か主砲での火力補強は重要。
+<ul class="list3"><li><a href="/kancolle/%E8%BB%BD%E5%B7%A1%E3%83%98%E7%B4%9Aflagship" title="軽巡ヘ級flagship" class="rel-wiki-page">軽巡ヘ級flagship</a>を反航戦で一撃で中破とするためには、火力または雷装93が必要。(非CI、かつヘ級flagshipの装甲乱数が最高値(50)のとき)</li>
+<li>高耐久値を持たない水雷中心の敵編成であることから、<a href="/kancolle/%E9%98%BF%E6%AD%A6%E9%9A%88%E6%94%B9%E4%BA%8C" title="阿武隈改二" class="rel-wiki-page">阿武隈改二</a>や<a href="/kancolle/%E7%94%B1%E8%89%AF%E6%94%B9%E4%BA%8C" title="由良改二" class="rel-wiki-page">由良改二</a>の先制雷撃が有効。<br />
+甲標的のみでの雷装値で敵を無力化でき、対潜装備を載せる余裕もあることからも推奨したい。</li>
+<li>由良の雷装+甲標的でも、駆逐艦は反航戦以上なら確定で撃沈可能。<br />
+軽巡flagshipも撃沈は同航戦で5割といったところだが、高確率で中破には達する。<br />
+勿論、阿武隈の方が軽巡flagshipに対しても有効打が与えられる確率が高いが、標的になるのは高確率で随伴の駆逐艦である以上、それ程条件は変わらない。</li>
+<li><a href="/kancolle/%E7%99%BA%E7%85%99%E8%A3%85%E7%BD%AE%28%E7%85%99%E5%B9%95%29" title="発煙装置(煙幕)" class="rel-wiki-page">発煙装置(煙幕)</a>、<a href="/kancolle/%E7%99%BA%E7%85%99%E8%A3%85%E7%BD%AE%E6%94%B9%28%E7%85%99%E5%B9%95%29" title="発煙装置改(煙幕)" class="rel-wiki-page">発煙装置改(煙幕)</a>の実装により、Gマスを<span class="wikicolor" style="background-color:silver">煙幕展開</span>でやり過ごすという選択肢も出てきた。<br />
+この場合、発煙装置を3つ以上（改を含め2つ以上）用意することで十分な確率で煙幕を展開できる。<br />
+こちらの攻撃もほぼ当たらないので、回避目的の梯形陣・単横陣の選択で良いだろう。<br />
+発煙装置は特定艦不要で開発できるため、初攻略のハードルは下がったと言える。<br />
+煙幕の発動率は旗艦の運にも左右されるため、旗艦には幸運艦を据えよう。</li></ul></li></ul>
+<ul class="list2"><li><a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aelite" title="潜水ソ級elite" class="rel-wiki-page">潜水ソ級elite</a>や<a href="/kancolle/%E6%BD%9C%E6%B0%B4%E3%82%BD%E7%B4%9Aflagship" title="潜水ソ級flagship" class="rel-wiki-page">潜水ソ級flagship</a>が出現する以上、最低でも2種シナジー程度の火力は欲しい。<br />
+なので、1スロットで対潜攻撃が可能な艦に、主砲を2つ積むという運用は推奨されない。
+<ul class="list3"><li>高対潜値を持ちスロットに余裕のある<a href="/kancolle/%E6%9C%9D%E6%BD%AE%E6%94%B9%E4%BA%8C%E4%B8%81" title="朝潮改二丁" class="rel-wiki-page">朝潮改二丁</a>などに、主砲を一本搭載して対応するのも良いだろう。</li></ul></li></ul>
+<h3 id="h3_content_13_0" ><strong>オススメ編成</strong></h3>
+
+<ul class="list1"><li><strong>初心者提督向けの具体的な編成としては、五十鈴改二+駆逐4</strong>。
+<ul class="list2"><li>無条件先制対潜艦で最もハードルの低い<a href="/kancolle/%E4%BA%94%E5%8D%81%E9%88%B4%E6%94%B9%E4%BA%8C" title="五十鈴改二" class="rel-wiki-page">五十鈴改二</a>(必要レベル50)は、<strong>初回突破のためには必須</strong>といってもいいだろう。</li>
+<li><strong>駆逐艦</strong>なら、開発可能な三式ソナー3つでボーナス込みでレベル61から可能な<a href="/kancolle/%E6%99%82%E9%9B%A8%E6%94%B9%E4%BA%8C" title="時雨改二" class="rel-wiki-page">時雨改二</a>(改装必要レベル60)が筆頭候補と言える。<br />
+この二人を軸にするといい。<br />
+この時点で意識して稼ぐのはまだまだ苦しいだろうが、演習を活用すればそう多くの時間はかからない。</li></ul></li>
+<li><strong>4隻編成なら、五十鈴改二+時雨改二などの先制対潜可能艦+改二雷巡2</strong>。
+<ul class="list2"><li>ボス前羅針盤はランダムだが、複数の先制雷撃や駆逐に比べて装甲の高い艦が多いため事故は起きにくく、試行回数は稼ぎやすい。<br />
+撤退が嵩むならこちらも検討していいだろう。</li></ul></li></ul>
+<ul class="list1"><li>艦隊のレベルが上ってきたら、次のメンバーも考慮に入れよう。
+<ul class="list2"><li><strong>軽巡</strong>の理想は先制雷撃のできる<a href="/kancolle/%E9%98%BF%E6%AD%A6%E9%9A%88%E6%94%B9%E4%BA%8C" title="阿武隈改二" class="rel-wiki-page">阿武隈改二</a>or<a href="/kancolle/%E7%94%B1%E8%89%AF%E6%94%B9%E4%BA%8C" title="由良改二" class="rel-wiki-page">由良改二</a>or<a href="/kancolle/%E5%A4%95%E5%BC%B5%E6%94%B9%E4%BA%8C%E7%89%B9" title="夕張改二特" class="rel-wiki-page">夕張改二特</a>or<a href="/kancolle/%E7%90%83%E7%A3%A8%E6%94%B9%E4%BA%8C%E4%B8%81" title="球磨改二丁" class="rel-wiki-page">球磨改二丁</a>or<a href="/kancolle/%E7%9F%A2%E7%9F%A7%E6%94%B9%E4%BA%8C%E4%B9%99" title="矢矧改二乙" class="rel-wiki-page">矢矧改二乙</a>。<br />
+だが、この中では最も必要レベルの低い阿武隈でも75も必要と手間が大きすぎる上、さらに設計図まで使う(夕張や矢矧は戦闘詳報も必要)。</li>
+<li><strong>駆逐</strong>は先制対潜役の<a href="/kancolle/%E6%99%82%E9%9B%A8%E6%94%B9%E4%BA%8C" title="時雨改二" class="rel-wiki-page">時雨改二</a>・素の砲撃火力が高い<a href="/kancolle/%E5%A4%95%E7%AB%8B%E6%94%B9%E4%BA%8C" title="夕立改二" class="rel-wiki-page">夕立改二</a>・駆逐改の中でトップクラスの<a href="/kancolle/%E9%9B%AA%E9%A2%A8%E6%94%B9" title="雪風改" class="rel-wiki-page">雪風改</a>・<a href="/kancolle/%E5%B3%B6%E9%A2%A8%E6%94%B9" title="島風改" class="rel-wiki-page">島風改</a>が筆頭候補。<br />
+持っていない場合はレベルの高い駆逐艦で埋めよう。<br />
+もし、米英駆逐等の更なる先制対潜要員を準備できるのなら、それが一番ベスト。
+<ul class="list3"><li><a href="/kancolle/%E9%9C%B0%E6%94%B9%E4%BA%8C" title="霰改二" class="rel-wiki-page">霰改二</a>(改装必要レベル63)も64から可能だが、改修更新が必要(＝明石が必要)となる四式ソナーが3つも必要なため厳しい。<br />
+また四ソへの更新には結局五十鈴改二や時雨改二が必要となる。さらには設計図も使うため、頑張って準備出来るのなら……と言ったところ。<br />
+ちなみに三式ソナー３つならレベル77で可能である<span class="wikicolor" style="color:Silver">先制できずとも素火力は高いので十分だが</span></li>
+<li><a href="/kancolle/%E6%9C%9D%E9%9C%9C%E6%94%B9" title="朝霜改" class="rel-wiki-page">朝霜改</a>は三式ソナー3つでボーナス込みレベル59から可能、現在は1-4でもドロップするため候補に挙がる…<br />
+…がこの1-4ドロップが期間限定ドロップの恒常化かどうかはアナウンスがないため要注意。たまたま拾ってたら起用するでいいだろう。</li>
+<li>恒常入手は不可能だが、期間限定ドロップやイベントの序盤海域で<a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Class_J" title="艦娘名一覧（艦種別）" class="rel-wiki-page">J級</a>や<a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Class_Fletcher" title="艦娘名一覧（艦種別）" class="rel-wiki-page">Fletcher級</a>、<a href="/kancolle/Samuel%20B.Roberts" title="Samuel B.Roberts" class="rel-wiki-page">Samuel B.Roberts</a>と言った無条件先制対潜駆逐を引き当てられたのならぜひ育てて組み込みたい。<br />
+改にならないと習得しないJ級やSamuelはもちろんだが、無改造で可能なFletcher級もGマスを考えると改造はしておきたい。</li></ul></li>
+<li><strong>海防艦</strong>を投入する手もあるが、海防艦を絡めてルート固定をするためには海防艦が3隻必要。<br />
+7-1のゲージ攻略の段階ではイベントドロップで海防艦を引き当てるところから始める必要がある。<br />
+先制対潜艦をそろえやすいので対潜事故は抑えやすいが、海防艦の水上戦能力の低さから最大のネックであるGマスの事故率が跳ね上がる。<br />
+Gマスさえ乗り切れれば、先制対潜の手数の暴力で何とかなる。<br />
+Gマス対策はダメコンでゴリ押しするか、煙幕展開でやり過ごすかが考えられる(海防艦編成に限った話ではないが)。<br />
+これらの対策を行うつもりがないなら、無理に海防艦を入れるより駆逐艦で挑んだほうが突破はしやすいだろう。</li></ul></li></ul>
+<ul class="list1"><li>装備については開発で出る三式ソナー・三式爆雷投射機を人数分は準備したい。<br />
+先制対潜も加味すると、最低限の必要数は三ソ7つと三投4つ(4隻編成なら1個ずつ減る)。数が足りないなら増産しよう。<br />
+三投1つは五十鈴改二が持参する。三ソは1-4でもドロップする巻雲<span class="wikicolor" style="color:Gray">や朝霜(恒常かどうかは不明)</span>が改で持ってくる。
+<ul class="list2"><li><a href="/kancolle/%E7%99%BD%E9%9C%B2%E6%94%B9" title="白露改" class="rel-wiki-page">白露改</a>・<a href="/kancolle/%E6%99%82%E9%9B%A8%E6%94%B9" title="時雨改" class="rel-wiki-page">時雨改</a>や海防艦の改が持参する<a href="/kancolle/%E4%B9%9D%E4%BA%94%E5%BC%8F%E7%88%86%E9%9B%B7" title="九五式爆雷" class="rel-wiki-page">九五式爆雷</a>と絡めた3種シナジーとするなら、九三ソナーや九四投射機でも誤魔化しは効くので参考までに。
+<ul class="list3"><li>九五爆雷の使用を考慮するなら、三ソの最低必要数は時雨改二の先制対潜用の3つまで減らせる。三投も五十鈴改二の持参分だけで何とかできなくはない。</li>
+<li>ただし、甲標的や発煙装置、ダメコンに枠を割かれて爆雷を装備する余裕がない場合も間々ある。<br />
+万全を期したいならやはり三ソ・三投の準備は欠かせないだろう。</li></ul></li></ul></li></ul>
+<h3 id="h3_content_14_0" ><strong>ドロップについて</strong></h3>
+
+<ul class="list1"><li>ドロップ艦にイベント限定だった駆逐艦が多数報告されている。<br />
+現状報告があるのはボスマスで<a href="/kancolle/%E7%8B%AD%E9%9C%A7" title="狭霧" class="rel-wiki-page">狭霧</a>、<a href="/kancolle/%E5%B5%90" title="嵐" class="rel-wiki-page">嵐</a>、<a href="/kancolle/%E8%90%A9%E9%A2%A8" title="萩風" class="rel-wiki-page">萩風</a>、そして<a href="/kancolle/%E4%B8%89%E9%9A%88" title="三隈" class="rel-wiki-page">三隈</a>。加えてCマスで<a href="/kancolle/%E8%A6%AA%E6%BD%AE" title="親潮" class="rel-wiki-page">親潮</a>がドロップする。
+<ul class="list2"><li><a class="inn" href="https://wikiwiki.jp/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F#area3"  rel="nofollow">他の</a><a class="inn" href="https://wikiwiki.jp/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F#area5"  rel="nofollow">ドロップ</a><a class="inn" href="https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area2"  rel="nofollow">地点</a>に比べれば資源消費・確実性とも圧倒的に条件が良いため、<a href="/kancolle/20.3cm%283%E5%8F%B7%29%E9%80%A3%E8%A3%85%E7%A0%B2" title="20.3cm(3号)連装砲" class="rel-wiki-page">20.3cm(3号)連装砲</a>の量産を狙ってここを周回する提督もいる。</li></ul></li></ul>
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+</div>
+</div>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">レベリング・戦果稼ぎに関して</div>
+    <div class="fold-content visible-on-open"><ul class="list1"><li>育成も戦果も高効率だった旧5-4に代わる戦果稼ぎの場としてこの海域が浮上している。</li>
+<li>2018/11/16の経験値調整により、得られる戦果は半分程度になった。
+<ul class="list2"><li>とはいえ、他の戦果稼ぎの海域と比べて要求される資源が軽く、先制対潜で戦闘時間も短く事故率もさほどではないため、メンテ後もここで戦果稼ぎをする提督もいるようである。</li>
+<li>戦果を稼ぐ場合、全艦に先制対潜とダメコンを装備させよう。Gマスでの大破が旗艦以外の1隻程度なら、HKマスを先制対潜で突破可能かつ万一の保険である。</li>
+<li>また余裕があるならドラム缶・大発でEマスの獲得量を増加させよう。消費が少ない分、周回効率上昇は大きい。
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">2018/11/16メンテ前の情報</div>
+    <div class="fold-content visible-on-open"><ul class="list2"><li>水雷戦がやや不安定な部分もあるが、ボス以外が1戦あたり提督経験値250、ボスが3500とボス撃破まで回れば、4隻ルート、5隻ルート共に全部Sで4250とおおよそ戦果3を入手できる。これは旧5-4以上である。
+<ul class="list3"><li>また艦隊が低コストのため、1周辺りの燃料や弾薬の消費も低め。Sが安定しにくい水雷戦でAになっても4200入手できる。</li>
+<li>実際のところ事故要素はほぼGマスの水雷戦。水雷戦で事故ると提督経験値500前後(戦果約0.35)と微妙な面はある。</li>
+<li>たまに先制対潜を外して開幕雷撃での大破事故があるが、水雷戦で事故るよりかは低め。</li></ul></li></ul>
+<ul class="list1"><li>ガチガチで戦果を求めるならば旗艦以外にダメコン装備のうえ周回が一番手っ取り早い。2戦目(水雷戦)での大破をダメコンまたは女神で進撃してしまうのである。1戦目大破は流石に帰りましょう。
+<ul class="list2"><li>5隻ルートで先制対潜さえしっかりできれば3戦目、4戦目の発動率は低め。ただし先制対潜は必中ではないのでたまに外して雷撃が飛んでくる。ダメコン装備忘れで慢心しないように。
+<ul class="list3"><li>ただ旗艦ダメコンの場合、旗艦大破進軍後の次マスで戦闘開始した瞬間発動扱いとなり随伴と比べ消費ペースが一気に上昇するため、どうしても戦果が欲しいとかでない限り非推奨。</li></ul></li></ul></li></ul>
+</div>
+</div></li></ul></li>
+<li>対潜マップのため駆逐や軽巡等が育て易い。
+<ul class="list2"><li>1マスあたりの経験値は多い為、1-5よりも成長ペースが早め。
+<ul class="list3"><li>しかし、ソ級eliteやGマスと言った事故要素が点在しているため、育成艦中心での周回は不向き。</li>
+<li>一方で、Gマス対策と先制対潜を兼ねられる艦が多数編成されているなら周回の安定性を高められる。</li></ul></li>
+<li>このことから、先制対潜ができるようになった軽巡・駆逐1隻の集中的な育成に向いている。<br />
+育成したい艦を旗艦に据え、随伴艦はすべてGマス対策と先制対潜を兼ねられる艦で統一する。
+<ul class="list3"><li>育成対象が駆逐艦なら5隻編成、軽巡なら4隻編成がおすすめ。</li></ul></li>
+<li>先制対潜ができない艦を育成したいなら7-2の第一ゲージのほうが向いている。</li></ul></li></ul>
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+</div>
+</div>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">任務関連</div>
+    <div class="fold-content visible-on-open"><h3 id="h3_content_18_0" >定期任務</h3>
+
+<h4 id="h4_content_19_0" >(クォータリー)<a href="/kancolle/%E4%BB%BB%E5%8B%99#id-Bq8" title="任務" class="rel-wiki-page">泊地周辺海域の安全確保を徹底せよ！</a></h4>
+
+<p>実装日：2018年11月16日<br />
+旗艦指定：なし<br />
+随伴指定：自由枠6<br />
+達成条件：ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>3</strong><br />
+他海域達成条件：</p>
+<ul class="list1"><li><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area5" title="鎮守府海域" class="rel-wiki-page">1-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>3</strong></li>
+<li>7-2第一ボス(Gマス)<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>3</strong></li>
+<li>7-2第二ボス(Mマス)<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>3</strong></li></ul>
+<p>補足：</p>
+<ul class="list1"><li>ボーナス戦果を得られる任務の一つ。（<span class="wikicolor" style="color:#FF6600">+300</span>）</li></ul>
+<h3 id="h3_content_20_0" >単発任務</h3>
+
+<div class="h-scrollable"><table><tbody><tr><th>任務名</th><th>実装日</th><th>旗艦指定</th><th>随伴指定</th><th>達成条件</th><th>他海域達成条件</th><th>備考</th></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99#id-B123" title="任務" class="rel-wiki-page">精強「十七駆」、北へ、南へ！</a></td><td>2018/10/26</td><td>なし</td><td><a href="/kancolle/%E6%B5%A6%E9%A2%A8%E4%B8%81%E6%94%B9" title="浦風丁改" class="rel-wiki-page">浦風丁改</a>、<a href="/kancolle/%E7%A3%AF%E9%A2%A8%E4%B9%99%E6%94%B9" title="磯風乙改" class="rel-wiki-page">磯風乙改</a>、<a href="/kancolle/%E6%B5%9C%E9%A2%A8%E4%B9%99%E6%94%B9" title="浜風乙改" class="rel-wiki-page">浜風乙改</a>、<a href="/kancolle/%E8%B0%B7%E9%A2%A8%E4%B8%81%E6%94%B9" title="谷風丁改" class="rel-wiki-page">谷風丁改</a><br class="spacer">+自由枠2</td><td>ボス<span class="wikicolor" style="color:Red"><strong>勝利A以上</strong></span>x1</td><td><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area5" title="鎮守府海域" class="rel-wiki-page">1-5</a>ボス<span class="wikicolor" style="color:Red"><strong>勝利A以上</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area2" title="北方海域" class="rel-wiki-page">3-2</a>ボス<span class="wikicolor" style="color:Red"><strong>勝利A以上</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area1" title="南方海域" class="rel-wiki-page">5-1</a>ボス<span class="wikicolor" style="color:Red"><strong>勝利A以上</strong></span>x1</td><td>選択報酬</td></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99#id-B141" title="任務" class="rel-wiki-page">新編「六水戦」出撃！後で感想、聞かせてね！</a></td><td>2020/01/14</td><td>「夕張改二」型<br class="spacer">(<a href="/kancolle/%E5%A4%95%E5%BC%B5%E6%94%B9%E4%BA%8C" title="夕張改二" class="rel-wiki-page">改二</a>/<a href="/kancolle/%E5%A4%95%E5%BC%B5%E6%94%B9%E4%BA%8C%E7%89%B9" title="夕張改二特" class="rel-wiki-page">改二特</a>/<a href="/kancolle/%E5%A4%95%E5%BC%B5%E6%94%B9%E4%BA%8C%E4%B8%81" title="夕張改二丁" class="rel-wiki-page">改二丁</a>)</td><td>「第六水雷戦隊」より3人<br class="spacer">(<a href="/kancolle/%E7%9D%A6%E6%9C%88" title="睦月" class="rel-wiki-page">睦月</a>、<a href="/kancolle/%E5%A6%82%E6%9C%88" title="如月" class="rel-wiki-page">如月</a>、<a href="/kancolle/%E5%BC%A5%E7%94%9F" title="弥生" class="rel-wiki-page">弥生</a>、<a href="/kancolle/%E5%8D%AF%E6%9C%88" title="卯月" class="rel-wiki-page">卯月</a>、<a href="/kancolle/%E8%8F%8A%E6%9C%88" title="菊月" class="rel-wiki-page">菊月</a>、<a href="/kancolle/%E6%9C%9B%E6%9C%88" title="望月" class="rel-wiki-page">望月</a>)<br class="spacer">+自由枠2</td><td>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area5" title="鎮守府海域" class="rel-wiki-page">1-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area6" title="鎮守府海域" class="rel-wiki-page">1-6</a>ゴール地点到達x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area2" title="南西諸島海域" class="rel-wiki-page">2-2</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area2" title="北方海域" class="rel-wiki-page">3-2</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td>選択報酬</td></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99#id-B149" title="任務" class="rel-wiki-page">改装護衛駆逐艦「Fletcher Mk.II」作戦開始！</a></td><td>2020/05/20</td><td><a href="/kancolle/Fletcher%20Mk.II" title="Fletcher Mk.II" class="rel-wiki-page">Fletcher Mk.II</a></td><td><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Flag_America" title="艦娘名一覧（艦種別）" class="rel-wiki-page">米</a>、<a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Flag_Britain" title="艦娘名一覧（艦種別）" class="rel-wiki-page">英</a>、<a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Flag_Australia" title="艦娘名一覧（艦種別）" class="rel-wiki-page">豪</a>、<a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89#Flag_Netherlands" title="艦娘名一覧（艦種別）" class="rel-wiki-page">蘭</a>の艦娘より2人<br class="spacer">+自由枠3</td><td>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>2</strong></td><td><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area5" title="鎮守府海域" class="rel-wiki-page">1-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>2</strong><br class="spacer"><a href="/kancolle/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F#area2" title="中部海域" class="rel-wiki-page">6-2</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>2</strong><br class="spacer"><a href="/kancolle/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F#area5" title="中部海域" class="rel-wiki-page">6-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x<strong>2</strong></td><td>選択報酬</td></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99#id-B158" title="任務" class="rel-wiki-page">精鋭「二七駆」、回避運動は気をつけて！</a></td><td>2020/10/16</td><td>なし</td><td><a href="/kancolle/%E7%99%BD%E9%9C%B2%E6%94%B9%E4%BA%8C" title="白露改二" class="rel-wiki-page">白露改二</a>、<a href="/kancolle/%E6%99%82%E9%9B%A8%E6%94%B9%E4%BA%8C" title="時雨改二" class="rel-wiki-page">時雨改二</a>+自由枠4</td><td>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area5" title="鎮守府海域" class="rel-wiki-page">1-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area5" title="南西諸島海域" class="rel-wiki-page">2-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area5" title="南方海域" class="rel-wiki-page">5-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F#area3" title="中部海域" class="rel-wiki-page">6-3</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td>選択報酬</td></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99#id-B164" title="任務" class="rel-wiki-page">改装最新鋭軽巡「能代改二」、出撃せよ！</a></td><td>2021/02/05</td><td><a href="/kancolle/%E8%83%BD%E4%BB%A3%E6%94%B9%E4%BA%8C" title="能代改二" class="rel-wiki-page">能代改二</a></td><td>駆逐3+自由枠2</td><td>ボス<span class="wikicolor" style="color:orange"><strong>勝利S</strong></span>x1</td><td><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area4" title="南西諸島海域" class="rel-wiki-page">2-4</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area2" title="北方海域" class="rel-wiki-page">3-2</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer">7-2第二ボス(Mマス)<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area3" title="南方海域" class="rel-wiki-page">5-3</a>ボス<span class="wikicolor" style="color:orange"><strong>勝利S</strong></span>x1</td><td>選択報酬</td></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99#id-B212" title="任務" class="rel-wiki-page">防空駆逐艦「秋月改二」、推参します！</a></td><td>2025/12/18</td><td><a href="/kancolle/%E7%A7%8B%E6%9C%88%E6%94%B9%E4%BA%8C" title="秋月改二" class="rel-wiki-page">秋月改二</a></td><td>自由枠5</td><td>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F#area4" title="鎮守府海域" class="rel-wiki-page">1-4</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area4" title="南西諸島海域" class="rel-wiki-page">2-4</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer">7-2第二ボス(Mマス)<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F#area4" title="南方海域" class="rel-wiki-page">5-4</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td>選択報酬</td></tr><tr><td><a href="/kancolle/%E4%BB%BB%E5%8B%99/%E5%87%BA%E6%92%83%E4%BB%BB%E5%8B%99#id-B213" title="任務/出撃任務" class="rel-wiki-page">三十二駆「早波改二」、元気に出撃せよ！</a></td><td>2026/01/28</td><td><a href="/kancolle/%E6%97%A9%E6%B3%A2%E6%94%B9%E4%BA%8C" title="早波改二" class="rel-wiki-page">早波改二</a></td><td><a href="/kancolle/%E7%8E%89%E6%B3%A2" title="玉波" class="rel-wiki-page">玉波</a>、<a href="/kancolle/%E6%B6%BC%E6%B3%A2" title="涼波" class="rel-wiki-page">涼波</a>、<a href="/kancolle/%E8%97%A4%E6%B3%A2" title="藤波" class="rel-wiki-page">藤波</a>、<a href="/kancolle/%E6%B5%9C%E6%B3%A2" title="浜波" class="rel-wiki-page">浜波</a>より2人+自由枠3</td><td>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area2" title="南西諸島海域" class="rel-wiki-page">2-2</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area4" title="南西諸島海域" class="rel-wiki-page">2-4</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer"><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F#area5" title="南西諸島海域" class="rel-wiki-page">2-5</a>ボス<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1<br class="spacer">7-2第二ボス(Mマス)<span class="wikicolor" style="color:Orange"><strong>勝利S</strong></span>x1</td><td>選択報酬</td></tr></tbody></table></div>
+<p><br /></p>
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+</div>
+</div>
+<h3 id="h3_content_1_1" class="heading-after-first">7-1 情報提供  <a class="anchor_super" name ="comment1"></a> <a class="anchor_super" href="/kancolle/::cmd/edit?page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1&id=comment1" rel='nofollow'><span class="system-icon paraedit" title="Edit"></span></a></h3>
+<div class="includex" style="padding:0;margin:0;"> <a class="anchor_super" id="z3b6d9ec3163374942236058242b59379" href="#z3b6d9ec3163374942236058242b59379" title="z3b6d9ec3163374942236058242b59379"></a></div>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">【7-1 情報提供コメント欄】</div>
+    <div class="fold-content visible-on-open"><p><strong>※南西海域（7-1）の情報提供のコメント欄です。</strong>司令部レベルも記載お願いします。</p>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">過去ログ</div>
+    <div class="fold-content visible-on-open"><p>過去ログ</p>
+<ul class="list1">
+<li><a id="list_1" href="/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1/%E3%83%AD%E3%82%B01" title="南西海域/7-1/ログ1" class="rel-wiki-page">南西海域/7-1/ログ1</a>
+</li>
+<li><a id="list_2" href="/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1/%E3%83%AD%E3%82%B02" title="南西海域/7-1/ログ2" class="rel-wiki-page">南西海域/7-1/ログ2</a></li></ul>
+</div>
+</div>
+    <div class="pcomment-form-placeholder" data-form-action-path="/kancolle/::cmd/pcomment?refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F&page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1%2F%E3%83%AD%E3%82%B02" data-comment-page-url="/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1/%E3%83%AD%E3%82%B02"
+         data-comment-page="南西海域/7-1/ログ2" data-comment-page-exists="1"
+         data-linked-page-name="南西海域/7-1/ログ2" data-no-date="0" data-no-name="0"
+         data-dir="1" data-count="30" data-reply="1"
+         data-interrupt-type="none" data-unfreeze-url="" data-capacity-warning=""
+         data-new-page-name="" data-archive-page-name=""
+         data-digest="">
+         <div class="pcomment-form-comments"><ul class="list1"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="b49b97f23393b64e2daf56d905843aa2" tabindex="52" />Hマスの表で言う一番下の分岐のKマスへの確率って本当に7割なんですか？今の所、10回ぐらいやっているのですがすべてIマスに分岐したのですが。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1671741446">2022-12-23 (金) 05:37:26</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="4c28dd8b8602b64a08c82da400cf77f7" tabindex="51" />編成貼れよ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1671747812">2022-12-23 (金) 07:23:32</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="9f4f224c60fcbb5e4fdb91e49af6ed44" tabindex="50" />着任して一か月提督(司令部Lv.80)、ゲージ割り完了。 編成：旗艦, Johnston(Lv.10)、随伴, 駆逐改×3(Lv20台)、五十鈴改二(Lv50)。　最低限の対潜要員でしたが割れました(削り入れて10回ほど)、恐らく五十鈴改二とジョンが居なくても試行回数で割れそう。　<br />
+道中全戦、ボス戦共に単横陣。 火力改修が微妙なのでGマス(水上戦)はほぼ終幕雷撃されます、雷撃回避を期待して単横陣にしました。　逆に火力改修が済んでるならGマスは単縦陣にして、出来るだけ先に沈めたほうが良いかと。<br />
+さっさと後半海域を開放して任務やら掘りやら育成やらしたいので、よくわからず足踏みしてる初心者提督は強気に行きましょう。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1671762795">2022-12-23 (金) 11:33:15</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="1e11cd4d8b15492cb2f9253abf887a88" tabindex="49" />すごい はやい --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1671763205">2022-12-23 (金) 11:40:05</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="3ad65989818b12b65417f9538d8b45d4" tabindex="48" />海防艦４隻でクリアできた人います…？ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1674644618">2023-01-25 (水) 20:03:38</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="194856996a3bb1241cd8f7cc5d5be77d" tabindex="47" />Kcnav を見るに、海防4、海防5、駆逐1海防4、水母1海防4　という編成でクリアしているデータはあるようです。　海防4の編成は平均Lv93というなかなかな練度ですし、水母入りはDでランダム分岐するのが留意ポイントでしょうか。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1674652858">2023-01-25 (水) 22:20:58</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="05dc5d23802a6e39d722b4e20dc69b23" tabindex="46" />海域開放当初の分岐が分かってなかった頃は潜水マップということで(1-5の延長として)海防4でやってた。対潜で苦労はしないけど、今だと4隻編成にするなら水雷も安定する雷巡3軽巡1とかを選ぶと思う、どちらにしてもボス前ランダムなのはご愛嬌 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1675875257">2023-02-09 (木) 01:54:17</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="b2d7e0d8632f8be87a5287403ef544de" tabindex="45" />海防4駆逐1とかならまだわかるが… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1718417385">2024-06-15 (土) 11:09:45</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="7c89ef83e48e68cf96f61a5181ab5060" tabindex="44" />Gマス辛くね？w対戦装備しか積んで無いのにファラグシップ相手はやばくね？ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1675435525">2023-02-03 (金) 23:45:25</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="1f70c83bf87620d56a4693c9a17e593c" tabindex="43" />ファラオ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1675440582">2023-02-04 (土) 01:09:42</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="2078caf9f25175042fbcb2c7d1e07ad0" tabindex="42" />駆逐4雷巡1でD→C行ったんですがこれどっかに書いてる？編成詳細は満潮・大井・山風・Samuel・朝潮 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1676029626">2023-02-10 (金) 20:47:06</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="6232c1124bb8b59bf500b5e5c4ce6981" tabindex="41" />さっと見た感じ、＞(駆逐+海防)4隻の場合_・練巡を含むとE_・補給艦を含むとE_・水母を含むとランダムそれ以外はC　に当て嵌まってるのでは？　駆逐4で練習巡洋艦、補給艦、水母もどれも含まないのでCに行っただけのような。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1676030405">2023-02-10 (金) 21:00:05</span></span>
+<ul class="list3"><li>なるほど、ありがとうございます。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1676295893">2023-02-13 (月) 22:44:53</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="6ea4875edd0223264f31fe00f4cc457d" tabindex="40" />煙幕でGマス抜け結構安定するな。問題は煙幕自体の発動率だが --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1683278750">2023-05-05 (金) 18:25:50</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="24d90a88202c2d1998693021f17c7a1c" tabindex="39" />Gマスの煙幕は、4スロットの軽巡かタシュケントに2つ積むと被害が軽減されて進みやすく、Lv20の駆逐艦の改更新が、やりやすいと実感します。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1684040164">2023-05-14 (日) 13:56:04</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="fa7d8bacfd43ca16be8e561e8c7a2263" tabindex="38" />対潜装備モリモリにしているので、Gマスで大破しても進撃してるわ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1685968451">2023-06-05 (月) 21:34:11</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="9e72aaa341d3da3bb866fa516c351202" tabindex="37" />着任約ひと月、長良改66,ユッキー改56,択捉30,松輪28,よつ24で割った。　五十鈴改二準備中だったけど使わんかった。先制対潜は択捉のみ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1686875156">2023-06-16 (金) 09:25:56</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="ca99734d0e68935f04182082dd6c6cd2" tabindex="36" />司令部レベル５４、時雨改３７、叢雲改３９、雪風改３４、響改３３，五十鈴改二５０でゲージ破壊に成功。試行回数を稼いでＧマスは突破した。改二になる前から、ゲージは削れたので運がよければ先制対潜はなしでも突破できるかも --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1688515426">2023-07-05 (水) 09:03:46</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="d332e4b509d96843cae1252263f0c8fd" tabindex="35" />Gマスなら精鋭水雷戦隊司令部積んで退避させるのもいいかも。羅針盤次第だけど割とボスマスいく。まぁ任務やらで必要な艦が大破したなら撤退するしかないけど。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1689793380">2023-07-20 (木) 04:03:00</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="1a552b8615a4953d194b7b24c6df7520" tabindex="34" />ここの攻略記事って主砲は１本積んで対潜はシナジー効かせるって話になってるけど、増設爆雷できるようになってからは状況変わってるはずよね。例えば３スロ＋増設駆逐艦の場合はどういう装備構成が最適なんだろ？　どうせ駆逐艦だと昼戦連撃できないから主砲＋ソナー＋爆雷（増設）に、命中考慮で電探とか乗せることになるのかな？ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1690597517">2023-07-29 (土) 11:25:17</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="4d92b869549f41f8294cf938a7814950" tabindex="33" />増設爆雷できる駆逐艦って時雨改二/改三だけだから、わざわざ文章増やすほどかなぁと思う(注釈で「時雨なら増設爆雷ができるので～」ぐらいじゃないかなと)。その上で作戦室で見て来たけど、改三なら火力は十分足りるので主電ソ爆が安定っぽい。改二だと、C改三max+GFCSだけだとギリギリヘ級同航確定中破に届かない(ソナー改修や三ソ改フィット込みなら届く)から、改修や装備が一枚落ちとかなら主主ソ爆で火力伸ばすか、低確率小破耐えは諦めて主電ソ爆命中確保の二択になりそう。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1690611501">2023-07-29 (土) 15:18:21</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="35397d7ce57e72ac71d7a23ce9c3967e" tabindex="32" />主砲は実はあんまり使わない。シナジーもあくまで極初期の装備の話かな　実際はSG電探と改修ソナー　強い潜水艦いないし混成もないから単横だし --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1704749480">2024-01-09 (火) 06:31:20</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="c9027d16bca0c7331d287818240ed5f7" tabindex="31" />初攻略記述に煙幕を盛り込んでみました --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1694873985">2023-09-16 (土) 23:19:45</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="8e850fe4f36536aedc0dd1c265194404" tabindex="30" />3重煙幕使うとGマスがかなり安定して旗艦育成捗る。ただ、雷撃事故回避の単横すると敵味方無傷D敗北になりやすいので、単縦か梯形で削ってB勝利目指した方がいいかもしれない。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1696563295">2023-10-06 (金) 12:34:55</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="e0dc62b8ce2a13c53d9aced43020de4c" tabindex="29" />着任8日目の提督ですがゲージ破壊できました。司令部レベル７０五十鈴改、改駆逐４（全員レベル30以下）で全員装備は3爆３ソ煙幕です。陣形は全て単横陣でGマスで煙幕発動すれば試行回数でゴリ押しできます。3スロ艦が5隻用意できればどうにかなる印象でした。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1699347465">2023-11-07 (火) 17:57:45</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="2141f0330f886a6d4b21e1eb7e65910b" tabindex="28" />司令部レベル75 五十鈴改二(52)、国後改(49)、大井改二(54)、北上改二(70)ですんなりクリアできました。ルートは運が良かったのかFGHKで固定されました。煙幕は使わず五十鈴改二と解剖館の先制対潜と雷巡の先制雷撃でゴリ押しできました。ご参考までに。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1699666817">2023-11-11 (土) 10:40:17</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="19d9ef0e98f39253c75ce11b9fa65841" tabindex="27" />解剖館じゃなくて海防艦 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1699666920">2023-11-11 (土) 10:42:00</span></span>
+<ul class="list3"><li>ずいぶん血生臭そうな誤変換だな --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1699676561">2023-11-11 (土) 13:22:41</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="af0265dc925ced3d3c762bdfb3042d2d" tabindex="26" />軽巡（運：高、4スロ）、駆逐（運：高、先制爆雷：可）海防艦（運：高、先制爆雷：可）×３の編成で、煙幕を合計が3以上搭載して抜錨、Gマスで煙幕使用すると、被弾が減ってバケツの節約になりました、既存かもしれませんがご報告。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1700453783">2023-11-20 (月) 13:16:23</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="2446fda16aec92abed599b7ff6e19dab" tabindex="25" />戦果周回だと時間効率が落ちるのがなぁ… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1700456403">2023-11-20 (月) 14:00:03</span></span>
+<ul class="list3"><li>ちょっと質問、今での4隻編成だとHマスで10回中2回くらいほど逸れてたが、枝主のやり方で10回試したらバケツは1つも使わず、Hマスでの逸れは1度もなかったんだが、他に良い方法があるの？ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1700480635">2023-11-20 (月) 20:43:55</span></span></li>
+<li>軽巡１駆逐１海防３の５隻編成は「駆逐1隻以上 かつ 海防3隻以上」でDEGHK固定条件満たすよ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1700496153">2023-11-21 (火) 01:02:33</span></span></li>
+<li>駆逐１海防３なら日進だの北上だの最上だのでもいい… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1700611636">2023-11-22 (水) 09:07:16</span></span></li>
+<li>神州丸でも山汐丸でも熊野丸でもok（ルート的には） --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1704803132">2024-01-09 (火) 21:25:32</span></span></li>
+<li>山汐丸は補給艦じゃないっけ？ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1706319941">2024-01-27 (土) 10:45:41</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="8c5ad305f42b4414115356e3d62fd0bb" tabindex="24" />軽巡4隻で三回連続Iマスに逸れたんですけど単純に運ですよね...? --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1707582978">2024-02-11 (日) 01:36:18</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="d38c4c6b88bc694e3717ae072acca064" tabindex="23" />KCNavで最近１年分の軽巡×４のルートを探してみたら約30％でIマス行き。1-1駆逐キラ付けを３隻でやると30％でボス逸れするので、３重キラ付けするときに３連続でボス逸れするのと同程度と考えると、体感的にはまぁ起こるよねって思う。（確率的には2.7％） --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1707604380">2024-02-11 (日) 07:33:00</span></span>
+<ul class="list3"><li>なるほど、、、感謝です --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1707953116">2024-02-15 (木) 08:25:16</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="14164d679534a3333dc5b8c371132ee4" tabindex="22" />軽空1軽巡1駆逐3潜水1でB→Aに行きました　ルート分岐が間違ってるかもしれません --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1714461859">2024-04-30 (火) 16:24:19</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="7b76e0088dc107a9cb1e95576d056b4a" tabindex="21" />KCNavでも反例が1件（揚陸2重巡2駆逐1海防1でB→A）ありました。戦艦級と正空を含まず、軽空1隻以下、重巡級2隻以下、駆逐または海防2隻以上の条件で、151件中、反例は1件。B→Cには軽空を含むもの、潜水を含むものもありました。B→Aの条件は不明ですね。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1714469516">2024-04-30 (火) 18:31:56</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="8f2d16f7d80ca25f2fa955a12be64c47" tabindex="20" />ボスまで全く安定しない&amp;ボスも火力不足で超イライラしてたけど4隻編成で雷巡2を航巡1雷巡1に変えるとだいぶ安定した… まだクリアしてない方はお試しあれ。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1715430709">2024-05-11 (土) 21:31:49</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="d47a20068ea257af04f24b29f93c1b35" tabindex="19" />ボス火力不足なのに艦減らしたうえ航巡入れるのはコンセプトがよくわからないGにリソース割きすぎでは… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1718417145">2024-06-15 (土) 11:05:45</span></span>
+<ul class="list3"><li>＞1葉　(´・ω・`)つ 第4回鈴熊杯 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1718417906">2024-06-15 (土) 11:18:26</span></span></li>
+<li>「1枝」やね。鈴熊杯が何か知らんけどRTAとか？ボス前で逸れるのは「ボスまで安定しない」の範疇じゃないのだろうか --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1718427265">2024-06-15 (土) 13:54:25</span></span></li>
+<li>訂正サンクス。同じボスまで安定しないの範疇で、Gマス大破撤退を極力を回避してバケツ消費を抑える代わりに、ボス前逸れを許容するというコンセプトだと思うわよ～。通せれば立派なRTA戦術となり、鈴熊杯で多くの超大ベテラン提督方が採用して、やれ通した逸れたの悲喜こもごもで、なるほどと感心させられたわよ～、こういうのもありなのね～と。(´・ω・`)<br class="spacer">この海域ではないけど、私もまだぺいぺいの時は、編成を重くする代わりにボス前逸れる編成、よく多用していたしね。(´・ω・`) -- <span class="noexists">1葉<a href="/kancolle/::cmd/edit?page=1%E8%91%89&refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F" rel="nofollow">?</a></span> <span class="comment_date"><span class="plugin-new-body" data-timestamp="1718429362">2024-06-15 (土) 14:29:22</span></span></li>
+<li>なるほど、RTA勢ならボスさえ付けばほぼ勝てるか。ただ、”まだクリアしてない方はお試しあれ”はどうかと思う、未クリアのひとがRTA勢の編成再現とかできんだろ… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1719026262">2024-06-22 (土) 12:17:42</span></span></li>
+<li>それもそうね、だから、よっぽどうれしかったのかもしれないわね～。他の人と違うやり方で攻略できるのって、楽しいし。それが、苦労して何回も考え直してうまくいったものなら、なおさらね。(´・ω・`)// -- <span class="noexists">1葉<a href="/kancolle/::cmd/edit?page=1%E8%91%89&refer=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F" rel="nofollow">?</a></span> <span class="comment_date"><span class="plugin-new-body" data-timestamp="1719033939">2024-06-22 (土) 14:25:39</span></span></li>
+<li>ユーザー大会やそのコミュの宣伝したいがためか、ちょくちょく妙な理屈の主張してる人だから…　最近だと7－5でも… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1719037777">2024-06-22 (土) 15:29:37</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="65dc1ba4dbcfda910c6143f0c8498cbd" tabindex="18" />先制対潜可になった駆逐旗艦にして疲労抜きしつつ周回してるけどめちゃくちゃレベリング捗りますねここ。旗艦と夕張がキラキラ安定してるから他３人をローテして２部隊でやりたいけど火力と対潜両立してる子が足りなくてもどかしい。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1736030816">2025-01-05 (日) 07:46:56</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="af2783681a05e7635eb98a046313c8c6" tabindex="17" />遅レスで済まんが、ここは随伴にケッコン済みの矢作改二乙／初月改二／時雨改二／タシュ改（いずれも連撃）で駆逐がLV30くらいから育成できるぞ。旗艦にはめったに攻撃こないし、あてられてもかえってダウンタイムが短い。ただいま吹雪牧場中。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737093769">2025-01-17 (金) 15:02:49</span></span>
+<ul class="list3"><li>連撃装備は草。夜戦でもするつもりですかね。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737094215">2025-01-17 (金) 15:10:15</span></span></li>
+<li>＞1葉　草とはどういうことだ？昼火力を最大にしてGマスを抜け切るのは、3-2周回の応用だぞ。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737094888">2025-01-17 (金) 15:21:28</span></span></li>
+<li>横からだが、主砲装備自体はおかしくないと思うけど、「連撃」って書いてるからじゃないかな。結果的に夜戦連撃可能な装備構成にはなることはあるだろうけど、連撃自体は発生しないよね。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737097741">2025-01-17 (金) 16:09:01</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="5a4f7c1db744e23080e81fdaeb6cb0ed" tabindex="16" />育ててる一人が十分育てば二人目育成のときの随伴ローテ役に…ってな具合で最初さえ乗り越えれば面子は揃うから頑張るんやで～ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737094847">2025-01-17 (金) 15:20:47</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="6fc2d1a4497ec1fb93dbb8a662bc0f59" tabindex="15" />ぜかましとか７－１戦果周回記事参考にするとすごくためになる。先制対潜火力75駆逐3と矢矧乙か夕張特であれば、旗艦lv1からパワーレベリングできる（吹雪天津風等牧場してた）。1隻教徒じゃなければ、綾波夕立（設計図いらないから）増やして疲労ローテ艦（疲労が完全に抜ける3艦隊分編成記録）の2枠ずつ埋めるといい。つまり旗艦先制対潜なしで主主主や主主電探とか火力命中盛って（旗艦は必ずキラになるから電探はいらないかも）水雷マス特化でも育成できる。（潜水撤退はほんのり増えるくらい） --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737101165">2025-01-17 (金) 17:06:05</span></span>
+<ul class="list3"><li>ついでに先制対潜火力75駆逐4であれば軽巡も旗艦レベル1から可能です。（ぐろわーるふぇに等やってた） --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737101552">2025-01-17 (金) 17:12:32</span></span></li>
+<li>まあ旗艦パワーレベリングだけなら7-2-1でいいけどな。瑞鳳乙と海防艦三に先制対潜させりゃできる。ローテできるだけの海防艦があればバケツもいらん --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737198465">2025-01-18 (土) 20:07:45</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="d73dc6538b05e7a33e904a3292bb913a" tabindex="14" />Gマスの基本経験値170のとこでD敗北すると、経験値が0.7倍の119じゃなくて118しかもらえないけどここだけなのかな。通常マップでD敗北することほぼないからわからない… --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737191030">2025-01-18 (土) 18:03:50</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="73b14f4d4202041bad5f4836755480ae" tabindex="13" />2進数表現に起因する（0.7が無限小数になる）演算誤差なので、基本経験値170のマスは全部そうなるはず。TP計算のA勝利でも特定の値の時に誤差が出る。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737193148">2025-01-18 (土) 18:39:08</span></span>
+<ul class="list3"><li>艦これ輸送物資量(TP)計算機では、他に「180*0.7=126のはずが125」の例が挙げられている。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1737194953">2025-01-18 (土) 19:09:13</span></span></li></ul></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="e6b0cdaf595f1d04adfb746efa5776b3" tabindex="12" />警戒陣が使える（Ｇマスで適用）期間は軽巡旗艦レベリングが捗りますな、はっはっはっはっは～（イベなんてどうでも良いわ！）。３，４，５番艦に起用する艦が肝だけど。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1743139014">2025-03-28 (金) 14:16:54</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="748e8add643146b0ce297c9742eacc66" tabindex="11" />復帰勢だが戦果稼ぎは君に決めた！旗艦と軽巡がキラ維持できるから他3隻駆逐高火力艦準備できればcond維持しながら周回できる？（ほぼ全S、４編成）から良いな　 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1762637574">2025-11-09 (日) 06:32:54</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="9414b3836155d9d6e3bd17f0649a2f72" tabindex="10" />ツリーミスしたので修正。あと、ついでに皆さんのおすすめのあれこれがあったら教えてくれるとうれしいｗ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1762637794">2025-11-09 (日) 06:36:34</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="4293f38458b63888b950a8e9c38c03b7" tabindex="9" />今更ながら初突破したので記載。司令官Lv80　編成はJohnston(Lv20)、夕立改(Lv45)、時雨改(Lv45)、雪風改(Lv30)、川内改(Lv30)。装備はJohnstonのみソナー爆雷、他駆逐はソナー爆雷と主砲。川内は主主偵の弾着。Gマスのみ警戒陣か複縦陣、他は単横陣。　ソナーも爆雷も93式やら二式、三式バラバラ。煙幕もなしでも行けます。周回するなら必要かもだけどね。Fletcher級が先制爆雷してくれるので都合よさそうでした。割とがばがば編成でも行けるのでとりあえず初回行ってみるといいと思います。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1765341928">2025-12-10 (水) 13:45:28</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="69279b32a574e2ccc225140ac7f1ef02" tabindex="8" />突破おめ！ --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1765342380">2025-12-10 (水) 13:53:00</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="50f2fc89ff5fc120716f54244cc5c090" tabindex="7" />おめおめ。ただ、ここ、サミュ２に回転翼機積む以外で制空権とる手段が無いし、索敵分岐もなかったはずなんで、川内の偵察機は他の装備で良いかも --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1765345419">2025-12-10 (水) 14:43:39</span></span>
+<ul class="list3"><li>…しまった。ランダムOKなら水母や航巡持ち込めるし、一部軽巡の瑞雲装備可忘れてた -- ２枝 <span class="comment_date"><span class="plugin-new-body" data-timestamp="1765345617">2025-12-10 (水) 14:46:57</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="decfd5c871c4127fe7ccbc54265a9cf1" tabindex="6" />おぉ、お祝いあざます！ちなみに制空権とか全く考えてすらいなかっt… -- 枝主 <span class="comment_date"><span class="plugin-new-body" data-timestamp="1765550895">2025-12-12 (金) 23:48:15</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="8708fc508a7235150236ffc5c777be50" tabindex="5" />マップ概要のうちのドロップ艦についての記載で、三隈が変に分けて書かれていたので修正させていただきました。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1775372817">2026-04-05 (日) 16:06:57</span></span></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="62338cc7d1ea80c33d6d1b654c21af73" tabindex="4" />三重煙幕でも軽々吹っ飛ぶな……増設ダメコン無しで回れないか色々調べてるけど無理そうな --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1783490587">2026-07-08 (水) 15:03:07</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="707e3c6b56c7dcce1efb30ad80482e97" tabindex="3" />クリティカルは煙幕関係なく当たるから閉幕雷撃の本数が増える状況では辛いぞ　ちゃんと正面から叩く編成を組んだ方が安定する --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1783495654">2026-07-08 (水) 16:27:34</span></span></li></ul></li>
+<li class="pcmt"><input class="pcmt" type="radio" name="reply" value="52d28a096e633512045b984ff9e9bd4a" tabindex="2" />Gマス警戒陣、助かる～っ！（どうせ当分は情報待ちで、イベ海域入らないし）<br class="spacer">うちでは、育成枠駆ー駆ー軽巡（言わずと知れた乙矢矧）ー駆ー駆、な感じの編成でやってます。 --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1783735579">2026-07-11 (土) 11:06:19</span></span>
+<ul class="list2"><li class="pcmt"><input class="pcmt" type="radio" name="reply" value="a79bf8f2e707722c069f9006be72c972" tabindex="1" />因みに、育成枠駆逐艦はLv.1からでも突っ込んでます。（風雲、高波、さあ今日もレベリングだ！） --  <span class="comment_date"><span class="plugin-new-body" data-timestamp="1783735856">2026-07-11 (土) 11:10:56</span></span></li></ul></li></ul>
+</div>
+    </div>
+<p><strong>※南西海域（7-1）の情報提供のコメント欄です。</strong>司令部レベルも記載お願いします。<br />
+<span class="wikicolor" style="color:Blue">勝利時の<strong>獲得艦娘報告</strong></span>→<span class="wikicolor" style="color:Red"><strong>ここではなく</strong></span><span class="wikicolor" style="color:Blue"><strong>「<a href="#commentdrop">ドロップ報告</a>」</strong>にお願いいたします。</span></p>
+<div class="h-scrollable"><table><tbody><tr><th>7-1<br class="spacer">ブルネイ泊地沖</th></tr><tr><td><a href="https://cdn.wikiwiki.jp/to/w/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/::attach/map2nd7-1.jpg?rev=512ed3e9a9993ea4fa55a52f9f23cb37&amp;t=20180821044842" title="map2nd7-1.jpg" data-lightbox="imageset"><img src="https://cdn.wikiwiki.jp/to/w/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/::ref/map2nd7-1.jpg.webp?rev=512ed3e9a9993ea4fa55a52f9f23cb37&amp;t=20180821044842" alt="map2nd7-1.jpg" title="map2nd7-1.jpg" width="342" height="174"  loading="lazy"></a><br class="spacer"><span style="font-size:8px">クリックで拡大</span></td></tr></tbody></table></div>
+</div>
+</div>
+<div style="text-align:right"><a href="#area1"><ins><strong>海域Mapへ戻る▲</strong></ins></a></div>
+
+                </div>
+
+                <div id="main-contents-bottom">
+                    <div class="caption-flybox" >
+<div id="pc-bottom-parent-ad-container" style="min-height:250px;">
+<div id="pc-bottom-left-ad-container">
+    <!-- /19033742/WIKIWIKI_PC_BOTTOM_LEFT or /19033742/WIKIWIKI_SP_SECOND -->
+    <div id='div-gpt-ad-1567408559923-0' class="hidden-switch-class"></div>
+</div>
+<div id="pc-bottom-right-ad-container">
+    <!-- /19033742/WIKIWIKI_PC_BOTTOM_RIGHT -->
+    <div id='div-gpt-ad-1658912377789-0'></div>
+</div>
+</div>
+</div>
+
+<style>
+.pc-bottom-ad-default {
+    margin-top:120px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:flex-start;
+    gap: 10px 5px;
+}
+.pc-bottom-ad-center{
+    margin-top:120px;
+    margin-bottom:20px;
+    display:flex;
+    justify-content:center;
+    flex-wrap:wrap;
+    gap: 10px 5px;
+}
+.pc-bottom-ad-mobile{
+    margin-top:20px;
+    margin-bottom:20px;
+    display:flex;
+    align-items: center;
+    flex-direction:column;
+    position:sticky;
+    z-index: 3;
+    top:45px;
+}
+</style>
+
+<script>
+(function() {
+    var body = document.getElementById('body');
+    var co = document.getElementById("pc-bottom-parent-ad-container");
+    var fh = 50;
+    if (!wi_ismobile && body.clientHeight < 620) {
+        co.style.marginTop = '200px';
+    }
+    if (wi_ismobile && body.clientWidth < 400){
+        co.classList.add("pc-bottom-ad-mobile");
+    } else if (co.clientWidth < 769) {
+        co.classList.add("pc-bottom-ad-center");
+    } else {
+        co.classList.add("pc-bottom-ad-default");
+    }
+}());
+</script>
+                </div>
+            </div>
+        </div>
+
+        
+                    <div class="column-left">
+                <div id="menubar">
+                                        <h3 id="h3_content_1_0" >サイト内検索</h3>
+<form action="/kancolle/::cmd/lookup?refer=SB2U-2" method="post">
+ <div>
+  <input type="hidden" name="inter"  value="サイト内検索(by Google)" />
+  <label for="_p_lookup_1">サイト内検索(by Google):</label>
+  <input type="text" name="page" id="_p_lookup_1" size="20" value="" />
+  <input type="submit" value="検索"/>
+ </div>
+</form>
+<hr class="full_hr" />
+<p><span class="wikicolor" style="color:Blue"><strong>2026夏 期間限定海域</strong></span><br />
+<strong>【前段作戦】「<a href="/kancolle/%E5%8F%8D%E6%92%83%EF%BC%81%E7%AC%AC%E4%B8%89%E5%8D%81%E4%B8%80%E6%88%A6%E9%9A%8A%E3%81%AE%E6%88%A6%E3%81%84" title="反撃！第三十一戦隊の戦い" class="rel-wiki-page">反撃！第三十一戦隊の戦い</a>」</strong><br />
+&#160;<span class="size2">(参照：<a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2Ftwitter.com%2FKanColle_STAFF%2Fstatus%2F2074837806376161449" title="tw.KanColleSTF:2074837806376161449"  rel="nofollow">運営&#120143;</a>)</span></p>
+<hr class="full_hr" />
+<p><strong><span class="wikicolor" style="color:Blue">期間限定任務</span></strong><br class="spacer"><strong><a href="/kancolle/%E4%BB%BB%E5%8B%99/%E3%83%95%E3%83%AD%E3%83%B3%E3%83%88%E3%83%9A%E3%83%BC%E3%82%B8#New" title="任務/フロントページ" class="rel-wiki-page">【初夏限定任務群】<br class="spacer">【夏季大演習】<br class="spacer">【第三十一戦隊任務群】他</a></strong></p>
+<hr class="full_hr" />
+<p><span class="wikicolor" style="color:Blue"><strong>最新期間限定邂逅</strong></span><br />
+<strong><a href="/kancolle/%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88#w482a29d" title="期間限定ドロップイベント" class="rel-wiki-page">【梅雨のあとさき】期間限定邂逅</a></strong><br />
+&#160; <span class="size2">(参照：運営&#120143; <a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2Ftwitter.com%2FKanColle_STAFF%2Fstatus%2F2070471912174841934" title="tw.KanColleSTF:2070471912174841934"  rel="nofollow">1</a>)</span></p>
+<h3 id="h3_content_1_1" class="heading-after-first">ゲームガイド</h3>
+<ul class="list1"><li><a href="/kancolle/%E6%A6%82%E8%A6%81" title="概要" class="rel-wiki-page">艦これについて</a>
+<ul class="list2"><li><a href="/kancolle/%E7%AC%AC%E4%BA%8C%E6%9C%9F%E7%A7%BB%E8%A1%8C%E7%94%A8%E3%83%9A%E3%83%BC%E3%82%B8" title="第二期移行用ページ" class="rel-wiki-page">第二期について</a></li></ul></li>
+<li><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E3%81%8B%E3%82%89%E3%81%AE%E3%81%8A%E7%9F%A5%E3%82%89%E3%81%9B" title="鎮守府からのお知らせ" class="rel-wiki-page">鎮守府からのお知らせ</a>
+<ul class="list2"><li><span class="size2"><span class="wikicolor" style="color:red"><strong>HTML5版移行後、<br class="spacer">iPad/iPhone環境で接続できない場合</strong></span></span><br />
+<span class="size2"><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E3%81%8B%E3%82%89%E3%81%AE%E3%81%8A%E7%9F%A5%E3%82%89%E3%81%9B#up251017" title="鎮守府からのお知らせ" class="rel-wiki-page"><span class="wikicolor" style="color:darkorange"><strong>・対応方法</strong></span></a></span><span class="size1">(25/10/17)</span></li>
+<li><span class="size2"><span class="wikicolor" style="color:red"><strong>サーバ近代化改修後、<br class="spacer">接続が不安定な場合</strong></span></span><br />
+<span class="size2"><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E3%81%8B%E3%82%89%E3%81%AE%E3%81%8A%E7%9F%A5%E3%82%89%E3%81%9B#up241204" title="鎮守府からのお知らせ" class="rel-wiki-page"><span class="wikicolor" style="color:darkorange"><strong>・対応方法のお知らせ</strong></span></a></span><span class="size1">(24/12/04)</span></li></ul></li>
+<li><a href="/kancolle/%E6%96%B0%E7%B1%B3%E6%8F%90%E7%9D%A3%E3%81%AE%E6%89%8B%E5%BC%95%E3%81%8D" title="新米提督の手引き" class="rel-wiki-page">新米提督の手引き</a></li>
+<li><a href="/kancolle/%E7%9F%A5%E3%81%A3%E3%81%A6%E3%81%8A%E3%81%8D%E3%81%9F%E3%81%84%E6%A9%9F%E8%83%BD" title="知っておきたい機能" class="rel-wiki-page">知っておきたい機能</a></li>
+<li><a href="/kancolle/FAQ" title="FAQ" class="rel-wiki-page">FAQ</a></li></ul>
+<h3 id="h3_content_1_2" class="heading-after-first">スマートフォン版</h3>
+<ul class="list1"><li><a href="/kancolle/Android%E7%89%88" title="Android版" class="rel-wiki-page">Android版</a></li></ul>
+<h3 id="h3_content_1_3" class="heading-after-first">任務(クエスト)</h3>
+<ul class="list1"><li><a href="/kancolle/%E4%BB%BB%E5%8B%99/%E3%83%95%E3%83%AD%E3%83%B3%E3%83%88%E3%83%9A%E3%83%BC%E3%82%B8" title="任務/フロントページ" class="rel-wiki-page">任務</a>(<a href="/kancolle/%E4%BB%BB%E5%8B%99/%E3%83%95%E3%83%AD%E3%83%B3%E3%83%88%E3%83%9A%E3%83%BC%E3%82%B8#New" title="任務/フロントページ" class="rel-wiki-page">新着任務</a>/<a href="/kancolle/%E4%BB%BB%E5%8B%99" title="任務" class="rel-wiki-page">全任務一覧</a>)</li></ul>
+<h3 id="h3_content_1_4" class="heading-after-first">出撃</h3>
+<ul class="list1"><li><a href="/kancolle/%E5%87%BA%E6%92%83" title="出撃" class="rel-wiki-page">出撃一覧</a>
+<ul class="list2"><li><a href="/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F" title="鎮守府海域" class="rel-wiki-page">鎮守府海域 (1-X)</a></li>
+<li><a href="/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F" title="南西諸島海域" class="rel-wiki-page">南西諸島海域 (2-X)</a></li>
+<li><a href="/kancolle/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F" title="北方海域" class="rel-wiki-page">北方海域 (3-X)</a></li>
+<li><a href="/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F" title="南西海域" class="rel-wiki-page">南西海域 (7-X)</a></li>
+<li><a href="/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F" title="西方海域" class="rel-wiki-page">西方海域 (4-X)</a></li>
+<li><a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F" title="南方海域" class="rel-wiki-page">南方海域 (5-X)</a></li>
+<li><a href="/kancolle/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F" title="中部海域" class="rel-wiki-page">中部海域 (6-X)</a></li></ul></li>
+<li><a href="/kancolle/%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E5%87%BA%E6%92%83" title="期間限定出撃" class="rel-wiki-page">期間限定海域一覧</a>
+<ul class="list2"><li><a href="/kancolle/%E5%8F%8D%E6%92%83%EF%BC%81%E7%AC%AC%E4%B8%89%E5%8D%81%E4%B8%80%E6%88%A6%E9%9A%8A%E3%81%AE%E6%88%A6%E3%81%84" title="反撃！第三十一戦隊の戦い" class="rel-wiki-page">反撃！第三十一戦隊の戦い</a></li></ul></li>
+<li><a href="/kancolle/%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88" title="期間限定ドロップイベント" class="rel-wiki-page">期間限定ドロップ</a>
+<ul class="list2"><li><a href="/kancolle/%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88#now" title="期間限定ドロップイベント" class="rel-wiki-page">継続中のドロップ一覧<br class="spacer"></a></li></ul></li>
+<li><a href="/kancolle/%E5%87%BA%E6%92%83%E3%83%89%E3%83%AD%E3%83%83%E3%83%97" title="出撃ドロップ" class="rel-wiki-page">出撃ドロップ</a></li>
+<li><a href="/kancolle/%E6%BC%94%E7%BF%92" title="演習" class="rel-wiki-page">演習</a></li>
+<li><a href="/kancolle/%E9%81%A0%E5%BE%81" title="遠征" class="rel-wiki-page">遠征</a>
+<ul class="list2"><li><a href="/kancolle/%E6%94%AF%E6%8F%B4%E8%89%A6%E9%9A%8A" title="支援艦隊" class="rel-wiki-page">支援艦隊</a></li></ul></li>
+<li><a href="/kancolle/%E3%83%AB%E3%83%BC%E3%83%88%E5%88%86%E5%B2%90" title="ルート分岐" class="rel-wiki-page">ルート分岐</a>(<a href="/kancolle/%E3%83%AB%E3%83%BC%E3%83%88%E5%88%86%E5%B2%90#los_formula" title="ルート分岐" class="rel-wiki-page">索敵スコア</a>/<a href="/kancolle/%E9%80%9F%E5%8A%9B" title="速力" class="rel-wiki-page">速力</a>)</li>
+<li><a href="/kancolle/%E6%88%A6%E9%97%98%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6" title="戦闘について" class="rel-wiki-page">戦闘について</a>
+<ul class="list2"><li><a href="/kancolle/%E6%88%A6%E9%97%98%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6#Observation" title="戦闘について" class="rel-wiki-page">弾着観測射撃</a></li>
+<li><a href="/kancolle/%E5%A4%9C%E6%88%A6" title="夜戦" class="rel-wiki-page">夜戦(攻撃分類)</a></li>
+<li><a href="/kancolle/%E8%88%AA%E7%A9%BA%E6%88%A6" title="航空戦" class="rel-wiki-page">航空戦</a>(<a href="/kancolle/%E8%89%A6%E8%BC%89%E6%A9%9F%E7%86%9F%E7%B7%B4%E5%BA%A6" title="艦載機熟練度" class="rel-wiki-page">熟練度</a>/<a href="/kancolle/%E5%AF%BE%E7%A9%BA%E7%A0%B2%E7%81%AB" title="対空砲火" class="rel-wiki-page">対空砲火</a>)</li>
+<li><a href="/kancolle/%E5%AF%BE%E6%BD%9C%E6%94%BB%E6%92%83" title="対潜攻撃" class="rel-wiki-page">対潜攻撃</a>(<a href="/kancolle/%E5%AF%BE%E6%BD%9C%E6%94%BB%E6%92%83#oasw" title="対潜攻撃" class="rel-wiki-page">先制対潜</a>)</li>
+<li><a href="/kancolle/%E5%AF%BE%E5%9C%B0%E6%94%BB%E6%92%83" title="対地攻撃" class="rel-wiki-page">対地攻撃</a></li>
+<li><a href="/kancolle/%E9%99%A3%E5%BD%A2" title="陣形" class="rel-wiki-page">陣形</a></li></ul></li>
+<li><a href="/kancolle/%E7%B5%8C%E9%A8%93%E5%80%A4" title="経験値" class="rel-wiki-page">経験値</a>
+<ul class="list2"><li><a href="/kancolle/%E7%A7%B0%E5%8F%B7%E3%83%BB%E6%88%A6%E6%9E%9C" title="称号・戦果" class="rel-wiki-page">称号・戦果</a></li></ul></li>
+<li><a href="/kancolle/%E9%80%A3%E5%90%88%E8%89%A6%E9%9A%8A" title="連合艦隊" class="rel-wiki-page">連合艦隊</a></li>
+<li><a href="/kancolle/%E5%9F%BA%E5%9C%B0%E8%88%AA%E7%A9%BA%E9%9A%8A" title="基地航空隊" class="rel-wiki-page">基地航空隊</a></li></ul>
+<h3 id="h3_content_1_5" class="heading-after-first">図鑑</h3>
+<ul class="list1"><li><a href="/kancolle/%E8%89%A6%E8%88%B9" title="艦船" class="rel-wiki-page">艦船</a>
+<ul class="list2"><li><a href="/kancolle/%E8%89%A6%E5%A8%98%E3%82%AB%E3%83%BC%E3%83%89%E4%B8%80%E8%A6%A7" title="艦娘カード一覧" class="rel-wiki-page">カード(図鑑No順)</a></li>
+<li><a href="/kancolle/%E8%89%A6%E5%A8%98%E3%82%AB%E3%83%BC%E3%83%89%E4%B8%80%E8%A6%A72" title="艦娘カード一覧2" class="rel-wiki-page">カード(艦種別)</a></li>
+<li><a href="/kancolle/%E8%89%A6%E5%A8%98%E5%90%8D%E4%B8%80%E8%A6%A7%EF%BC%88%E8%89%A6%E7%A8%AE%E5%88%A5%EF%BC%89" title="艦娘名一覧（艦種別）" class="rel-wiki-page">艦娘名一覧</a></li></ul></li>
+<li><a href="/kancolle/%E6%94%B9%E9%80%A0%E8%89%A6%E8%88%B9" title="改造艦船" class="rel-wiki-page">改造艦船</a>(※図鑑非登録艦)</li>
+<li><a href="/kancolle/%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E8%89%A6%E8%88%B9" title="期間限定艦船" class="rel-wiki-page">期間限定艦船</a></li>
+<li><a href="/kancolle/%E8%A3%85%E5%82%99" title="装備" class="rel-wiki-page">装備</a>
+<ul class="list2"><li><a href="/kancolle/%E8%A3%85%E5%82%99%E3%82%AB%E3%83%BC%E3%83%89%E4%B8%80%E8%A6%A7" title="装備カード一覧" class="rel-wiki-page">カード(図鑑No.順)</a></li>
+<li><a href="/kancolle/%E8%A3%85%E5%82%99%E3%82%AB%E3%83%BC%E3%83%89%E4%B8%80%E8%A6%A7%EF%BC%88%E7%A8%AE%E9%A1%9E%E5%88%A5%EF%BC%89" title="装備カード一覧（種類別）" class="rel-wiki-page">カード(種類別)</a></li>
+<li><a href="/kancolle/%E8%A3%85%E5%82%99%E4%B8%80%E8%A6%A7%28%E7%A8%AE%E9%A1%9E%E5%88%A5%29" title="装備一覧(種類別)" class="rel-wiki-page">装備一覧(種類別)</a></li></ul></li>
+<li><a href="/kancolle/%E3%83%AC%E3%82%A2%E3%83%AA%E3%83%86%E3%82%A3" title="レアリティ" class="rel-wiki-page">レアリティ</a></li>
+<li><a href="/kancolle/%E6%95%B5%E8%89%A6%E8%88%B9" title="敵艦船" class="rel-wiki-page">敵艦船</a>
+<ul class="list2"><li><a href="/kancolle/%E6%B7%B1%E6%B5%B7%E6%A3%B2%E8%89%A6%E3%82%AB%E3%83%BC%E3%83%89%E4%B8%80%E8%A6%A7" title="深海棲艦カード一覧" class="rel-wiki-page">深海棲艦カード一覧</a></li></ul></li>
+<li><a href="/kancolle/NPC%E5%A8%98%E3%81%AE%E4%B8%80%E8%A6%A7" title="NPC娘の一覧" class="rel-wiki-page">NPC娘</a></li></ul>
+<h3 id="h3_content_1_6" class="heading-after-first">改装</h3>
+<ul class="list1"><li><a href="/kancolle/%E6%94%B9%E9%80%A0" title="改造" class="rel-wiki-page">改造</a></li>
+<li><a href="/kancolle/%E8%BF%91%E4%BB%A3%E5%8C%96%E6%94%B9%E4%BF%AE" title="近代化改修" class="rel-wiki-page">近代化改修</a></li>
+<li><a href="/kancolle/%E8%89%A6%E8%88%B9%E6%9C%80%E5%A4%A7%E5%80%A4" title="艦船最大値" class="rel-wiki-page">艦船最大値</a></li>
+<li><a href="/kancolle/%E7%B0%A1%E6%98%93%E6%9C%80%E7%B5%82%E5%80%A4" title="簡易最終値" class="rel-wiki-page">簡易最終値</a>
+<ul class="list2"><li><a href="/kancolle/%E3%82%B1%E3%83%83%E3%82%B3%E3%83%B3%E5%BE%8C%E6%9C%80%E7%B5%82%E5%80%A4" title="ケッコン後最終値" class="rel-wiki-page">ケッコン後最終値</a></li></ul></li>
+<li><a href="/kancolle/%E8%A3%85%E5%82%99%E8%80%83%E5%AF%9F" title="装備考察" class="rel-wiki-page">装備考察</a>
+<ul class="list2"><li><a href="/kancolle/%E8%89%A6%E7%A8%AE%E3%81%94%E3%81%A8%E3%81%AE%E8%A3%85%E5%82%99%E8%80%83%E5%AF%9F" title="艦種ごとの装備考察" class="rel-wiki-page">艦種ごとの装備考察</a></li></ul></li>
+<li><a href="/kancolle/%E8%A3%9C%E5%BC%B7%E5%A2%97%E8%A8%AD" title="補強増設" class="rel-wiki-page">補強増設</a></li>
+<li><a href="/kancolle/%E6%A0%BC%E7%B4%8D%E5%BA%AB%E5%A2%97%E8%A8%AD" title="格納庫増設" class="rel-wiki-page">格納庫増設</a></li>
+<li><a href="/kancolle/%E3%82%B1%E3%83%83%E3%82%B3%E3%83%B3%E3%82%AB%E3%83%83%E3%82%B3%E3%82%AB%E3%83%AA" title="ケッコンカッコカリ" class="rel-wiki-page">ケッコンカッコカリ</a></li></ul>
+<h3 id="h3_content_1_7" class="heading-after-first">工廠</h3>
+<ul class="list1"><li><a href="/kancolle/%E5%BB%BA%E9%80%A0" title="建造" class="rel-wiki-page">建造</a>
+<ul class="list2"><li><a href="/kancolle/%E5%BB%BA%E9%80%A0%E7%90%86%E8%AB%96%E5%80%A4" title="建造理論値" class="rel-wiki-page">解体</a></li>
+<li><a href="/kancolle/%E5%BB%BA%E9%80%A0%E3%83%AC%E3%82%B7%E3%83%94" title="建造レシピ" class="rel-wiki-page">建造レシピ</a></li></ul></li>
+<li><a href="/kancolle/%E5%A4%A7%E5%9E%8B%E8%89%A6%E5%BB%BA%E9%80%A0" title="大型艦建造" class="rel-wiki-page">大型艦建造</a></li>
+<li><a href="/kancolle/%E9%96%8B%E7%99%BA" title="開発" class="rel-wiki-page">開発</a>
+<ul class="list2"><li><a href="/kancolle/%E9%96%8B%E7%99%BA%E7%90%86%E8%AB%96%E5%80%A4" title="開発理論値" class="rel-wiki-page">理論値</a></li>
+<li><a href="/kancolle/%E9%96%8B%E7%99%BA%E3%83%AC%E3%82%B7%E3%83%94" title="開発レシピ" class="rel-wiki-page">開発レシピ</a></li></ul></li>
+<li><a href="/kancolle/%E6%94%B9%E4%BF%AE%E5%B7%A5%E5%BB%A0" title="改修工廠" class="rel-wiki-page">改修工廠</a>
+<ul class="list2"><li><a href="/kancolle/%E6%94%B9%E4%BF%AE%E8%A1%A8" title="改修表" class="rel-wiki-page">改修表</a></li></ul></li></ul>
+<h3 id="h3_content_1_8" class="heading-after-first">補給・入渠</h3>
+<ul class="list1"><li><a href="/kancolle/%E8%A3%9C%E7%B5%A6" title="補給" class="rel-wiki-page">補給</a></li>
+<li><a href="/kancolle/%E8%B3%87%E6%9D%90" title="資材" class="rel-wiki-page">資材</a></li>
+<li><a href="/kancolle/%E7%96%B2%E5%8A%B4%E5%BA%A6" title="疲労度" class="rel-wiki-page">疲労度</a></li>
+<li><a href="/kancolle/%E5%85%A5%E6%B8%A0" title="入渠" class="rel-wiki-page">入渠</a></li></ul>
+<h3 id="h3_content_1_9" class="heading-after-first">アイテム</h3>
+<ul class="list1"><li><a href="/kancolle/%E3%82%A2%E3%82%A4%E3%83%86%E3%83%A0" title="アイテム" class="rel-wiki-page">アイテム</a></li>
+<li><a href="/kancolle/%E5%AE%B6%E5%85%B7" title="家具" class="rel-wiki-page">家具</a></li></ul>
+<h3 id="h3_content_1_10" class="heading-after-first">TIPS</h3>
+<ul class="list1"><li><a href="/kancolle/%E9%81%8B%E5%96%B6%E9%8E%AE%E5%AE%88%E5%BA%9C%E7%94%A8%E8%AA%9E" title="運営鎮守府用語" class="rel-wiki-page">運営鎮守府用語</a></li>
+<li><a href="/kancolle/CV%E3%83%BB%E3%82%A4%E3%83%A9%E3%82%B9%E3%83%88%E3%83%AC%E3%83%BC%E3%82%BF%E3%83%BC" title="CV・イラストレーター" class="rel-wiki-page">CV・イラストレーター</a></li>
+<li><a href="/kancolle/BGM" title="BGM" class="rel-wiki-page">BGM</a></li>
+<li><a href="/kancolle/%E3%82%B5%E3%83%BC%E3%83%90%E3%83%BC" title="サーバー" class="rel-wiki-page">サーバー</a></li>
+<li><a href="/kancolle/%E3%81%BE%E3%82%81%E3%81%A1%E3%81%97%E3%81%8D" title="まめちしき" class="rel-wiki-page">まめちしき</a></li>
+<li><a href="/kancolle/%E9%9B%91%E5%AD%A6" title="雑学" class="rel-wiki-page">雑学</a>
+<ul class="list2"><li><a href="/kancolle/%E8%89%A6%E7%A8%AE%E3%81%94%E3%81%A8%E3%81%AE%E7%89%B9%E5%BE%B4" title="艦種ごとの特徴" class="rel-wiki-page">艦種ごとの特徴</a></li></ul></li>
+<li><a href="/kancolle/wiki%E5%86%85%E7%A5%9E%E7%A4%BE" title="wiki内神社" class="rel-wiki-page">wiki内神社</a></li>
+<li><a href="/kancolle/%E7%94%A8%E8%AA%9E%E9%9B%861" title="用語集1" class="rel-wiki-page">用語集1</a></li>
+<li><a href="/kancolle/%E7%94%A8%E8%AA%9E%E9%9B%862" title="用語集2" class="rel-wiki-page">用語集2</a></li>
+<li><a href="/kancolle/%E4%BF%97%E7%A7%B0%E3%83%BB%E3%82%B9%E3%83%A9%E3%83%B3%E3%82%B0%E9%9B%86" title="俗称・スラング集" class="rel-wiki-page">俗称・スラング集</a></li>
+<li><a href="/kancolle/%E6%83%85%E5%A0%B1%E5%80%89%E5%BA%AB" title="情報倉庫" class="rel-wiki-page">情報倉庫</a></li>
+<li><a href="/kancolle/%E8%89%A6%E3%81%93%E3%82%8C%E5%95%86%E5%93%81%E3%83%BB%E3%81%8A%E3%81%99%E3%81%99%E3%82%81%E4%BD%9C%E5%93%81" title="艦これ商品・おすすめ作品" class="rel-wiki-page">艦これ商品・おすすめ作品</a></li></ul>
+<h3 id="h3_content_1_11" class="heading-after-first">掲示板</h3>
+<h4 id="h4_content_1_12" class="heading-after-first">交流用掲示板</h4>
+<ul class="list1"><li><a href="/kancolle/%E8%B3%AA%E5%95%8F%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="質問掲示板" class="rel-wiki-page">質問掲示板</a></li>
+<li><a href="/kancolle/%E3%81%8A%E7%B5%B5%E3%81%8B%E3%81%8D%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="お絵かき掲示板" class="rel-wiki-page">お絵かき掲示板</a></li>
+<li><a href="https://wikiwiki.jp/kancolle2nd/%E9%9B%91%E8%AB%87%E6%8E%B2%E7%A4%BA%E6%9D%BF"  rel="nofollow">雑談掲示板</a>(避難wikiへ)</li>
+<li><a href="/kancolle/%E6%84%9A%E7%97%B4%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="愚痴掲示板" class="rel-wiki-page">愚痴掲示板</a></li>
+<li><a href="https://zawazawa.jp/kancolle_wiki/"  rel="nofollow">艦これzawazawa</a></li></ul>
+<h4 id="h4_content_1_13" class="heading-after-first">交流用チャット</h4>
+<ul class="list1"><li><a href="/kancolle/%E9%9B%91%E8%AB%87%E3%83%81%E3%83%A3%E3%83%83%E3%83%88" title="雑談チャット" class="rel-wiki-page">雑談チャット</a></li>
+<li><a href="/kancolle/%E5%AE%9F%E6%B3%81%E3%83%81%E3%83%A3%E3%83%83%E3%83%88" title="実況チャット" class="rel-wiki-page">実況チャット</a><span class="wikicolor" style="color:Blue"><strong>(アニメ実況OK！)</strong></span></li>
+<li><a href="/kancolle/%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88%E3%83%81%E3%83%A3%E3%83%83%E3%83%88" title="イベントチャット" class="rel-wiki-page">イベントチャット</a></li></ul>
+<h4 id="h4_content_1_14" class="heading-after-first">管理・議論掲示板</h4>
+<ul class="list1"><li><a href="/kancolle/%E6%8F%90%E6%A1%88%E6%84%8F%E8%A6%8B%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="提案意見掲示板" class="rel-wiki-page">提案意見掲示板</a></li>
+<li><a href="/kancolle/%E8%AD%B0%E8%AB%96%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="議論掲示板" class="rel-wiki-page">議論掲示板</a></li>
+<li><a href="/kancolle/%E7%AE%A1%E7%90%86%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="管理掲示板" class="rel-wiki-page">管理掲示板</a></li>
+<li><a href="/kancolle/%E7%B7%A8%E9%9B%86%E9%80%A3%E7%B5%A1%E6%8E%B2%E7%A4%BA%E6%9D%BF" title="編集連絡掲示板" class="rel-wiki-page">編集連絡掲示板</a></li></ul>
+<h3 id="h3_content_1_15" class="heading-after-first">リンク</h3>
+<ul class="list1"><li><a href="https://wikiwiki.jp/p/cushion?to=http%3A%2F%2Fwww.dmm.com%2Fnetgame%2Fsocial%2Fcommunity%2F-%2Fdetail%2F%3D%2Fid%3D100"  rel="nofollow">公式コミュ</a><span style="font-size:10px">※要DMMログイン</span></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2FX.com%2FKanColle_STAFF"  rel="nofollow">艦これ開発/運営公式&#120143;</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2FX.com%2FC2_STAFF"  rel="nofollow">コラボ情報等/C2機関&#120143;</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2Fc2praparat.com%2F"  rel="nofollow">C2機関公式サイト</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2Fcomic-walker.com%2Fcontents%2Fdetail%2FKDCW_EB02000004010000_68%2F"  rel="nofollow">公式4コマ＆鎮守府通信</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=http%3A%2F%2Fkancolle-anime.jp%2F"  rel="nofollow">アニメ(1期)公式サイト</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=https%3A%2F%2Fkancolle-itsuumi.com%2F"  rel="nofollow">「艦これ」いつかあの海で(アニメ2期)公式サイト</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=http%3A%2F%2Fkancolle-a.sega.jp%2F"  rel="nofollow">アーケード公式サイト</a></li>
+<li><a href="https://wikiwiki.jp/p/cushion?to=http%3A%2F%2Fwww.dmm.com%2Fnetgame%2Ffeature%2Fkancolle.html"  rel="nofollow">DMM公式サイト</a></li></ul>
+<h3 id="h3_content_1_16" class="heading-after-first">wikiについて</h3>
+<ul class="list1"><li><a href="/kancolle/wiki%E7%AE%A1%E7%90%86%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6" title="wiki管理について" class="rel-wiki-page">wiki管理について</a></li>
+<li><a href="/kancolle/wiki%E7%B7%A8%E9%9B%86%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6" title="wiki編集について" class="rel-wiki-page">wiki編集について</a></li>
+<li><a href="/kancolle/%E7%B7%B4%E7%BF%92%E3%83%9A%E3%83%BC%E3%82%B8" title="練習ページ" class="rel-wiki-page">練習ページ</a></li></ul>
+<div class="recentdetail-container" data-recent-hash="255525d23f756c7652d5ed1ab72e9513"></div>
+<h2 id="h2_content_1_17" class="heading-after-first"><strong>最新の7件 (<span class="wikicolor" style="color:#22C6FC">ZaWa</span><span class="wikicolor" style="color:#89CB76">ZaWa</span>形式)</strong></h2>
+<div class="zawazawa-recent" data-zrecent-hash="276468c72210ac0825327fb4633b5d22" data-zrecent-data="{&quot;topics&quot;:[{&quot;embeddedSites&quot;:{&quot;wikiwiki &quot;:{&quot;name&quot;:&quot;雑談掲示板 ログ202607&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle2nd/%E9%9B%91%E8%AB%87%E6%8E%B2%E7%A4%BA%E6%9D%BF&quot;}},&quot;forumSlug&quot;:&quot;kancolle2nd&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 避難所&quot;,&quot;lastCommentNumber&quot;:20699,&quot;lastCommentedAt&quot;:&quot;Mon, 13 Jul 2026 17:42:06 +0900&quot;,&quot;topicNumber&quot;:126,&quot;topicTitle&quot;:&quot;雑談掲示板 ログ202607&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle2nd/topic/126&quot;},{&quot;embeddedSites&quot;:{&quot;wikiwiki&quot;:{&quot;name&quot;:&quot;イベント総合コメント&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle/%E5%8F%8D%E6%92%83%EF%BC%81%E7%AC%AC%E4%B8%89%E5%8D%81%E4%B8%80%E6%88%A6%E9%9A%8A%E3%81%AE%E6%88%A6%E3%81%84&quot;}},&quot;forumSlug&quot;:&quot;kancolle_wiki&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 Wiki*&quot;,&quot;lastCommentNumber&quot;:35032,&quot;lastCommentedAt&quot;:&quot;Mon, 13 Jul 2026 17:39:36 +0900&quot;,&quot;topicNumber&quot;:13,&quot;topicTitle&quot;:&quot;イベント総合コメント&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle_wiki/topic/13&quot;},{&quot;embeddedSites&quot;:{&quot;wikiwiki&quot;:{&quot;name&quot;:&quot;wiki内神社&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle/wiki%E5%86%85%E7%A5%9E%E7%A4%BE&quot;}},&quot;forumSlug&quot;:&quot;kancolle_wiki&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 Wiki*&quot;,&quot;lastCommentNumber&quot;:21088,&quot;lastCommentedAt&quot;:&quot;Mon, 13 Jul 2026 17:39:31 +0900&quot;,&quot;topicNumber&quot;:9,&quot;topicTitle&quot;:&quot;wiki内神社&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle_wiki/topic/9&quot;},{&quot;embeddedSites&quot;:{&quot;wikiwiki&quot;:{&quot;name&quot;:&quot;愚痴掲示板 ログ4&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle/%E6%84%9A%E7%97%B4%E6%8E%B2%E7%A4%BA%E6%9D%BF&quot;}},&quot;forumSlug&quot;:&quot;kancolle_wiki&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 Wiki*&quot;,&quot;lastCommentNumber&quot;:36199,&quot;lastCommentedAt&quot;:&quot;Mon, 13 Jul 2026 17:34:55 +0900&quot;,&quot;topicNumber&quot;:20,&quot;topicTitle&quot;:&quot;愚痴掲示板 ログ4&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle_wiki/topic/20&quot;},{&quot;embeddedSites&quot;:{&quot;wikiwiki&quot;:{&quot;name&quot;:&quot;質問掲示板&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle/%E8%B3%AA%E5%95%8F%E6%8E%B2%E7%A4%BA%E6%9D%BF&quot;}},&quot;forumSlug&quot;:&quot;kancolle_wiki&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 Wiki*&quot;,&quot;lastCommentNumber&quot;:9749,&quot;lastCommentedAt&quot;:&quot;Mon, 13 Jul 2026 08:51:13 +0900&quot;,&quot;topicNumber&quot;:14,&quot;topicTitle&quot;:&quot;質問掲示板&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle_wiki/topic/14&quot;},{&quot;embeddedSites&quot;:{&quot;wikiwiki&quot;:{&quot;name&quot;:&quot;鎮守府港湾労働者組合雑談掲示板&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle/%E5%BD%97%E6%98%9F%E4%B8%80%E4%BA%8C%E5%9E%8B%E7%94%B2#commando&quot;}},&quot;forumSlug&quot;:&quot;kancolle_wiki&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 Wiki*&quot;,&quot;lastCommentNumber&quot;:3895,&quot;lastCommentedAt&quot;:&quot;Sun, 12 Jul 2026 08:21:31 +0900&quot;,&quot;topicNumber&quot;:15,&quot;topicTitle&quot;:&quot;鎮守府港湾労働者組合雑談掲示板&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle_wiki/topic/15&quot;},{&quot;embeddedSites&quot;:{&quot;wikiwiki&quot;:{&quot;name&quot;:&quot;練習ページ/zawazawa&quot;,&quot;url&quot;:&quot;https://wikiwiki.jp/kancolle/%E7%B7%B4%E7%BF%92%E3%83%9A%E3%83%BC%E3%82%B8#zcomment&quot;}},&quot;forumSlug&quot;:&quot;kancolle_wiki&quot;,&quot;forumTitle&quot;:&quot;艦隊これくしょん -艦これ- 攻略 Wiki*&quot;,&quot;lastCommentNumber&quot;:346,&quot;lastCommentedAt&quot;:&quot;Fri, 10 Jul 2026 20:38:01 +0900&quot;,&quot;topicNumber&quot;:1,&quot;topicTitle&quot;:&quot;練習ページ&quot;,&quot;url&quot;:&quot;https://z.wikiwiki.jp/kancolle_wiki/topic/1&quot;}]}"></div>
+<hr class="full_hr" />
+<p><a href="/kancolle/RecentChanges" title="RecentChanges" class="rel-wiki-page"><strong>Recent Changes</strong></a></p>
+<div class="fold-container  clearfix">
+    <button class="fold-toggle-button hidden-on-open"><i class="fal fa-plus-square"></i></button>
+    <button class="fold-toggle-button visible-on-open"><i class="fal fa-minus-square"></i></button>
+    <div class="fold-summary hidden-on-open">人気の10件</div>
+    <div class="fold-content visible-on-open"><div class="wikiwiki-popular wikiwiki-popular-yesterday" data-popular-data="{&quot;error&quot;:&quot;&quot;,&quot;errorInfo&quot;:null,&quot;list&quot;:[{&quot;page&quot;:&quot;反撃！第三十一戦隊の戦い&quot;,&quot;pv&quot;:22379},{&quot;page&quot;:&quot;反撃！第三十一戦隊の戦い/E1&quot;,&quot;pv&quot;:20794},{&quot;page&quot;:&quot;反撃！第三十一戦隊の戦い/E2&quot;,&quot;pv&quot;:12645},{&quot;page&quot;:&quot;艦娘カード一覧2&quot;,&quot;pv&quot;:7145},{&quot;page&quot;:&quot;反撃！第三十一戦隊の戦い/E3&quot;,&quot;pv&quot;:6808},{&quot;page&quot;:&quot;改修表&quot;,&quot;pv&quot;:6267},{&quot;page&quot;:&quot;遠征&quot;,&quot;pv&quot;:5989},{&quot;page&quot;:&quot;花月&quot;,&quot;pv&quot;:5175},{&quot;page&quot;:&quot;任務&quot;,&quot;pv&quot;:4998},{&quot;page&quot;:&quot;期間限定ドロップイベント&quot;,&quot;pv&quot;:3721}]}" data-popular-today="false">
+</div>
+</div>
+</div>
+<hr class="full_hr" />
+<div style="text-align:right"><span style="font-size:10px">T.<span class="wikiwiki-counter wikiwiki-counter-today">?</span>　Y.<span class="wikiwiki-counter wikiwiki-counter-yesterday">?</span></span><br />
+<span style="font-size:10px"><span class="wikicolor" style="color:#663300">NOW.<span class="wikiwiki-online">?</span></span></span><br />
+<span style="font-size:10px">TOTAL.<span class="wikiwiki-counter wikiwiki-counter-total">?</span></span></div>
+<div style="text-align:right"><span style="font-size:10px">〔<a href="https://wikiwiki.jp/kancolle/?cmd=edit&amp;page=MenuBar"  rel="nofollow">MENU編集</a>〕</span></div>                </div>
+                <div class="admenu-sticky">
+<!-- /19033742/WIKIWIKI_PC_MENU_STICKY -->
+<div id='div-gpt-ad-1567834179057-0'></div>
+</div>
+<script>
+if (document.documentElement.clientWidth > 805 && !wi_ismobile && wi_group === 'N' && wi_agreement === 'false' && !wi_isinbound &&
+    document.getElementById('body').clientHeight - document.getElementById('menubar').clientHeight > 1000) {
+    googletag.cmd.push(() => {
+        googletag.display(
+            googletag.defineSlot('/19033742/WIKIWIKI_PC_MENU_STICKY', [[120,600],[160,600],[1,1]], 'div-gpt-ad-1567834179057-0').addService(googletag.pubads())
+        );
+    });
+    defineSlotFlux.push({"slotID": "div-gpt-ad-1567834179057-0", "sizes": [[160,600]], "slotName":"WIKIWIKI_PC_MENU_STICKY"});
+}
+</script>
+<style>
+.admenu-sticky {
+    display: flex;
+    justify-content: center;
+    position: -webkit-sticky;
+    position: sticky;
+    margin-top: 50px;
+    top: 50px;
+    max-width: 160px;
+    margin-left: auto;
+    margin-right: auto;
+}
+</style>
+
+            </div>
+            </div>
+
+            <div class="container">
+            <div id="note">
+                <hr class="note_hr" /><a id="notefoot_1" href="#notetext_1" class="note_super">*1</a>
+<span class="small">2022/11/13以前、ルート分岐条件において(軽巡+練巡)を軽巡級としていた。（練巡は軽巡条件の代替になれる事が多いが、雷巡は別途 ルート分岐条件で扱われる事が多いためと思われる）</span><br>
+<a id="notefoot_2" href="#notetext_2" class="note_super">*2</a>
+<span class="small">艦これ改の内部データでは「巡洋戦艦」と「戦艦」に分けられている</span><br>
+<a id="notefoot_3" href="#notetext_3" class="note_super">*3</a>
+<span class="small">1戦目後に通過するため</span><br>
+<a id="notefoot_4" href="#notetext_4" class="note_super">*4</a>
+<span class="small">このマスを通れる弾薬の消費量が最大の<a href="/kancolle/%E6%AD%A6%E8%94%B5%E6%94%B9%E4%BA%8C" title="武蔵改二" class="rel-wiki-page">武蔵改二</a>(電探搭載艦0、未ケッコン)で-98される。</span><br>
+<a id="notefoot_5" href="#notetext_5" class="note_super">*5</a>
+<span class="small">「<a href="/kancolle/%E7%89%B9%E5%A4%A7%E7%99%BA%E5%8B%95%E8%89%87%EF%BC%8B%E6%88%A6%E8%BB%8A%E7%AC%AC11%E9%80%A3%E9%9A%8A" title="特大発動艇＋戦車第11連隊" class="rel-wiki-page">特大発動艇＋戦車第11連隊</a>」は対象外</span><br>
+<a id="notefoot_6" href="#notetext_6" class="note_super">*6</a>
+<span class="small">「<a href="/kancolle/%E7%89%B9%E5%A4%A7%E7%99%BA%E5%8B%95%E8%89%87%EF%BC%8B%E6%88%A6%E8%BB%8A%E7%AC%AC11%E9%80%A3%E9%9A%8A" title="特大発動艇＋戦車第11連隊" class="rel-wiki-page">特大発動艇＋戦車第11連隊</a>」は対象外</span><br>
+<a id="notefoot_7" href="#notetext_7" class="note_super">*7</a>
+<span class="small">対潜戦だが通常消費になる<br class="spacer">出現比はパターン1:2:3≒20%:30%:50%</span><br>
+<a id="notefoot_8" href="#notetext_8" class="note_super">*8</a>
+<span class="small">1期では4-4がはじめての戦力ゲージが設定されている海域だった</span><br>
+<a id="notefoot_9" href="#notetext_9" class="note_super">*9</a>
+<span class="small">一回の出撃で補給艦を5隻も狩れる4-2、レベリングに有用な<a href="/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F/4-4" title="西方海域/4-4" class="rel-wiki-page">4-4</a>や<a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-3" title="南方海域/5-3" class="rel-wiki-page">5-3</a>、ウィークリー任務に絡む<a href="/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-2" title="南方海域/5-2" class="rel-wiki-page">5-2</a></span><br>            </div>
+        </div>
+    
+    <div id="footer">
+                <div class="container">
+            <hr />
+            <div class="footer-block clearfix">
+                <div class="footer-block-item-left" id="signature">
+                    <!-- google_ad_section_start(weight=ignore) -->
+                    レンタルWIKI by <a href="https://wikiwiki.jp/" title="無料レンタルWIKIサービス">WIKIWIKI.jp*</a>&nbsp;/&nbsp;
+                    <a href="https://wikiwiki.jp/pp/aboutad" title="広告について">広告について</a> /
+                    無料レンタル掲示板 <a href="https://z.wikiwiki.jp/" title="zawazawa">zawazawa</a>
+                    <!-- google_ad_section_end -->
+                </div>
+                <div class="footer-block-item-right">
+                    <div class="footer-mixirss">
+                        <div class="toolbar"><a href="/kancolle/::cmd/mixirss" title="最終更新のRSS" rel="nofollow"><span class="system-icon rss"></span></a></div>                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="pageload" style="display: none" data-pageload="{&quot;time&quot;:{&quot;all&quot;:{&quot;real&quot;:0.09291696548461914,&quot;cost&quot;:0.12113690376281738},&quot;body&quot;:{&quot;real&quot;:0.08565902709960938,&quot;cost&quot;:0.08565902709960938},&quot;main&quot;:{&quot;real&quot;:0.08261799812316895,&quot;cost&quot;:0.08261799812316895},&quot;menu&quot;:{&quot;real&quot;:0.02771902084350586,&quot;cost&quot;:0.02771902084350586},&quot;head&quot;:{&quot;real&quot;:0.0003509521484375,&quot;cost&quot;:0.0003509521484375},&quot;foot&quot;:{&quot;real&quot;:0.0001499652862548828,&quot;cost&quot;:0.0001499652862548828}},&quot;include&quot;:4,&quot;memory&quot;:6477752,&quot;io&quot;:{&quot;read&quot;:{&quot;files&quot;:10,&quot;bytes&quot;:950637,&quot;locks&quot;:7},&quot;write&quot;:{&quot;files&quot;:0,&quot;bytes&quot;:0,&quot;locks&quot;:0},&quot;directory&quot;:{&quot;traversals&quot;:0,&quot;files&quot;:0},&quot;misc&quot;:650},&quot;contentSize&quot;:{&quot;all&quot;:150840,&quot;body&quot;:121173},&quot;timestamp&quot;:&quot;2026-07-13 17:43:20&quot;}"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mark.js@8.11.1/dist/jquery.mark.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/clipboard@2.0.11/dist/clipboard.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@7.2.0/js/fontawesome.min.js" data-auto-replace-svg="false"></script>
+<script type="text/javascript" src="https://cdn.wikiwiki.jp/to/w/common/assets/dist/wikiwiki-12f12e8e7953dee27a03.min.js"></script>
+<script type="text/javascript" src="https://cdn.wikiwiki.jp/to/w/common/assets/dist/wikiwiki-ex1-e13505c57a12af32bb51.min.js"></script>
+<script type="text/javascript" src="https://cdn.wikiwiki.jp/to/w/common/assets/dist/wikiwiki-ex2-f6a2bba4cc0537198159.min.js"></script>
+    <script>
+        if (window.FontAwesome) {
+            window.FontAwesome.dom.watch();
+        } else {
+            console.warn('FontAwesome is not loaded.');
+        }
+    </script>
+<script type="text/javascript">
+    bootLazy.addJqPluginInit('.fold-container', function() {
+        this.fold({
+            buttonSelector: '.fold-toggle-button',
+            openClassName: 'fold-open'
+        });
+    });
+</script>
+<script type="text/javascript">
+    bootLazy.addJqPluginInit('.plugin-new-body', function() {
+        this.newmarker();
+    });
+</script>
+    <script>
+        bootLazy.addJqPluginInit('.security-check-interrupt', function() {
+            this.securityCheckInterrupt({});
+        });
+    </script>
+    <script>
+    bootLazy.addJqPluginInit('.pcomment-form-placeholder', function() {
+        this.pcommentForm({});
+    });
+    </script>
+<div id="wikiwiki-pageview-counter" data-endpoint="https://counter.wikiwiki.jp/c/kancolle/pv/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1" style="display: none;"></div>
+<script>
+    $('#wikiwiki-pageview-counter').pageview();
+</script>
+<script type="text/javascript">
+    bootLazy.addJqPluginInit('.recentdetail-container[data-recent-hash="255525d23f756c7652d5ed1ab72e9513"]', function() {
+        this.recentdetail({"timestamp":1783932160,"groupBoundary":["5m","30m","1h","3h","1d","1w"],"list":[{"time":1783932160,"page":"花月/コメント1","link":"/kancolle/%E8%8A%B1%E6%9C%88/%E3%82%B3%E3%83%A1%E3%83%B3%E3%83%881"},{"time":1783932064,"page":"出撃ドロップ/ログ39","link":"/kancolle/%E5%87%BA%E6%92%83%E3%83%89%E3%83%AD%E3%83%83%E3%83%97/%E3%83%AD%E3%82%B039"},{"time":1783931382,"page":"日進/コメント2","link":"/kancolle/%E6%97%A5%E9%80%B2/%E3%82%B3%E3%83%A1%E3%83%B3%E3%83%882"},{"time":1783931371,"page":"震電改三(試製 噴式震電)/コメント1","link":"/kancolle/%E9%9C%87%E9%9B%BB%E6%94%B9%E4%B8%89%28%E8%A9%A6%E8%A3%BD%20%E5%99%B4%E5%BC%8F%E9%9C%87%E9%9B%BB%29/%E3%82%B3%E3%83%A1%E3%83%B3%E3%83%881"},{"time":1783930823,"page":"吹雪改三護(六式)/コメント1","link":"/kancolle/%E5%90%B9%E9%9B%AA%E6%94%B9%E4%B8%89%E8%AD%B7%28%E5%85%AD%E5%BC%8F%29/%E3%82%B3%E3%83%A1%E3%83%B3%E3%83%881"},{"time":1783930562,"page":"管理掲示板/コメント28","link":"/kancolle/%E7%AE%A1%E7%90%86%E6%8E%B2%E7%A4%BA%E6%9D%BF/%E3%82%B3%E3%83%A1%E3%83%B3%E3%83%8828"},{"time":1783929897,"page":"12.7cm単装高角砲(後期型)","link":"/kancolle/12.7cm%E5%8D%98%E8%A3%85%E9%AB%98%E8%A7%92%E7%A0%B2%28%E5%BE%8C%E6%9C%9F%E5%9E%8B%29"},{"time":1783928713,"page":"出撃ドロップ/反撃！第三十一戦隊の戦いE1_01","link":"/kancolle/%E5%87%BA%E6%92%83%E3%83%89%E3%83%AD%E3%83%83%E3%83%97/%E5%8F%8D%E6%92%83%EF%BC%81%E7%AC%AC%E4%B8%89%E5%8D%81%E4%B8%80%E6%88%A6%E9%9A%8A%E3%81%AE%E6%88%A6%E3%81%84E1_01"},{"time":1783928618,"page":"出撃ドロップ/反撃！第三十一戦隊の戦いE2_01","link":"/kancolle/%E5%87%BA%E6%92%83%E3%83%89%E3%83%AD%E3%83%83%E3%83%97/%E5%8F%8D%E6%92%83%EF%BC%81%E7%AC%AC%E4%B8%89%E5%8D%81%E4%B8%80%E6%88%A6%E9%9A%8A%E3%81%AE%E6%88%A6%E3%81%84E2_01"},{"time":1783927845,"page":"反撃！第三十一戦隊の戦い/E2","link":"/kancolle/%E5%8F%8D%E6%92%83%EF%BC%81%E7%AC%AC%E4%B8%89%E5%8D%81%E4%B8%80%E6%88%A6%E9%9A%8A%E3%81%AE%E6%88%A6%E3%81%84/E2"}]});
+    });
+</script>
+    <script type="text/javascript">
+        bootLazy.addJqPluginInit('.zawazawa-recent', function() {
+            this.zrecent();
+        });
+    </script>
+    <script type="text/javascript">
+        bootLazy.addJqPluginInit('.wikiwiki-popular', function() {
+            this.popular({
+                wikiRootUrl: '/kancolle/',
+            });
+        });
+    </script>
+    <script>
+        bootLazy.addJqPluginInit('#responsive-navigation', function() {
+            this.responsiveNavigation({
+                menuBarSelector: '#menubar',
+                editMenuSelector: '#edit-menu',
+
+                mainContentsBottomElement: '#main-contents-bottom',
+                sidebarBottomElement: '#sidebar-bottom',
+                menuBarContainerElement: '#contents .column-left',
+                footerElement: '#footer',
+
+                overlayAdRenderedEventName: 'overlay-ad-rendered',
+                overlayAdMarginTop: 25
+            });
+        });
+    </script>
+    <script>
+        $('#share-button-root').sharePanel({
+            title: "南西海域\/7-1 - 艦隊これくしょん -艦これ- 攻略 Wiki*",
+            controlPanelUrl: "https:\/\/c.wikiwiki.jp\/wiki\/kancolle\/design",
+            imageUrl: "https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/wikiwiki_ogp.png?v=4",
+            description: "",
+            shareUrl: "https:\/\/wikiwiki.jp\/kancolle\/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F\/7-1",
+            shortUrlRequestUrl: "\/kancolle\/::cmd\/short_url?mode=json&page=%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-1",
+            hasOgSettings: false,
+        })
+    </script>
+<script>
+    $('#admin-contact-root').adminContact({
+        logoImgUrl: "https:\/\/cdn.wikiwiki.jp\/to\/w\/common\/image\/pukiwiki.svg?v=4",
+        pageTitle: "艦隊これくしょん -艦これ- 攻略 Wiki*",
+        controlPanelUrl: "https:\/\/c.wikiwiki.jp\/wiki\/kancolle\/settings",
+        contact: "",
+        helpLink: 'https://wikiwiki.jp/pp/admin_contact',
+    });
+</script>
+<script>
+$("#load-panel-root").loadpanel({
+    dataSelector: "#pageload",
+    helpLink: 'https://wikiwiki.jp/pp/page_load_panel'
+});
+</script>
+<script>
+    $('.admin-login-status').adminLoginStatus({
+        cookieName: 'login_session',
+    });
+</script>
+<script>
+    $(function() {
+        $('.search-words').searchWordHighlight({
+            paramName: 'word',
+            selector: "#content,#note",
+            limit: 10,
+            markedClassResolver: function (i) { return "word" + i; }
+        });
+    });
+</script>
+<script>$(".realtime-date").realtimeDate();</script>
+<script>
+    $("body").notificationBar();
+</script>
+<script>
+$("#contents").anchorLink({
+    url: '/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1',
+});
+</script>
+    <script>
+        bootLazy.addJqPluginInit('.tooltip', function() {
+            this.tooltip();
+        });
+    </script>
+    <script>
+        bootLazy.addPlainScript(function() {
+            lightbox.option({
+                resizeDuration: 0
+            });
+        });
+    </script>
+<script>
+    $(function() {
+        window.bootLazy.bootOn(document);
+    });
+</script>
+<script>
+    $(document).pukiwiki();
+</script>
+
+<script>
+jQuery(function() {
+    $('form').usageStatistics({"keyName":"usageStatistics","smsAuth":false,"hasPosted":false});
+    $(document).browsingStatistics({
+        keyName: 'browsingStatistics'
+    });
+});
+</script>
+</body>
+</html>

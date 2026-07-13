@@ -1,6 +1,6 @@
 {
   "domain": "sortie",
-  "generatedAt": "2026-07-12T14:07:08.808Z",
+  "generatedAt": "2026-07-13T08:49:29.274Z",
   "generator": "scripts/generate-sortie-data.mjs",
   "repositoryRevision": "a8018819ad330b73c714fbba195794453c8dfde3",
   "schemaVersion": 1,
@@ -7495,6 +7495,389 @@
       "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
       "sha256": "cb0cc90d3c271181aedc3eddd377c2d60e3d2ad3b51b05100cc83b78284570a8",
       "status": 200
+    },
+    {
+      "file": "experience-kcwiki.json",
+      "requestedUrl": "https://zh.kcwiki.cn/api.php?action=query&prop=revisions&rvprop=content&redirects=1&format=json&formatversion=2&titles=1-1%7C1-2%7C1-3%7C1-4%7C1-5%7C1-6%7C2-1%7C2-2%7C2-3%7C2-4%7C2-5%7C3-1%7C3-2%7C3-3%7C3-4%7C3-5%7C4-1%7C4-2%7C4-3%7C4-4%7C4-5%7C5-1%7C5-2%7C5-3%7C5-4%7C5-5%7C5-6%7C6-1%7C6-2%7C6-3%7C6-4%7C6-5%7C7-1%7C7-2%7C7-3%7C7-4%7C7-5",
+      "status": 200,
+      "finalUrl": "https://zh.kcwiki.cn/api.php?action=query&prop=revisions&rvprop=content&redirects=1&format=json&formatversion=2&titles=1-1%7C1-2%7C1-3%7C1-4%7C1-5%7C1-6%7C2-1%7C2-2%7C2-3%7C2-4%7C2-5%7C3-1%7C3-2%7C3-3%7C3-4%7C3-5%7C4-1%7C4-2%7C4-3%7C4-4%7C4-5%7C5-1%7C5-2%7C5-3%7C5-4%7C5-5%7C5-6%7C6-1%7C6-2%7C6-3%7C6-4%7C6-5%7C7-1%7C7-2%7C7-3%7C7-4%7C7-5",
+      "contentType": "application/json; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "04d0ced2ea10639f4c81164e0dd6313857a2d76be2817ef5ef3d9ea9be458fae",
+      "bytes": 799586,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience",
+        "maps": [
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          21,
+          22,
+          23,
+          24,
+          25,
+          31,
+          32,
+          33,
+          34,
+          35,
+          41,
+          42,
+          43,
+          44,
+          45,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          61,
+          62,
+          63,
+          64,
+          65,
+          71,
+          72,
+          73,
+          74,
+          75
+        ]
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://zh.kcwiki.cn/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-13.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F/1-3",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E9%8E%AE%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F/1-3",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "e218cf226d64305d325598aeb258f8e52156b3e954ee287d15f6566a3bf846f7",
+      "bytes": 189100,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 13
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-21.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F/2-1",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F/2-1",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "54172472e7a9a058d848e23c3f8f5c5c6d23a201e61c13d4100621feb83928c9",
+      "bytes": 189939,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 21
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-25.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F/2-5",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E8%AB%B8%E5%B3%B6%E6%B5%B7%E5%9F%9F/2-5",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "3ae3822c9d67d9d6e861a08fde683093e45a267bb65ca3ca96ef58a74bd1164b",
+      "bytes": 308465,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 25
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-35.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F/3-5",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F/3-5",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "af7e802ca8e7441f3ac03759f8d02ca79d8e5adbd85b291eef9e38e8fc536221",
+      "bytes": 261321,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 35
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-44.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F/4-4",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F/4-4",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "1359b1246b0c74631d50d6460d511e3380e1c6ed1c9a15b5ea3e2c9d95e68673",
+      "bytes": 194182,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 44
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-53.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-3",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-3",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "806a066515200c8a706a8d3ce5086f841374b1519bb4e5e6304edeaba347d483",
+      "bytes": 338083,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 53
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-54.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-4",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-4",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "1d20138a2d1f2cadd2c45d122f1054f1c75cb2385ed6058e13ea331720fc28f6",
+      "bytes": 280914,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 54
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-55.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-5",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-5",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "b500d443ea1affbb44c9308b23d9d11522d6b4c1648a7d00eca249d1805d11a5",
+      "bytes": 388765,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 55
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-56.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-6",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-6",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "c91b51c39e8c80d7714464deae33fec114717f948fb318f805a59a1ce61129a1",
+      "bytes": 355866,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 56
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-64.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F/6-4",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F/6-4",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "79ee351d8ad523cc0a61bdaece6e8a8142b2bb67e9af863be461a7987ed0370a",
+      "bytes": 365371,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 64
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-71.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-1",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "8e0fd6ab56352912872140a21d07972646bcd817f49ced510275e9fb2e1518b9",
+      "bytes": 200371,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 71
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-73.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-3",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-3",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "b89f5926c9eb2f79207d36273b05613328ced833ea38c084f2c43ebf73959848",
+      "bytes": 224292,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 73
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-74.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-4",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-4",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "981c164d8f81fa4f0104ac2ef870d58c5c8763bf8388ddcc73c56d59f1dbdf4d",
+      "bytes": 355030,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 74
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
+    },
+    {
+      "file": "experience-wikiwiki-75.html",
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-5",
+      "status": 200,
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-5",
+      "contentType": "text/html; charset=utf-8",
+      "etag": null,
+      "lastModified": null,
+      "retrievedAt": "2026-07-13T08:49:29.274Z",
+      "sha256": "d60d2f251f1503988ac7858b662c265b8752ef4b5b450d93d96d067f56056120",
+      "bytes": 299884,
+      "revision": null,
+      "parameters": {
+        "kind": "ship-experience-fallback",
+        "mapId": 75
+      },
+      "license": {
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/kancolle/",
+        "note": "Community-published enemy formation and experience table"
+      },
+      "evidence": "exact"
     },
     {
       "bytes": 22682,

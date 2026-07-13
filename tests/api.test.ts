@@ -3130,7 +3130,7 @@ describe("local kcsapi endpoints", () => {
     expect(start.json().api_data).toMatchObject({ api_maparea_id: 61, api_mapinfo_no: 1 });
 
     const session = store.getSave().sortieSession!;
-    store.db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = 1")
+    store.db.prepare("UPDATE sortie_sessions SET node = ?, seed = 0, state_json = ? WHERE id = 1")
       .run(28, JSON.stringify({ ...session.state, point: "V" }));
 
     const battle = await post("api_req_sortie/battle", { api_formation: 1 });

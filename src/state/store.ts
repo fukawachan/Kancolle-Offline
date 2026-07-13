@@ -36,6 +36,11 @@ import {
 } from "../master/event-data.js";
 import { normalRoutingMap } from "../master/routing-data.js";
 import { publishedLandBaseRange } from "../master/land-base-range.js";
+import {
+  resolveSortieExperience,
+  sortieAdmiralExperience,
+  sortieMapExperience
+} from "../master/sortie-data.js";
 import { playerShipStatBounds } from "../master/ship-stat-growth.js";
 import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { QUEST_BY_ID, QUEST_DEFINITIONS, type QuestDefinition, type QuestReward } from "../master/quest-data.js";
@@ -2554,7 +2559,7 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
   if (!loaded.record) return { save, record: null, applied: false };
   if (loaded.record.resultClaimed && isJsonObject(loaded.record.settlement)) return { save, record: loaded.record, applied: false };
 
-  const record = loaded.record as unknown as BattleRecord;
+  const record = refreshUnclaimedSortieExperience(loaded.record as unknown as BattleRecord);
   const settlement = buildBattleSettlement(save, record);
   const nextBattle = { ...record, resultClaimed: true, settlement };
   const questEvent = battleQuestEvent(nextBattle as unknown as BattleRecord, mode);
@@ -2993,8 +2998,9 @@ function buildBattleSettlement(save: SaveState, record: BattleRecord): BattleSet
   const memberGain = safeNum(record.result?.memberExp, baseExp * 2);
   const memberExp = save.player.exp + memberGain;
   const rankModifier = record.mode === "practice" ? 1 : sortieShipExpRankModifier(record.result?.rank);
-  const main = buildFleetSettlement(save, record.shipIds, safeNum(record.result?.mvp, 1), baseExp, rankModifier);
-  const escort = record.mode === "combined" ? buildFleetSettlement(save, record.escortShipIds ?? [], safeNum(record.result?.mvpCombined, 1), baseExp, rankModifier) : undefined;
+  const flagshipBonus = record.result?.rank !== "E";
+  const main = buildFleetSettlement(save, record.shipIds, safeNum(record.result?.mvp, 1), baseExp, rankModifier, flagshipBonus);
+  const escort = record.mode === "combined" ? buildFleetSettlement(save, record.escortShipIds ?? [], safeNum(record.result?.mvpCombined, 1), baseExp, rankModifier, flagshipBonus) : undefined;
   const dropShipId = record.mode === "practice" ? 0 : safeNum(record.result?.dropShipId, 0);
   return {
     memberLevel: playerLevelForExp(memberExp),
@@ -3008,15 +3014,22 @@ function buildBattleSettlement(save: SaveState, record: BattleRecord): BattleSet
   };
 }
 
-function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: number, baseExp: number, rankModifier = 1) {
+function buildFleetSettlement(
+  save: SaveState,
+  shipIds: number[] = [],
+  mvp: number,
+  baseExp: number,
+  rankModifier = 1,
+  flagshipBonus = true
+) {
   const fixedShipIds = normalizeFixed(shipIds.map((id) => Number(id)), 6, -1);
   return fixedShipIds.map((shipId, index) => {
     if (shipId <= 0) return { shipId, gainedExp: -1, beforeExp: -1, afterExp: -1, afterLevel: 0, levelup: [-1] };
     const ship = save.ships.find((item) => item.id === shipId);
     if (!ship) return { shipId, gainedExp: -1, beforeExp: -1, afterExp: -1, afterLevel: 0, levelup: [-1] };
     const flagship = index === 0;
-    const multiplier = rankModifier * (flagship ? 1.5 : 1) * (mvp === index + 1 ? 2 : 1);
-    const gainedExp = Math.max(1, Math.floor(baseExp * multiplier));
+    const multiplier = rankModifier * (flagship && flagshipBonus ? 1.5 : 1) * (mvp === index + 1 ? 2 : 1);
+    const gainedExp = Math.max(0, Math.floor(baseExp * multiplier));
     const afterExp = ship.exp + gainedExp;
     const cap = shipLevelCap(ship);
     return {
@@ -3028,6 +3041,37 @@ function buildFleetSettlement(save: SaveState, shipIds: number[] = [], mvp: numb
       levelup: shipLevelupInfo(ship.exp, gainedExp, cap)
     };
   });
+}
+
+function refreshUnclaimedSortieExperience(record: BattleRecord): BattleRecord {
+  if (record.mode === "practice" || !record.sortie) return record;
+  const current = resolveSortieExperience(record.sortie.mapId, record.sortie.node, record.sortie.enemyFleetKey);
+  if (!current) {
+    if (!sortieMapExperience(record.sortie.mapId)) return record;
+    throw new StateDatabaseIntegrityError(
+      `Normal sortie ${record.sortie.mapId}:${record.sortie.node} cannot resolve experience for ${record.sortie.enemyFleetKey}`
+    );
+  }
+  const memberExp = sortieAdmiralExperience(
+    current.experienceProfile,
+    current.isBoss,
+    record.result.rank,
+    current.baseExp
+  );
+  return {
+    ...record,
+    sortie: {
+      ...record.sortie,
+      baseExp: current.baseExp,
+      experienceProfile: current.experienceProfile
+    },
+    result: {
+      ...record.result,
+      baseExp: current.baseExp,
+      getExp: memberExp,
+      memberExp
+    }
+  };
 }
 
 function sortieShipExpRankModifier(rank: BattleRecord["result"]["rank"] | undefined) {

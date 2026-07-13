@@ -64,6 +64,11 @@ export type EventMapDefinition = {
   phaseBreakpoints: readonly number[];
   phases?: readonly EventPhaseDefinition[];
   ranks: Record<string, EventRankDefinition>;
+  experience?: {
+    version: string;
+    normalAdmiralExp: number;
+    bossAdmiralExpByPoint: Readonly<Record<string, number>>;
+  };
   nodes: readonly EventNodeDefinition[];
 };
 
@@ -256,6 +261,21 @@ export function selectEventSortieEncounter(
   const node = eventSortieNodeData(areaId, mapNo, nodeNo);
   if (!node || !node.combat || node.encounters.length === 0) return undefined;
   const encounter = weightedPick(node.encounters, (item) => item.weight, seed) ?? node.encounters[0];
+  const map = EVENT_MAP_BY_ID.get(node.mapId);
+  const baseExp = encounter.baseExp ?? node.baseExp;
+  if (!Number.isInteger(baseExp) || Number(baseExp) <= 0) {
+    throw new Error(`Event map ${node.mapId} point ${node.point} has no ship experience`);
+  }
+  const experienceProfile = EVENT_PACKAGE_KIND === "synthetic-debug"
+    ? { policy: "synthetic-debug" as const, version: EVENT_PACKAGE_ID }
+    : {
+        policy: "normal" as const,
+        version: map?.experience?.version ?? "",
+        normalAdmiralExp: map?.experience?.normalAdmiralExp ?? 0,
+        nodeAdmiralExp: node.isBoss
+          ? map?.experience?.bossAdmiralExpByPoint[node.point] ?? 0
+          : map?.experience?.normalAdmiralExp ?? 0
+      };
   return {
     areaId,
     mapNo,
@@ -267,7 +287,8 @@ export function selectEventSortieEncounter(
     shipIds: encounter.shipIds,
     enemyCombinedShipIds: encounter.enemyCombinedShipIds ?? [],
     formation: encounter.formation,
-    baseExp: encounter.baseExp ?? node.baseExp,
+    baseExp: Number(baseExp),
+    experienceProfile,
     observedAt: node.observedAt
   };
 }
@@ -329,7 +350,10 @@ export function eventMapPhaseDefinitions(mapId: number, rank: number): readonly 
     id: "boss",
     point: boss.point,
     required: hp,
-    condition: "sink",
+    // The bundled event is explicitly a synthetic smoke-test package: its
+    // one-ship boss advances on any victory so API acceptance does not depend
+    // on a random final hit. Versioned production packages keep sink rules.
+    condition: EVENT_PACKAGE_KIND === "synthetic-debug" ? "victory" : "sink",
     gaugeNo: 1,
     gaugeType: "hp"
   }];
@@ -414,6 +438,11 @@ export function validateEventPackage(
     if (EVENT_PACKAGE_PRODUCTION_ELIGIBLE && (!map.phases || map.phases.length === 0)) {
       return { ok: false as const, error: `Event map ${map.id} has no versioned phase definitions` };
     }
+    if (EVENT_PACKAGE_PRODUCTION_ELIGIBLE && (!map.experience
+      || !Number.isInteger(map.experience.normalAdmiralExp)
+      || map.experience.normalAdmiralExp <= 0)) {
+      return { ok: false as const, error: `Event map ${map.id} has no versioned experience profile` };
+    }
     for (const prerequisiteId of map.unlock?.clearedMapIds ?? []) {
       if (!event.maps.some((candidate) => candidate.id === prerequisiteId)) {
         return { ok: false as const, error: `Event map ${map.id} has unknown unlock prerequisite ${prerequisiteId}` };
@@ -436,6 +465,14 @@ export function validateEventPackage(
             error: `Event map ${map.id} node ${node.node} has an invalid enemy main/escort split`
           };
         }
+        if (!Number.isInteger(encounter.baseExp) || encounter.baseExp <= 0) {
+          return { ok: false as const, error: `Event map ${map.id} node ${node.node} has no ship experience` };
+        }
+      }
+      if (EVENT_PACKAGE_PRODUCTION_ELIGIBLE && node.boss
+        && (!Number.isInteger(map.experience?.bossAdmiralExpByPoint[node.point])
+          || Number(map.experience?.bossAdmiralExpByPoint[node.point]) <= 0)) {
+        return { ok: false as const, error: `Event map ${map.id} boss ${node.point} has no HQ experience` };
       }
     }
   }

@@ -35,8 +35,35 @@ export type SortieEncounter = {
   enemyCombinedShipIds?: readonly number[];
   formation: number;
   weight: number;
-  baseExp?: number;
+  baseExp: number;
+  expEvidence?: SortieExperienceEvidence;
   evidence?: SortieEvidence;
+};
+
+export type SortieExperienceEvidence = {
+  level: "exact" | "inferred";
+  source: string;
+  match: string;
+  sampleSize: number;
+};
+
+export type SortieExperienceProfile =
+  | {
+      policy: "normal";
+      version: string;
+      normalAdmiralExp: number;
+      nodeAdmiralExp: number;
+    }
+  | {
+      policy: "synthetic-debug";
+      version: string;
+    };
+
+export type SortieMapExperience = {
+  version: string;
+  normalAdmiralExp: number;
+  bossAdmiralExpByPoint: Readonly<Record<string, number>>;
+  evidence: SortieEvidence;
 };
 
 export type SortieDropEntry = {
@@ -85,7 +112,8 @@ export type SelectedSortieEncounter = {
   shipIds: readonly number[];
   enemyCombinedShipIds: readonly number[];
   formation: number;
-  baseExp?: number;
+  baseExp: number;
+  experienceProfile: SortieExperienceProfile;
   observedAt: readonly string[];
 };
 
@@ -104,6 +132,7 @@ type GeneratedPoint = Omit<SortieNodeData, "node"> & {
 type GeneratedSortieData = {
   maps: {
     mapId: number;
+    experience: SortieMapExperience;
     points: GeneratedPoint[];
   }[];
   enemyTemplates: Record<string, EnemyUnitTemplate>;
@@ -149,14 +178,13 @@ const SORTIE_NODES: readonly SortieNodeData[] = GENERATED.maps.flatMap((map) =>
 const SORTIE_NODE_BY_MAP_AND_NODE = new Map(
   SORTIE_NODES.map((node) => [sortieNodeKey(node.mapId, node.node), node] as const)
 );
+const SORTIE_EXPERIENCE_BY_MAP = new Map(
+  GENERATED.maps.map((map) => [map.mapId, map.experience] as const)
+);
 
 for (const node of SORTIE_NODES) {
   for (const encounter of node.encounters) validateEnemyFleetSplit(encounter, `${node.mapId}:${node.point}`);
 }
-
-const SORTIE_POINT_BASE_EXP = new Map<string, number>([
-  ["35:B", 300]
-]);
 
 export function sortieMapId(areaId: number, mapNo: number) {
   return Math.trunc(areaId) * 10 + Math.trunc(mapNo);
@@ -174,6 +202,11 @@ export function sortieNodes() {
   return SORTIE_NODES;
 }
 
+/** Read-only generated HQ experience profile for completeness checks and tooling. */
+export function sortieMapExperience(mapId: number): SortieMapExperience | undefined {
+  return SORTIE_EXPERIENCE_BY_MAP.get(Math.trunc(mapId));
+}
+
 export function selectSortieEncounter(
   areaId: number,
   mapNo: number,
@@ -183,6 +216,14 @@ export function selectSortieEncounter(
   const node = sortieNodeData(areaId, mapNo, nodeNo);
   if (!node || !node.combat || node.encounters.length === 0) return undefined;
   const encounter = weightedPick(node.encounters, (item) => item.weight, seed) ?? node.encounters[0];
+  const experience = SORTIE_EXPERIENCE_BY_MAP.get(node.mapId);
+  if (!experience) throw new Error(`Map ${node.mapId} has no experience profile`);
+  const nodeAdmiralExp = node.isBoss
+    ? experience.bossAdmiralExpByPoint[node.point]
+    : experience.normalAdmiralExp;
+  if (!Number.isInteger(encounter.baseExp) || encounter.baseExp <= 0 || !Number.isInteger(nodeAdmiralExp) || nodeAdmiralExp <= 0) {
+    throw new Error(`Map ${node.mapId} point ${node.point} has incomplete experience data`);
+  }
   return {
     areaId,
     mapNo,
@@ -194,9 +235,60 @@ export function selectSortieEncounter(
     shipIds: encounter.shipIds,
     enemyCombinedShipIds: encounter.enemyCombinedShipIds ?? [],
     formation: encounter.formation,
-    baseExp: encounter.baseExp ?? node.baseExp ?? SORTIE_POINT_BASE_EXP.get(sortiePointKey(node.mapId, node.point)),
+    baseExp: encounter.baseExp,
+    experienceProfile: {
+      policy: "normal",
+      version: experience.version,
+      normalAdmiralExp: experience.normalAdmiralExp,
+      nodeAdmiralExp
+    },
     observedAt: node.observedAt
   };
+}
+
+export function resolveSortieExperience(mapId: number, nodeNo: number, enemyFleetKey: string) {
+  const node = SORTIE_NODE_BY_MAP_AND_NODE.get(sortieNodeKey(Math.trunc(mapId), Math.trunc(nodeNo)));
+  const encounter = node?.encounters.find((item) => item.key === enemyFleetKey);
+  const experience = node ? SORTIE_EXPERIENCE_BY_MAP.get(node.mapId) : undefined;
+  if (!node || !encounter || !experience) return undefined;
+  const nodeAdmiralExp = node.isBoss
+    ? experience.bossAdmiralExpByPoint[node.point]
+    : experience.normalAdmiralExp;
+  if (!Number.isInteger(encounter.baseExp) || encounter.baseExp <= 0 || !Number.isInteger(nodeAdmiralExp) || nodeAdmiralExp <= 0) {
+    throw new Error(`Map ${node.mapId} point ${node.point} has incomplete experience data`);
+  }
+  return {
+    baseExp: encounter.baseExp,
+    isBoss: node.isBoss,
+    experienceProfile: {
+      policy: "normal" as const,
+      version: experience.version,
+      normalAdmiralExp: experience.normalAdmiralExp,
+      nodeAdmiralExp
+    }
+  };
+}
+
+export function sortieAdmiralExperience(
+  profile: SortieExperienceProfile,
+  isBoss: boolean,
+  rank: "S" | "A" | "B" | "C" | "D" | "E",
+  shipBaseExp: number
+) {
+  if (profile.policy === "synthetic-debug") return Math.max(0, Math.trunc(shipBaseExp) * 2);
+  const normal = Math.max(0, Math.trunc(profile.normalAdmiralExp));
+  const node = Math.max(0, Math.trunc(profile.nodeAdmiralExp));
+  if (!isBoss) {
+    if (rank === "S") return node;
+    if (rank === "A") return Math.floor(node * 0.8);
+    if (rank === "B") return Math.floor(node * 0.5);
+    return 0;
+  }
+  if (rank === "S") return node;
+  if (rank === "A") return Math.floor(node - normal * 0.5);
+  if (rank === "B") return Math.floor(node - normal * 0.8);
+  if (rank === "C") return normal;
+  return 0;
 }
 
 export function selectSortieDrop(input: {
@@ -232,10 +324,6 @@ export function fallbackEnemyShipIds(nodeNo: number) {
 
 function sortieNodeKey(mapId: number, nodeNo: number) {
   return String(mapId) + ":" + String(nodeNo);
-}
-
-function sortiePointKey(mapId: number, point: string) {
-  return String(mapId) + ":" + point;
 }
 
 function dropWeight(entry: SortieDropEntry, rankIndex: number, enemyFleetKey: string | undefined) {
