@@ -13,7 +13,7 @@ const OFFICIAL_NORMAL_MAP_IDS = [
   21, 22, 23, 24, 25,
   31, 32, 33, 34, 35,
   41, 42, 43, 44, 45,
-  51, 52, 53, 54, 55,
+  51, 52, 53, 54, 55, 56,
   61, 62, 63, 64, 65,
   71, 72, 73, 74, 75
 ];
@@ -37,7 +37,7 @@ describe("offline normal-map sortie data", () => {
   it("keeps every observed enemy fleet and resolves every enemy master", () => {
     const encounters = sortieNodes().flatMap((node) => node.encounters);
 
-    expect(encounters.some((encounter) => encounter.shipIds.length === 12)).toBe(true);
+    expect(encounters.some((encounter) => encounter.enemyCombinedShipIds?.length === 6)).toBe(true);
     for (const encounter of encounters) {
       expect(encounter.shipIds.length, encounter.key).toBeGreaterThan(0);
       for (const shipId of encounter.shipIds) {
@@ -83,6 +83,7 @@ describe("offline normal-map sortie data", () => {
   it("uses the generated 7-5 boss fleet instead of the fallback encounter", () => {
     const store = createStateStore({ databasePath: ":memory:" });
     store.registerAccount(15);
+    store.db.prepare("UPDATE maps SET unlocked = 1 WHERE id = 75").run();
     store.startSortie(1, 7, 5);
     const session = store.getSave().sortieSession!;
     store.db.prepare("UPDATE sortie_sessions SET node = 24, state_json = ? WHERE id = 1")
@@ -96,7 +97,18 @@ describe("offline normal-map sortie data", () => {
     store.close();
   });
 
-  it("does not expose the non-official 5-6 placeholder map", () => {
-    expect(masterData.api_mst_mapinfo.some((map) => map.api_id === 56)).toBe(false);
+  it("includes the official 5-6 master and generated battle package", () => {
+    expect(masterData.api_mst_mapinfo.find((map) => map.api_id === 56)).toMatchObject({
+      api_maparea_id: 5,
+      api_no: 6,
+      api_required_defeat_count: 280
+    });
+    expect(sortieNodes().filter((node) => node.mapId === 56)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ point: "G", isBoss: true }),
+        expect.objectContaining({ point: "N", isBoss: true }),
+        expect.objectContaining({ point: "Z", isBoss: true })
+      ])
+    );
   });
 });

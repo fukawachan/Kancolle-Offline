@@ -63,7 +63,10 @@ describe("Event support expeditions", () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-event-support-"));
-    store = createStateStore({ databasePath: path.join(tempDir, "save.sqlite") });
+    store = createStateStore({
+      databasePath: path.join(tempDir, "save.sqlite"),
+      allowSyntheticEvents: true
+    });
     store.registerAccount(15);
     store.unlockAllExpeditions(true);
     store.setExpeditionFixedSeed(1);

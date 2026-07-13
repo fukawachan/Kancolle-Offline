@@ -1,13 +1,15 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFrozenSourceSession, generatedOutputPath } from "./lib/frozen-source.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
-const CACHE_DIR = path.join(ROOT, ".local", "wiki-cache");
-const OUTPUT = path.join(ROOT, "src", "master", "expedition-data.ts");
-const START2_URL = "https://api.kcwiki.moe/start2";
-const RULES_URL = "https://raw.githubusercontent.com/Nishisonic/SuccessCheck/master/mission_extend.js";
+const OUTPUT = generatedOutputPath(path.join(ROOT, "src", "master", "expedition-data.ts"));
+const KANCOLLE_DATA_COMMIT = "a8018819ad330b73c714fbba195794453c8dfde3";
+const SUCCESS_CHECK_COMMIT = "3a20af2f43d8ac679dd1aed3069fdabcd735c930";
+const START2_URL = `https://raw.githubusercontent.com/kcwiki/kancolle-data/${KANCOLLE_DATA_COMMIT}/api/api_start2.json`;
+const RULES_URL = `https://raw.githubusercontent.com/Nishisonic/SuccessCheck/${SUCCESS_CHECK_COMMIT}/mission_extend.js`;
 const REQUIRED_MASTER_KEYS = [
   "api_id", "api_maparea_id", "api_disp_no", "api_reset_type", "api_damage_type",
   "api_name", "api_difficulty", "api_details", "api_time", "api_use_fuel",
@@ -41,20 +43,21 @@ const SHIP_TYPE_IDS = new Map([
   ["護空", [7]],
 ]);
 
-async function loadText(envName, cacheName, url) {
-  const explicit = process.env[envName];
-  if (explicit) return readFile(explicit, "utf8");
-  const cachePath = path.join(CACHE_DIR, cacheName);
-  try {
-    return await readFile(cachePath, "utf8");
-  } catch {
-    const response = await fetch(url, { headers: { "user-agent": "kancolle-local-dev" } });
-    if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`);
-    const text = await response.text();
-    await mkdir(CACHE_DIR, { recursive: true });
-    await writeFile(cachePath, text);
-    return text;
-  }
+const session = await createFrozenSourceSession("expedition", {
+  generator: "scripts/generate-expedition-data.mjs",
+  userAgent: "kancolle-local-expedition-generator"
+});
+
+async function loadText(cacheName, url, revision, upstream) {
+  return session.readText(cacheName, url, {
+    revision,
+    evidence: "exact",
+    license: {
+      spdx: "NOASSERTION",
+      url: upstream,
+      note: "Community mechanics/master snapshot; consult the pinned upstream revision for terms"
+    }
+  });
 }
 
 function parseRuleRows(source) {
@@ -105,7 +108,12 @@ function parseRequirements(requirementsText) {
   const simplePattern = /(潜水母艦|航戦|練巡|護空|軽母|水母|空母|海防|重|軽|潜|駆)(\d+)(\[旗艦\])?/g;
   const withoutCombined = requirementsText
     .replace(combinedPattern, "")
-    .replace(alternativePattern, "");
+    .replace(alternativePattern, "")
+    // Stat requirements contain the same kanji as ship abbreviations (for
+    // example, 対潜210).  Remove them before parsing composition or they are
+    // misread as an impossible requirement for 210 submarines.
+    .replace(/(?:火力|対空|対潜|索敵)\d+/g, "")
+    .replace(/ﾄﾞﾗﾑ缶\d+隻(?:\d+個)?/g, "");
   for (const match of withoutCombined.matchAll(simplePattern)) {
     const typeIds = SHIP_TYPE_IDS.get(match[1]);
     if (!typeIds) throw new Error(`Unknown expedition ship type: ${match[1]}`);
@@ -176,11 +184,46 @@ function buildDefinition(master, row, prerequisiteIds) {
       materials: [fuel, ammo, steel, bauxite],
       items: [parseReward(reward1), parseReward(reward2)].filter(Boolean),
     },
+    evidence: {
+      level: "exact",
+      operationalRulesRevision: SUCCESS_CHECK_COMMIT,
+      masterRevision: KANCOLLE_DATA_COMMIT,
+      prerequisiteLevel: prerequisiteIds.length === 0 ? "exact" : "fallback"
+    }
+  };
+}
+
+function buildSupportDefinition(master) {
+  const supportType = master.api_disp_no === "S1" ? "route" : "boss";
+  if (!supportType) throw new Error(`Unsupported master-only expedition ${master.api_id}`);
+  return {
+    id: master.api_id,
+    areaId: master.api_maparea_id,
+    prerequisiteIds: [],
+    durationMinutes: Number(master.api_time),
+    minimumShips: 2,
+    flagshipLevel: 1,
+    totalLevel: 0,
+    requirementsText: "駆2",
+    ...parseRequirements("駆2"),
+    greatSuccessType: "support",
+    resetType: master.api_reset_type,
+    damageType: master.api_damage_type,
+    returnAllowed: master.api_return_flag === 1,
+    supportType,
+    costs: { fuelRate: master.api_use_fuel, ammoRate: master.api_use_bull },
+    rewards: { admiralExp: 0, shipExp: 0, materials: [0, 0, 0, 0], items: [] },
+    evidence: {
+      level: "exact",
+      operationalRulesRevision: "master-support-contract",
+      masterRevision: KANCOLLE_DATA_COMMIT,
+      prerequisiteLevel: "exact"
+    }
   };
 }
 
 function validateMasters(masters) {
-  if (masters.length !== 63) throw new Error(`Expected 63 expedition masters, got ${masters.length}`);
+  if (masters.length < 63) throw new Error(`Expected at least 63 expedition masters, got ${masters.length}`);
   const ids = new Set();
   for (const master of masters) {
     if (ids.has(master.api_id)) throw new Error(`Duplicate expedition master ${master.api_id}`);
@@ -210,7 +253,7 @@ function normalizeUseItems(useItems) {
 }
 
 function render(masters, useItems, definitions) {
-  const checkedDate = new Date().toISOString().slice(0, 10);
+  const checkedDate = session.generatedAt.slice(0, 10);
   const source = `// Generated by scripts/generate-expedition-data.mjs.
 // Sources checked on ${checkedDate}:
 // - ${START2_URL}
@@ -271,6 +314,12 @@ export type ExpeditionDefinition = {
     materials: [number, number, number, number];
     items: ExpeditionRewardItem[];
   };
+  evidence: {
+    level: "exact" | "statistical" | "fallback";
+    operationalRulesRevision: string;
+    masterRevision: string;
+    prerequisiteLevel: "exact" | "fallback";
+  };
 };
 
 export const EXPEDITION_MASTERS: ExpeditionMaster[] = ${JSON.stringify(masters, null, 2)};
@@ -282,9 +331,19 @@ export const EXPEDITION_DEFINITIONS: ExpeditionDefinition[] = ${JSON.stringify(d
   return source;
 }
 
-const rawStart2 = JSON.parse(await loadText("START2_FILE", "expedition-start2.json", START2_URL));
+const rawStart2 = JSON.parse(await loadText(
+  "start2.json",
+  START2_URL,
+  KANCOLLE_DATA_COMMIT,
+  `https://github.com/kcwiki/kancolle-data/tree/${KANCOLLE_DATA_COMMIT}`
+));
 const start2 = rawStart2.api_data ?? rawStart2;
-const ruleSource = await loadText("MISSION_RULES_FILE", "mission_extend.js", RULES_URL);
+const ruleSource = await loadText(
+  "mission_extend.js",
+  RULES_URL,
+  SUCCESS_CHECK_COMMIT,
+  `https://github.com/Nishisonic/SuccessCheck/tree/${SUCCESS_CHECK_COMMIT}`
+);
 const masters = normalizeMissionMasters(start2.api_mst_mission ?? []);
 const useItems = normalizeUseItems(start2.api_mst_useitem ?? []);
 validateMasters(masters);
@@ -292,9 +351,19 @@ validateMasters(masters);
 const rows = parseRuleRows(ruleSource);
 const definitions = masters.map((master, index) => {
   const row = rows.get(master.api_id);
+  if (!row && /^S[12]$/.test(master.api_disp_no)) return buildSupportDefinition(master);
   if (!row) throw new Error(`Missing operational rule for expedition ${master.api_id}`);
   return buildDefinition(master, row, index === 0 ? [] : [masters[index - 1].api_id]);
 });
+
+for (const definition of definitions) {
+  const impossible = definition.shipGroups.find((group) => group.count > definition.minimumShips);
+  if (impossible) {
+    throw new Error(
+      `Expedition ${definition.id} composition requires ${impossible.count} ships but fleet size is ${definition.minimumShips}`
+    );
+  }
+}
 
 const useItemIds = new Set(useItems.map((item) => item.api_id));
 for (const definition of definitions) {
@@ -306,4 +375,10 @@ for (const definition of definitions) {
 }
 
 await writeFile(OUTPUT, render(masters, useItems, definitions));
+await session.finalize({
+  repositoryRevisions: {
+    kancolleData: KANCOLLE_DATA_COMMIT,
+    successCheck: SUCCESS_CHECK_COMMIT
+  }
+});
 console.log(`Generated ${definitions.length} expedition definitions at ${OUTPUT}`);

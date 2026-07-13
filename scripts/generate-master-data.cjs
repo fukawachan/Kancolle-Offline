@@ -1,65 +1,37 @@
 // Generate complete master data from kcwiki/kancolle-data repository
 // Downloads equipment.json and ship.json, maps to our API format, generates TypeScript
 
-const https = require("https");
 const fs = require("fs");
 const path = require("path");
 
-const EQUIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/wiki/equipment.json";
-const SHIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/wiki/ship.json";
-const START2_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/api/api_start2.json";
-const CACHE_DIR = path.join(__dirname, "..", ".local", "wiki-cache");
+const KANCOLLE_DATA_COMMIT = "a8018819ad330b73c714fbba195794453c8dfde3";
+const REPOSITORY_BASE = `https://raw.githubusercontent.com/kcwiki/kancolle-data/${KANCOLLE_DATA_COMMIT}`;
+const EQUIP_URL = `${REPOSITORY_BASE}/wiki/equipment.json`;
+const SHIP_URL = `${REPOSITORY_BASE}/wiki/ship.json`;
+const START2_URL = `${REPOSITORY_BASE}/api/api_start2.json`;
 const NEW_MODEL_HIGH_TEMPERATURE_HIGH_PRESSURE_BOILER_ID = 87;
+let frozenSessionPromise;
 
-function getCachePath(url) {
-  const filename = url.includes("api_start2") ? "api_start2.json" : url.includes("equipment") ? "equipment.json" : "ship.json";
-  return path.join(CACHE_DIR, filename);
+async function frozenSession() {
+  frozenSessionPromise ??= import("./lib/frozen-source.mjs").then(({ createFrozenSourceSession }) =>
+    createFrozenSourceSession("master", {
+      generator: "scripts/generate-master-data.cjs",
+      userAgent: "kancolle-local-master-generator"
+    })
+  );
+  return frozenSessionPromise;
 }
 
-function readCache(url) {
-  const p = getCachePath(url);
-  if (fs.existsSync(p)) {
-    try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch(e) {}
-  }
-  return null;
-}
-
-function writeCache(url, data) {
-  const p = getCachePath(url);
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(data));
-}
-
-async function fetch(url) {
-  // Try cache first
-  const cached = readCache(url);
-  if (cached) {
-    console.log(`  Using cached ${getCachePath(url)}`);
-    return cached;
-  }
-  return new Promise((resolve, reject) => {
-    https.get(url, { headers: { "User-Agent": "kancolle-local-dev" } }, (res) => {
-      if (res.statusCode !== 200) {
-        // Handle redirect
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          fetch(res.headers.location).then(resolve).catch(reject);
-          return;
-        }
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      let body = "";
-      res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => {
-        try {
-          const data = JSON.parse(body);
-          writeCache(url, data);
-          resolve(data);
-        } catch(e) {
-          reject(e);
-        }
-      });
-    }).on("error", reject);
+async function fetchSource(filename, url) {
+  const session = await frozenSession();
+  return session.readJson(filename, url, {
+    revision: KANCOLLE_DATA_COMMIT,
+    evidence: "exact",
+    license: {
+      spdx: "NOASSERTION",
+      url: `https://github.com/kcwiki/kancolle-data/tree/${KANCOLLE_DATA_COMMIT}`,
+      note: "Community master-data snapshot; consult the upstream repository for terms"
+    }
   });
 }
 
@@ -143,6 +115,8 @@ function mapShip(entry) {
     api_houg: [entry._firepower || 0, entry._firepower_max || 0],
     api_raig: [entry._torpedo || 0, entry._torpedo_max || 0],
     api_tyku: [entry._aa || 0, entry._aa_max || 0],
+    api_tais: [num(entry._asw), num(entry._asw_max, num(entry._asw))],
+    api_houk: [num(entry._evasion), num(entry._evasion_max, num(entry._evasion))],
     api_saku: [num(entry._los), num(entry._los_max, num(entry._los))],
     api_luck: [entry._luck || 0, entry._luck_max || 0],
     api_soku: num(entry._speed, 10),
@@ -348,16 +322,17 @@ function mapFurniture(entry) {
 
 // ---- Main ----
 async function main() {
+  const session = await frozenSession();
   console.log("Fetching equipment data...");
-  const equipData = await fetch(EQUIP_URL);
+  const equipData = await fetchSource("equipment.json", EQUIP_URL);
   console.log(`  Got ${Object.keys(equipData).length} equipment entries`);
 
   console.log("Fetching ship data...");
-  const shipData = await fetch(SHIP_URL);
+  const shipData = await fetchSource("ship.json", SHIP_URL);
   console.log(`  Got ${Object.keys(shipData).length} ship entries`);
 
   console.log("Fetching start2 equipment rule data...");
-  const start2Data = await fetch(START2_URL);
+  const start2Data = await fetchSource("api_start2.json", START2_URL);
   console.log(`  Got ${Object.keys(start2Data).length} start2 master sections`);
 
   // Map equipment
@@ -440,7 +415,8 @@ async function main() {
   const ts = [];
 
   ts.push("// Auto-generated master data from kcwiki/kancolle-data");
-  ts.push("// Generated: " + new Date().toISOString());
+  ts.push("// Generated: " + session.generatedAt);
+  ts.push(`// Source revision: ${KANCOLLE_DATA_COMMIT}`);
   ts.push("");
   ts.push(`// Equipment: ${uniqueEquipment.length} entries, Ships: ${uniqueShips.length} entries, Furniture: ${furniture.length} entries`);
   ts.push("");
@@ -517,8 +493,10 @@ async function main() {
   ts.push("");
 
   // Write output
-  const outPath = path.join(__dirname, "..", "src", "master", "generated-data.ts");
+  const outPath = path.resolve(process.env.GENERATED_OUTPUT_PATH || path.join(__dirname, "..", "src", "master", "generated-data.ts"));
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, ts.join("\n"));
+  await session.finalize({ repositoryRevision: KANCOLLE_DATA_COMMIT });
   console.log(`\nGenerated ${outPath}`);
   console.log(`  Equipment: ${uniqueEquipment.length}`);
   console.log(`  Ships: ${uniqueShips.length}`);
@@ -537,7 +515,8 @@ async function main() {
 }
 
 module.exports = {
-  buildShipRemodelExtraCosts
+  buildShipRemodelExtraCosts,
+  mapShip
 };
 
 if (require.main === module) {

@@ -1,30 +1,27 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFrozenSourceSession, generatedOutputPath } from "./lib/frozen-source.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT = path.join(ROOT, "src", "master", "arsenal-data.generated.json");
-const SHIP_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/wiki/ship.json";
-const EQUIPMENT_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/wiki/equipment.json";
-const START2_URL = "https://api.kcwiki.moe/start2";
+const OUTPUT = generatedOutputPath(path.join(ROOT, "src", "master", "arsenal-data.generated.json"));
+const KANCOLLE_DATA_COMMIT = "a8018819ad330b73c714fbba195794453c8dfde3";
+const DATA_BASE = `https://raw.githubusercontent.com/kcwiki/kancolle-data/${KANCOLLE_DATA_COMMIT}`;
+const SHIP_URL = `${DATA_BASE}/wiki/ship.json`;
+const EQUIPMENT_URL = `${DATA_BASE}/wiki/equipment.json`;
+const START2_URL = `${DATA_BASE}/api/api_start2.json`;
 const CONSTRUCTION_BASE = "https://db.kcwiki.cn/construction";
 const DEVELOPMENT_BASE = "https://db.kcwiki.cn/api/cache";
 const MIN_SAMPLE_SIZE = 100;
 const SPECIAL_CONSTRUCTION_IDS = new Set([171, 174, 175, 433, 448]);
 
-async function getJson(url, attempts = 4) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, { headers: { "user-agent": "kancolle-local-offline-api" } });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      return await response.json();
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
-    }
-  }
-  throw new Error(`Unable to fetch ${url}: ${String(lastError)}`);
+const session = await createFrozenSourceSession("arsenal", {
+  generator: "scripts/generate-arsenal-data.mjs",
+  userAgent: "kancolle-local-arsenal-generator"
+});
+
+function getJson(filename, url, metadata) {
+  return session.readJson(filename, url, metadata);
 }
 
 async function mapLimit(values, limit, mapper) {
@@ -52,7 +49,7 @@ function addOutcome(table, key, sample, id, count) {
   table.set(key, entry);
 }
 
-function compactTable(table) {
+function compactTable(table, sourceKind) {
   return Object.fromEntries(
     [...table.entries()]
       .filter(([, entry]) => entry.sample >= MIN_SAMPLE_SIZE)
@@ -61,6 +58,12 @@ function compactTable(table) {
         key,
         {
           sample: entry.sample,
+          evidence: {
+            level: "statistical",
+            source: sourceKind,
+            minimumSampleSize: MIN_SAMPLE_SIZE,
+            sampleSize: entry.sample
+          },
           outcomes: [...entry.outcomes.entries()]
             .filter(([, count]) => count > 0)
             .sort(([a], [b]) => a - b)
@@ -88,20 +91,28 @@ function normalizeBool(value) {
 async function main() {
   console.log("Fetching master and community arsenal data...");
   const [shipWiki, equipmentWiki, start2, constructionIds, developmentIds] = await Promise.all([
-    getJson(SHIP_URL),
-    getJson(EQUIPMENT_URL),
-    getJson(START2_URL),
-    getJson(`${CONSTRUCTION_BASE}/ship_list`),
-    getJson(`${DEVELOPMENT_BASE}/development_item_list`)
+    getJson("ship.json", SHIP_URL, repositoryEvidence()),
+    getJson("equipment.json", EQUIPMENT_URL, repositoryEvidence()),
+    getJson("start2.json", START2_URL, repositoryEvidence()),
+    getJson("construction/ship-list.json", `${CONSTRUCTION_BASE}/ship_list`, statisticalEvidence("construction ship list")),
+    getJson("development/item-list.json", `${DEVELOPMENT_BASE}/development_item_list`, statisticalEvidence("development item list"))
   ]);
 
   const constructionRows = await mapLimit(constructionIds, 16, async (id) => [
     Number(id),
-    await getJson(`${CONSTRUCTION_BASE}/ship/${id}.json`)
+    await getJson(
+      `construction/ship-${Number(id)}.json`,
+      `${CONSTRUCTION_BASE}/ship/${id}.json`,
+      statisticalEvidence("construction", { shipId: Number(id) })
+    )
   ]);
   const developmentRows = await mapLimit(developmentIds, 16, async (id) => [
     Number(id),
-    await getJson(`${DEVELOPMENT_BASE}/development_item_${id}`)
+    await getJson(
+      `development/item-${Number(id)}.json`,
+      `${DEVELOPMENT_BASE}/development_item_${id}`,
+      statisticalEvidence("development", { equipmentId: Number(id) })
+    )
   ]);
 
   const construction = new Map();
@@ -117,7 +128,12 @@ async function main() {
         specialConstruction[id] ??= {};
         specialConstruction[id][key] = {
           sample: Number(row.usedCount) || 0,
-          count: Number(row.count) || 0
+          count: Number(row.count) || 0,
+          evidence: {
+            level: "statistical",
+            source: "construction",
+            sampleSize: Number(row.usedCount) || 0
+          }
         };
       } else {
         addOutcome(construction, key, row.usedCount, id, row.count);
@@ -193,7 +209,7 @@ async function main() {
   }
 
   const result = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: session.generatedAt,
     minimumSampleSize: MIN_SAMPLE_SIZE,
     sources: {
       ships: SHIP_URL,
@@ -207,20 +223,44 @@ async function main() {
       development: developmentGeneratedAt,
       developmentTimeRange
     },
-    construction: compactTable(construction),
+    construction: compactTable(construction, "construction"),
     specialConstruction,
-    development: compactTable(development),
+    development: compactTable(development, "development"),
     ships,
     equipment
   };
 
-  await mkdir(path.dirname(OUTPUT), { recursive: true });
   await writeFile(OUTPUT, `${JSON.stringify(result)}\n`);
+  await session.finalize({ repositoryRevision: KANCOLLE_DATA_COMMIT });
   console.log(`Generated ${OUTPUT}`);
   console.log(`  construction recipes: ${Object.keys(result.construction).length}`);
   console.log(`  development recipes: ${Object.keys(result.development).length}`);
   console.log(`  ships: ${Object.keys(ships).length}`);
   console.log(`  equipment: ${Object.keys(equipment).length}`);
+}
+
+function repositoryEvidence() {
+  return {
+    revision: KANCOLLE_DATA_COMMIT,
+    evidence: "exact",
+    license: {
+      spdx: "NOASSERTION",
+      url: `https://github.com/kcwiki/kancolle-data/tree/${KANCOLLE_DATA_COMMIT}`,
+      note: "Community master-data snapshot; consult the pinned upstream repository for terms"
+    }
+  };
+}
+
+function statisticalEvidence(dataset, parameters = null) {
+  return {
+    evidence: "statistical",
+    parameters: { dataset, ...(parameters ?? {}) },
+    license: {
+      spdx: "NOASSERTION",
+      url: "https://db.kcwiki.cn/",
+      note: "Aggregated community observations; no machine-readable license was published"
+    }
+  };
 }
 
 await main();

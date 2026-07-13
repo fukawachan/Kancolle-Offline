@@ -29,4 +29,13 @@ describe("cached client compatibility patches", () => {
     expect(active).toContain("__KANCOLLE_LOCAL_EVENT_AREA_PATCH__");
     expect(active).toContain("_0x401221[_0x27624d(0x1a1f)]=0x3d/*__KANCOLLE_LOCAL_EVENT_AREA_PATCH__*/");
   });
+
+  it("cannot deadlock startup when browser audio callbacks are suppressed", async () => {
+    const source = await readFile(path.resolve("cache/kcs2/js/main.js"), "utf8");
+    const patched = patchKcsMainJs(source);
+
+    expect(patched.match(/__KANCOLLE_LOCAL_TITLECALL_TIMEOUT_PATCH__/g)).toHaveLength(1);
+    expect(patched).toContain("setTimeout(_0xfinish,0x9c4)");
+    expect(patched).toContain('if(!_0x2b5bdd["_finishedPlayTitleCallTask"])');
+  });
 });

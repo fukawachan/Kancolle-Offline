@@ -54,7 +54,9 @@ export function handleEventStatus(stateStore: StateStore, resourceManifest: Reso
   const activeAreaId = stateStore.hasAccount() ? stateStore.getActiveEventAreaId() : null;
   return apiOk({
     activeAreaId,
-    candidates: eventResourceStatus(resourceManifest, activeAreaId)
+    candidates: eventResourceStatus(resourceManifest, activeAreaId, {
+      allowSynthetic: stateStore.allowsSyntheticEvents()
+    })
   });
 }
 
@@ -67,29 +69,39 @@ export function handleEventActivation(
   if (rawAreaId == null || rawAreaId === "" || Number(rawAreaId) <= 0) {
     const result = stateStore.setActiveEventArea(null);
     return result.ok
-      ? apiOk({ activeAreaId: null, candidates: eventResourceStatus(resourceManifest, null), message: "Event disabled" })
-      : apiError(result.error, 400);
+      ? apiOk({
+          activeAreaId: null,
+          candidates: eventResourceStatus(resourceManifest, null, {
+            allowSynthetic: stateStore.allowsSyntheticEvents()
+          }),
+          message: "Event disabled"
+        })
+      : apiError(result.error, 400, {}, 400);
   }
 
   const areaId = Math.trunc(Number(rawAreaId));
-  const validation = validateEventPackage(areaId, resourceManifest);
-  if (!validation.ok) return apiError(validation.error, 400);
-  if (!eventDefinition(areaId)) return apiError(`Unknown event area ${areaId}`, 404);
+  const validation = validateEventPackage(areaId, resourceManifest, {
+    allowSynthetic: stateStore.allowsSyntheticEvents()
+  });
+  if (!validation.ok) return apiError(validation.error, 400, {}, 400);
+  if (!eventDefinition(areaId)) return apiError(`Unknown event area ${areaId}`, 404, {}, 404);
   const result = stateStore.setActiveEventArea(areaId);
-  if (!result.ok) return apiError(result.error, 400);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
   return apiOk({
     activeAreaId: result.activeAreaId,
     event: result.event ? { areaId: result.event.areaId, name: result.event.name, mapCount: result.event.maps.length } : null,
-    candidates: eventResourceStatus(resourceManifest, result.activeAreaId),
+    candidates: eventResourceStatus(resourceManifest, result.activeAreaId, {
+      allowSynthetic: stateStore.allowsSyntheticEvents()
+    }),
     message: `Event area ${result.activeAreaId} enabled`
   });
 }
 
 export function handleEventReset(params: { areaId?: unknown }, stateStore: StateStore) {
   const areaId = Math.trunc(Number(params.areaId));
-  if (!Number.isFinite(areaId) || areaId <= 0) return apiError("Invalid areaId", 400);
+  if (!Number.isFinite(areaId) || areaId <= 0) return apiError("Invalid areaId", 400, {}, 400);
   const result = stateStore.resetEventProgress(areaId);
-  if (!result.ok) return apiError(result.error, 400);
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
   return apiOk({
     areaId,
     activeAreaId: result.activeAreaId,
@@ -260,6 +272,7 @@ export function handleRemoveShip(params: { shipId?: unknown }, stateStore: State
 
   const master = SHIPS.find((s) => s.api_id === ship.masterId);
   const materials = stateStore.destroyShip([shipId]);
+  if (!materials.ok) return apiError(materials.error ?? "Ship destruction failed", 400);
 
   return apiOk({
     destroyedShip: { id: shipId, masterId: ship.masterId, name: master?.api_name ?? "Unknown" },
@@ -300,6 +313,7 @@ export function handleRemoveSlotItem(params: { itemId?: unknown }, stateStore: S
 
   const master = SLOT_ITEMS.find((s) => s.api_id === slotItem.masterId);
   const materials = stateStore.destroySlotItem([itemId]);
+  if (!materials.ok) return apiError(materials.error ?? "Equipment destruction failed", 400);
 
   return apiOk({
     destroyedItem: { id: itemId, masterId: slotItem.masterId, name: master?.api_name ?? "Unknown" },

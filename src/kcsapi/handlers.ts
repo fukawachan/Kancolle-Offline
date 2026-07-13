@@ -26,7 +26,12 @@ import type { RouteEvaluation } from "../master/routing.js";
 import { sortieBossNodeNo, sortieNodeData } from "../master/sortie-data.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { shipGraphOffsets } from "../master/shipgraph-offsets.js";
-import type { StateStore } from "../state/store.js";
+import { BASIC_MATERIAL_HARD_CAP, type StateStore } from "../state/store.js";
+import {
+  DEFAULT_GAMEPLAY_PROFILE,
+  profileSupportsNormalMap,
+  type GameplayProfile
+} from "../master/gameplay-profile.js";
 import type { AirBase, Materials, PresetDeck, PresetSlot, PresetSlotItem, SaveState, Ship, SlotItem } from "../state/types.js";
 import {
   battleResultPayload,
@@ -67,6 +72,8 @@ import {
 } from "./serializers.js";
 import { normalizeSupplyKind } from "./supply.js";
 import {
+  constructionDistribution,
+  developmentDistribution,
   rollConstruction,
   rollDevelopment,
   type ArsenalContext,
@@ -96,6 +103,7 @@ export type HandlerContext = {
   unknownLogPath: string;
   resourceManifest: ResourceManifest;
   arsenalRandom: () => number;
+  gameplayProfile?: GameplayProfile;
 };
 
 export type HandlerInput = {
@@ -111,16 +119,33 @@ type ShipUpgradeMaster = (typeof masterData.api_mst_shipupgrade)[number];
 const handlers = new Map<string, KcsHandler>();
 const RECORD_SLOT_ITEM_DISPLAY_BONUS = 3;
 const MAX_FURNITURE_COUNT = 200;
-const MATERIAL_CAP = 1_000_000;
+const MATERIAL_CAP = BASIC_MATERIAL_HARD_CAP;
 
-register("api_start2/getData", (_input, context) => apiOk(masterDataWithResources(context.resourceManifest, activeEventAreaId(context))));
+register("api_start2/getData", (_input, context) => apiOk(masterDataWithResources(
+  context.resourceManifest,
+  activeEventAreaId(context),
+  context.gameplayProfile
+)));
 register("api_start2/get_option_setting", (_input, context) => {
   const options = context.stateStore.getSave().player.options;
   return apiOk(toOptionSetting(options));
 });
 
 register("api_port/port", (_input, context) => apiOk(toPort(context.stateStore.getSave(), context.resourceManifest)));
-register("api_port/airCorpsCondRecoveryWithTimer", () => apiOk({ api_recovery: [] }));
+register("api_port/airCorpsCondRecoveryWithTimer", (input, context) => {
+  context.stateStore.settle();
+  const save = context.stateStore.getSave();
+  const base = save.airBases.find((candidate) =>
+    candidate.areaId === num(input.body.api_area_id, 0)
+      && candidate.baseId === num(input.body.api_base_id, 0)
+  );
+  if (!base) return apiError("Air base is not open", 400, {}, 400);
+  const serialized = toAirBase(base, save.slotItems);
+  return apiOk({
+    api_plane_info: serialized.api_plane_info,
+    api_distance: serialized.api_distance
+  });
+});
 
 register("api_get_member/require_info", (_input, context) => apiOk(toRequireInfo(context.stateStore.getSave(), context.resourceManifest)));
 register("api_get_member/basic", (_input, context) => {
@@ -165,7 +190,7 @@ register("api_get_member/questlist", (input, context) => apiOk(toQuestList(conte
 register("api_get_member/mapinfo", (_input, context) => {
   const save = context.stateStore.getSave();
   return apiOk({
-    api_map_info: toMapInfo(save),
+    api_map_info: toMapInfo(save, context.gameplayProfile),
     api_air_base: save.airBases.map((base) => toAirBase(base, save.slotItems)),
     api_air_base_expanded_info: save.airBases.map(toAirBaseExpandedInfo)
   });
@@ -185,7 +210,7 @@ register("api_get_member/picture_book", (input, context) =>
 );
 register("api_get_member/practice", (_input, context) => {
   const batch = context.stateStore.practiceBatch(practiceBatchOptions(context));
-  return apiOk(practiceListPayload(batch.rivals, batch.states));
+  return apiOk(practiceListPayload(batch.rivals, batch.states, context.stateStore.practiceMatchingKind()));
 });
 register("api_get_member/sortie_conditions", () => apiOk({ api_sortie_conditions: [], api_mission_conditions: [] }));
 register("api_get_member/chart_additional_info", (_input, context) => apiOk(chartAdditionalInfo(context.stateStore.getSave())));
@@ -196,11 +221,12 @@ register("api_req_init/nickname", (input, context) => {
   return apiOk(toBasic(player, save.furniture, save.useItems, context.resourceManifest));
 });
 register("api_req_init/firstship", (input, context) => {
-  const save = context.stateStore.getSave();
-  const masterId = num(input.body.api_ship_id, 9);
-  const ship = context.stateStore.createShip(masterId);
-  context.stateStore.changeDeckShip(1, 0, ship.id);
-  return apiOk({ api_ship: toShip(ship, save.slotItems), api_deck: save.decks.map(toDeck) });
+  const claimed = context.stateStore.claimInitialShip(num(input.body.api_ship_id, 0));
+  if (!claimed.ok) return apiError(claimed.error, 400, {}, 400);
+  return apiOk({
+    api_ship: toShip(claimed.ship, claimed.save.slotItems),
+    api_deck: claimed.save.decks.map(toDeck)
+  });
 });
 register("api_req_member/updatecomment", (input, context) => {
   const player = context.stateStore.updateComment(str(input.body.api_cmt, ""));
@@ -257,10 +283,24 @@ register("api_req_member/payitemuse", (input, context) => {
   if (!result.ok) return apiError(result.error, 400, {}, 400);
   return apiOk({ api_caution_flag: result.cautionFlag });
 });
-register("api_req_member/get_incentive", () => apiOk({ api_items: [] }));
-register("api_req_member/get_event_selected_reward", () => apiOk({ api_items: [] }));
-register("api_req_member/set_friendly_request", () => apiOk({}));
-register("api_req_member/set_oss_condition", () => apiOk({}));
+register("api_req_member/get_incentive", () => apiOk({ api_item: [] }));
+register("api_req_member/get_event_selected_reward", () => apiOk({ api_get_item_list: [] }));
+register("api_req_member/set_friendly_request", (input, context) => {
+  context.stateStore.updateOptions({
+    friendlyRequestFlag: num(input.body.api_request_flag, 0),
+    friendlyRequestType: num(input.body.api_request_type, 0)
+  });
+  return apiOk({});
+});
+register("api_req_member/set_oss_condition", (input, context) => {
+  context.stateStore.updateOptions({
+    languageType: num(input.body.api_language_type, 0),
+    ossItems: [0, 1, 2, 3].map((index) =>
+      num(input.body[`api_oss_items[${index}]`], 0)
+    ) as [number, number, number, number]
+  });
+  return apiOk({});
+});
 
 register("api_dmm_payment/paycheck", (input, context) => {
   if (num(input.body.api_local_purchase, 0) === 1) {
@@ -334,6 +374,7 @@ register("api_req_hokyu/charge", (input, context) => {
     kind: normalizeSupplyKind(num(input.body.api_kind, 3)),
     refillAircraft: num(input.body.api_onslot, 1) === 1
   });
+  if (!supplied.ok) return apiError(supplied.error ?? "Supply failed", 400, {}, 400);
   const save = context.stateStore.getSave();
   return apiOk({
     api_ship: supplied.ships.map((ship) => toShip(ship, save.slotItems)),
@@ -363,6 +404,12 @@ register("api_req_kaisou/slotset_ex", (input, context) => {
   const ship = context.stateStore.equipExSlotItem(shipId, itemId);
   return ship ? apiOk(toShip(ship, save.slotItems)) : apiError("Unknown ship", 404);
 });
+register("api_req_kaisou/open_exslot", (input, context) => {
+  const opened = context.stateStore.openShipExSlot(num(input.body.api_id, 0));
+  return opened.ok
+    ? { api_result: 1, api_result_msg: "成功" }
+    : apiError(opened.error, 400, {}, 400);
+});
 register("api_req_kaisou/unsetslot_all", (input, context) => {
   const save = context.stateStore.getSave();
   return apiOk(toShip(context.stateStore.unsetAllSlots(num(input.body.api_id ?? input.body.api_ship_id, 1))!, save.slotItems));
@@ -387,28 +434,29 @@ register("api_req_kaisou/slot_deprive", (input, context) => {
   const unsetKind = slotKind(input.body.api_unset_slot_kind);
   const setKind = slotKind(input.body.api_set_slot_kind);
   const unsetShip = save.ships.find((ship) => ship.id === unsetShipId);
-  const setShip = save.ships.find((ship) => ship.id === setShipId);
   const inferredItemId = slotItemIdAt(unsetShip, unsetIndex, unsetKind);
   const itemId = num(input.body.api_item_id, inferredItemId);
-  const actualSetIndex = setKind === "extra" ? setIndex : firstAvailableOrdinarySlotIndex(setShip, setIndex);
-  const displacedItemId = slotItemIdAt(setShip, actualSetIndex, setKind);
   if (itemId <= 0) return apiError("Unknown slot item", 400);
   const validation = validateSlotEquip(save, context.resourceManifest, setShipId, setIndex, itemId, setKind);
   if (!validation.ok) return apiError(validation.message, 400);
-  const unset = unsetKind === "extra"
-    ? context.stateStore.equipExSlotItem(unsetShipId, -1)
-    : context.stateStore.equipSlotItem(unsetShipId, unsetIndex, -1);
-  const set = setKind === "extra"
-    ? context.stateStore.equipExSlotItem(setShipId, itemId)
-    : context.stateStore.equipSlotItem(setShipId, setIndex, itemId);
+  const moved = context.stateStore.moveSlotItem({
+    sourceShipId: unsetShipId,
+    sourceIndex: unsetIndex,
+    sourceKind: unsetKind,
+    targetShipId: setShipId,
+    targetIndex: setIndex,
+    targetKind: setKind,
+    expectedItemId: itemId
+  });
+  if (!moved.ok) return apiError(moved.error, 400, {}, 400);
   const nextSave = context.stateStore.getSave();
-  const unsetPayload = unset ? toShip(unset, nextSave.slotItems) : null;
-  const setPayload = set ? toShip(set, nextSave.slotItems) : null;
+  const unsetPayload = toShip(moved.sourceShip, nextSave.slotItems);
+  const setPayload = toShip(moved.targetShip, nextSave.slotItems);
   return apiOk({
     api_ship_data: { api_unset_ship: unsetPayload, api_set_ship: setPayload },
     api_unset_ship: unsetPayload,
     api_set_ship: setPayload,
-    ...(displacedItemId > 0 ? { api_unset_list: slotDepriveUnsetList(nextSave, displacedItemId) } : {}),
+    ...(moved.displacedItemId > 0 ? { api_unset_list: slotDepriveUnsetList(nextSave, moved.displacedItemId) } : {}),
     api_bauxite: nextSave.materials.bauxite
   });
 });
@@ -424,7 +472,7 @@ register("api_req_kaisou/powerup", (input, context) => {
   const result = context.stateStore.modernizeShip(
     num(input.body.api_id, 1),
     csvNums(input.body.api_id_items, []),
-    { destroyConsumedEquipment }
+    { destroyConsumedEquipment, random: context.arsenalRandom }
   );
   const save = context.stateStore.getSave();
   return apiOk({
@@ -561,12 +609,19 @@ register("api_req_nyukyo/speedchange", (input, context) => {
   if (!repair.ok) return apiError(repair.error, 400);
   return apiOk(toRepairDock(repair.dock, context.stateStore.getSave().ships));
 });
-register("api_req_nyukyo/open_new_dock", () => apiOk({ api_opened: 1 }));
+register("api_req_nyukyo/open_new_dock", (_input, context) => {
+  const opened = context.stateStore.openRepairDock();
+  return opened.ok ? apiOk({ api_opened: 1 }) : apiError(opened.error, 400, {}, 400);
+});
 
 register("api_req_kousyou/createitem", (input, context) => {
   const recipe = developmentRecipe(input.body);
   const attempts = num(input.body.api_multiple_flag, 0) === 1 ? 3 : 1;
   const arsenalContext = currentArsenalContext(context.stateStore.getSave());
+  const distribution = developmentDistribution(recipe, arsenalContext);
+  if (distribution.source === "unsupported") {
+    return apiError(`Unsupported development recipe (${distribution.evidence.level})`, 400, {}, 400);
+  }
   const resultMasterIds = Array.from({ length: attempts }, () =>
     rollDevelopment(recipe, arsenalContext, context.arsenalRandom())
   );
@@ -587,24 +642,32 @@ register("api_req_kousyou/createitem", (input, context) => {
     api_slot_item: firstItem,
     api_get_items: getItems,
     api_unset_items: toUnsetSlotItems(save),
-    api_material: toMaterialValues(developed.materials)
+    api_material: toMaterialValues(developed.materials),
+    api_probability_evidence: distribution.evidence
   });
 });
 register("api_req_kousyou/destroyitem2", (input, context) => {
   const itemIds = csvNums(input.body.api_slotitem_ids ?? input.body.api_slotitem_id, [1]);
-  const materials = context.stateStore.destroySlotItem(itemIds);
+  const result = context.stateStore.destroySlotItem(itemIds);
+  if (!result.ok) return apiError(result.error ?? "Equipment destruction failed", 400, {}, 400);
   return apiOk({
-    api_get_material: [itemIds.length, itemIds.length, itemIds.length * 2, 0],
-    api_material: toMaterialValues(materials)
+    api_get_material: [...result.reward],
+    api_material: toMaterialValues(result)
   });
 });
 register("api_req_kousyou/createship", (input, context) => {
   const recipe = constructionRecipe(input.body);
+  const arsenalContext = currentArsenalContext(context.stateStore.getSave());
+  const distribution = constructionDistribution(recipe, arsenalContext);
+  if (distribution.source === "unsupported") {
+    return apiError(`Unsupported construction recipe (${distribution.evidence.level})`, 400, {}, 400);
+  }
   const resultMasterId = rollConstruction(
     recipe,
-    currentArsenalContext(context.stateStore.getSave()),
+    arsenalContext,
     context.arsenalRandom()
   );
+  if (resultMasterId == null) return apiError("Observed construction pool produced no eligible ship", 400, {}, 400);
   const started = context.stateStore.startBuild({
     dockId: num(input.body.api_kdock_id ?? input.body.api_id, 1),
     recipe,
@@ -616,7 +679,8 @@ register("api_req_kousyou/createship", (input, context) => {
   return apiOk({
     api_result: 1,
     api_kdock: toBuildDock(started.dock),
-    api_material: toMaterialValues(context.stateStore.getSave().materials)
+    api_material: toMaterialValues(context.stateStore.getSave().materials),
+    api_probability_evidence: distribution.evidence
   });
 });
 register("api_req_kousyou/createship_speedchange", (input, context) => {
@@ -633,8 +697,19 @@ register("api_req_kousyou/getship", (input, context) => {
     api_slotitem: claimed.slotItems.map(toSlotItem)
   });
 });
-register("api_req_kousyou/destroyship", (input, context) => apiOk({ api_material: toMaterialValues(context.stateStore.destroyShip(csvNums(input.body.api_ship_id, [1]))) }));
-register("api_req_kousyou/open_new_dock", () => apiOk({ api_opened: 1 }));
+register("api_req_kousyou/destroyship", (input, context) => {
+  const result = context.stateStore.destroyShip(
+    csvNums(input.body.api_ship_id, []),
+    { destroyEquipment: num(input.body.api_slot_dest_flag, 0) === 1 }
+  );
+  return result.ok
+    ? apiOk({ api_get_material: [...result.reward], api_material: toMaterialValues(result) })
+    : apiError(result.error ?? "Ship destruction failed", 400, {}, 400);
+});
+register("api_req_kousyou/open_new_dock", (_input, context) => {
+  const opened = context.stateStore.openBuildDock();
+  return opened.ok ? apiOk({ api_opened: 1 }) : apiError(opened.error, 400, {}, 400);
+});
 register("api_req_kousyou/remodel_slotlist", (_input, context) =>
   apiOk(remodelSlotListPayload(context.stateStore.getSave()))
 );
@@ -721,7 +796,12 @@ register("api_req_mission/return_instruction", (input, context) => {
 });
 
 register("api_req_map/start", (input, context) => {
-  const session = context.stateStore.startSortie(num(input.body.api_deck_id, 1), num(input.body.api_maparea_id, 1), num(input.body.api_mapinfo_no, 1));
+  const areaId = num(input.body.api_maparea_id, 1);
+  const mapNo = num(input.body.api_mapinfo_no, 1);
+  if (!profileSupportsNormalMap(context.gameplayProfile, mapMasterId(areaId, mapNo))) {
+    return apiError("Sortie map is not supported by the active gameplay profile", 400, {}, 400);
+  }
+  const session = context.stateStore.startSortie(num(input.body.api_deck_id, 1), areaId, mapNo);
   if (!session) return apiError("Unknown or locked sortie map", 400);
   return apiOk(mapNode(
     context.resourceManifest,
@@ -775,7 +855,13 @@ register("api_req_sortie/goback_port", (_input, context) => {
   context.stateStore.clearSortie();
   return apiOk(toPort(context.stateStore.getSave(), context.resourceManifest));
 });
-register("api_req_map/anchorage_repair", () => apiOk({ api_repair_flag: 0 }));
+register("api_req_map/anchorage_repair", () => apiOk({
+  // The cached client consumes these three fields. Anchorage repair itself is
+  // intentionally unavailable in the offline rules profile.
+  api_used_ship: 0,
+  api_ship_data: [],
+  api_repair_ships: []
+}));
 register("api_req_map/select_eventmap_rank", (input, context) => {
   const result = context.stateStore.selectEventMapRank(
     num(input.body.api_maparea_id, 0),
@@ -799,14 +885,37 @@ register("api_req_map/select_eventmap_rank", (input, context) => {
   });
 });
 register("api_req_map/start_air_base", (input, context) => {
-  const areaId = num(input.body.api_area_id ?? input.body.api_maparea_id, 1);
-  const airBases = context.stateStore.openAirBaseArea(areaId);
-  const save = context.stateStore.getSave();
-  return apiOk({
-    api_result: 1,
-    api_area_id: Math.max(1, Math.trunc(areaId)),
-    api_air_base: airBases.map((base) => toAirBase(base, save.slotItems))
-  });
+  const strikeFields: { baseId: number; nodes: [number, number] | null }[] = [];
+  for (const baseId of [1, 2, 3]) {
+    const raw = input.body[`api_strike_point_${baseId}`];
+    if (raw == null || raw === "") continue;
+    const nodes = parseAirBaseStrikePoints(raw);
+    strikeFields.push({ baseId, nodes });
+  }
+  if (strikeFields.some((field) => field.nodes == null)) {
+    return apiError("api_strike_point_N must contain exactly two positive cell ids", 400, {}, 400);
+  }
+
+  // Backward-compatible local administration hook. The cached game uses the
+  // strike-point fields above; api_area_id is retained for debug/tests which
+  // explicitly open an offline base before configuring it.
+  if (strikeFields.length === 0 && (input.body.api_area_id != null || input.body.api_maparea_id != null)) {
+    const areaId = num(input.body.api_area_id ?? input.body.api_maparea_id, 1);
+    const airBases = context.stateStore.openAirBaseArea(areaId);
+    const save = context.stateStore.getSave();
+    return apiOk({
+      api_result: 1,
+      api_area_id: Math.max(1, Math.trunc(areaId)),
+      api_air_base: airBases.map((base) => toAirBase(base, save.slotItems))
+    });
+  }
+
+  const result = context.stateStore.setSortieAirBaseTargets(
+    strikeFields.map((field) => ({ baseId: field.baseId, nodes: field.nodes! }))
+  );
+  return result.ok
+    ? apiOk({ api_result: 1, api_result_msg: "", api_strike_points: result.targets })
+    : apiError(result.error, 400, {}, 400);
 });
 
 register("api_req_air_corps/set_plane", (input, context) => {
@@ -841,34 +950,55 @@ register("api_req_air_corps/supply", (input, context) => {
   return apiOk(airBaseMutationPayload(result.airBase, result.materials, context.stateStore.getSave().slotItems));
 });
 
-for (const path of [
-  "api_req_combined_battle/battle",
-  "api_req_combined_battle/battle_water",
-  "api_req_combined_battle/each_battle",
-  "api_req_combined_battle/each_battle_water",
-  "api_req_combined_battle/airbattle",
-  "api_req_combined_battle/ld_airbattle",
-  "api_req_combined_battle/ld_shooting",
-  "api_req_combined_battle/midnight_battle",
-  "api_req_combined_battle/sp_midnight",
-  "api_req_combined_battle/ec_battle",
-  "api_req_combined_battle/ec_midnight_battle",
-  "api_req_combined_battle/ec_night_to_day",
-  "api_req_combined_battle/battleresult",
-  "api_req_combined_battle/goback_port",
-  "api_req_air_corps/change_name",
-  "api_req_air_corps/cond_recovery",
-  "api_req_air_corps/change_deployment_base",
-  "api_req_air_corps/expand_base",
-  "api_req_air_corps/expand_maintenance_level",
-  "api_req_member/get_practice_enemyinfo",
-  "api_req_practice/battle",
-  "api_req_practice/midnight_battle",
-  "api_req_practice/battle_result",
-  "api_req_practice/change_matching_kind"
-]) {
-  register(path, () => apiOk({ api_disabled: 1, api_message: "Local placeholder" }));
-}
+register("api_req_air_corps/change_name", (input, context) => {
+  const result = context.stateStore.renameAirBase(
+    num(input.body.api_area_id, 0),
+    num(input.body.api_base_id, 0),
+    str(input.body.api_name, "")
+  );
+  return result.ok
+    ? { api_result: 1, api_result_msg: "成功" }
+    : apiError(result.error, 400, {}, 400);
+});
+
+register("api_req_air_corps/cond_recovery", (input, context) => {
+  const result = context.stateStore.recoverAirBaseCondition(
+    num(input.body.api_area_id, 0),
+    num(input.body.api_base_id, 0)
+  );
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  return apiOk(airBaseMutationPayload(result.airBase, result.materials, context.stateStore.getSave().slotItems));
+});
+
+register("api_req_air_corps/change_deployment_base", (input, context) => {
+  const result = context.stateStore.exchangeAirBasePlane(
+    num(input.body.api_area_id, 0),
+    num(input.body.api_base_id, 0),
+    num(input.body.api_base_id_src, 0),
+    num(input.body.api_squadron_id, 0),
+    num(input.body.api_item_id, 0)
+  );
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  const save = context.stateStore.getSave();
+  return apiOk({ api_base_items: result.airBases.map((base) => airBaseItemPayload(base, save.slotItems)) });
+});
+
+register("api_req_air_corps/expand_base", (input, context) => {
+  const result = context.stateStore.expandAirBase(num(input.body.api_area_id, 0));
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  const save = context.stateStore.getSave();
+  return apiOk({ api_base_items: result.airBases.map((base) => toAirBase(base, save.slotItems)) });
+});
+
+register("api_req_air_corps/expand_maintenance_level", (input, context) => {
+  const result = context.stateStore.expandAirBaseMaintenance(num(input.body.api_area_id, 0));
+  if (!result.ok) return apiError(result.error, 400, {}, 400);
+  return apiOk({
+    api_area_id: result.areaId,
+    api_maintenance_level: result.maintenanceLevel,
+    api_useitem_count: context.stateStore.getSave().useItems.find((item) => item.id === 73)?.count ?? 0
+  });
+});
 
 register("api_req_member/get_practice_enemyinfo", (input, context) =>
   apiOk(practiceEnemyInfoPayload(num(input.body.api_member_id, 1), context.stateStore.practiceBatch(practiceBatchOptions(context)).rivals))
@@ -885,6 +1015,12 @@ register("api_req_practice/battle_result", (_input, context) => {
   context.stateStore.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
   const generated = context.stateStore.applyPracticeBattleResult();
   return apiOk(battleResultPayload((generated.record ?? battle.record) as unknown as BattleRecord));
+});
+register("api_req_practice/change_matching_kind", (input, context) => {
+  const result = context.stateStore.setPracticeMatchingKind(num(input.body.api_selected_kind, 0));
+  return result.ok
+    ? apiOk({ api_update_flag: result.updateFlag })
+    : apiError(result.error, 400, {}, 400);
 });
 
 register("api_req_combined_battle/battle", (input, context) => apiOk(recordedCombinedBattlePayload(input, context, endpointKind("api_req_combined_battle/battle"))));
@@ -915,6 +1051,11 @@ register("api_req_combined_battle/goback_port", (_input, context) => {
 
 export function isKnownKcsApi(path: string) {
   return handlers.has(normalizeApiPath(path));
+}
+
+/** Stable, sorted protocol surface used by the cached-client parity gate. */
+export function knownKcsApiPaths() {
+  return [...handlers.keys()].sort();
 }
 
 export async function handleKcsApi(input: HandlerInput, context: HandlerContext) {
@@ -1023,25 +1164,44 @@ function presetHasLoadout(preset: PresetSlot) {
 }
 
 async function recordUnknown(input: HandlerInput, context: HandlerContext) {
+  const query = withoutSecrets(input.query);
+  const body = withoutSecrets(input.body);
   mkdirSync(dirname(context.unknownLogPath), { recursive: true });
   await appendFile(
     context.unknownLogPath,
-    `${JSON.stringify({ time: new Date().toISOString(), method: input.method, path: `/kcsapi/${input.path}`, query: input.query, body: input.body })}\n`
+    `${JSON.stringify({ time: new Date().toISOString(), method: input.method, path: `/kcsapi/${input.path}`, query, body })}\n`
+  );
+}
+
+function withoutSecrets(values: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(values).filter(([key]) => key !== "api_token" && key !== "api_starttime")
   );
 }
 
 function activeEventAreaId(context: HandlerContext) {
+  if (context.gameplayProfile && !context.gameplayProfile.capabilities.currentEvent) return null;
   return typeof context.stateStore.getActiveEventAreaId === "function"
-    ? context.stateStore.getActiveEventAreaId()
+    ? enabledProfileEventArea(context, context.stateStore.getActiveEventAreaId())
     : null;
 }
 
-function masterDataWithResources(resourceManifest: ResourceManifest, activeEventAreaId: number | null = null) {
+function enabledProfileEventArea(context: HandlerContext, activeAreaId: number | null) {
+  const configuredEventId = context.gameplayProfile?.eventId;
+  if (configuredEventId == null) return activeAreaId;
+  return activeAreaId === configuredEventId ? activeAreaId : null;
+}
+
+function masterDataWithResources(
+  resourceManifest: ResourceManifest,
+  activeEventAreaId: number | null = null,
+  gameplayProfile: GameplayProfile = DEFAULT_GAMEPLAY_PROFILE
+) {
   const rawShips = buildShipMasters(resourceManifest);
   const shipIds = new Set(rawShips.map((ship) => ship.api_id));
   const ships = sanitizeShipRemodelTargets(rawShips, shipIds, resourceManifest);
   const slotItems = buildSlotMasters(resourceManifest);
-  const mapInfos = mapInfoMasters(resourceManifest, activeEventAreaId);
+  const mapInfos = mapInfoMasters(resourceManifest, activeEventAreaId, gameplayProfile);
   return {
     ...masterData,
     api_mst_ship: ships,
@@ -1257,9 +1417,15 @@ function chartAdditionalInfo(save: SaveState) {
   };
 }
 
-function mapInfoMasters(resourceManifest: ResourceManifest, activeEventAreaId: number | null = null) {
+function mapInfoMasters(
+  resourceManifest: ResourceManifest,
+  activeEventAreaId: number | null = null,
+  gameplayProfile: GameplayProfile = DEFAULT_GAMEPLAY_PROFILE
+) {
   const cacheBackedIds = new Set(resourceManifest.map.thumbnail.keys());
-  const normalMaps = masterData.api_mst_mapinfo.filter((map) => cacheBackedIds.has(map.api_id));
+  const normalMaps = masterData.api_mst_mapinfo.filter((map) =>
+    cacheBackedIds.has(map.api_id) && profileSupportsNormalMap(gameplayProfile, map.api_id)
+  );
   return activeEventAreaId == null
     ? normalMaps
     : [...normalMaps, ...eventMapMasters(activeEventAreaId, resourceManifest)];
@@ -1478,7 +1644,8 @@ function recordedPracticeNightBattlePayload(context: HandlerContext) {
 
 function practiceBatchOptions(context: HandlerContext) {
   return {
-    availableShipIds: context.resourceManifest.ship.banner.keys()
+    availableShipIds: context.resourceManifest.ship.banner.keys(),
+    matchingKind: context.stateStore.practiceMatchingKind()
   };
 }
 
@@ -1524,10 +1691,10 @@ function endpointKind(path: string): BattleEndpointKind {
   return battleEndpointMode(path)?.endpoint ?? "sortieDay";
 }
 
-function practiceListPayload(rivals: PracticeRival[], states: Record<string, number> = {}) {
+function practiceListPayload(rivals: PracticeRival[], states: Record<string, number> = {}, selectedKind = 2) {
   return {
     api_create_kind: 2,
-    api_selected_kind: 2,
+    api_selected_kind: selectedKind,
     api_entry_limit: 0,
     api_list: rivals.map((rival) => ({
       api_enemy_id: rival.id,
@@ -1591,7 +1758,10 @@ function recordPayload(save: SaveState) {
     api_material_max: MATERIAL_CAP,
     api_air_base_expanded_info: [5, 6, 7].map((areaId) => ({
       api_area_id: areaId,
-      api_maintenance_level: 1
+      api_maintenance_level: Math.max(
+        0,
+        ...save.airBases.filter((base) => base.areaId === areaId).map((base) => base.maintenanceLevel)
+      )
     }))
   };
 }
@@ -1606,9 +1776,21 @@ function airBaseMutationPayload(airBase: AirBase, materials: Materials, slotItem
   };
 }
 
+function airBaseItemPayload(airBase: AirBase, slotItems: SlotItem[]) {
+  const serialized = toAirBase(airBase, slotItems);
+  return {
+    api_rid: serialized.api_rid,
+    api_distance: serialized.api_distance,
+    api_plane_info: serialized.api_plane_info
+  };
+}
+
 function rankingPayload(input: HandlerInput, save: SaveState) {
   const page = Math.max(1, Math.trunc(num(input.body.api_pageno ?? input.query.api_pageno, 1)));
-  const score = save.recordStats.battleWin + save.recordStats.practiceWin + save.recordStats.missionSuccess;
+  const score = save.recordStats.rankingPoints
+    + save.recordStats.battleWin
+    + save.recordStats.practiceWin
+    + save.recordStats.missionSuccess;
   return {
     api_count: 1,
     api_page_count: 1,
@@ -1687,15 +1869,6 @@ function slotItemIdAt(ship: Ship | undefined, slotIndex: number, kind: "normal" 
   return slotIndex >= 0 && slotIndex < slots.length ? slots[slotIndex] : -1;
 }
 
-function firstAvailableOrdinarySlotIndex(ship: Ship | undefined, slotIndex: number) {
-  const targetIndex = Math.max(0, Math.min(4, Math.trunc(num(slotIndex, 0))));
-  const slots = ship ? [...ship.slotIds, -1, -1, -1, -1, -1].slice(0, 5) : [];
-  for (let index = 0; index <= targetIndex; index++) {
-    if ((slots[index] ?? -1) <= 0) return index;
-  }
-  return targetIndex;
-}
-
 function slotDepriveUnsetList(save: SaveState, itemId: number) {
   const item = save.slotItems.find((slotItem) => slotItem.id === itemId);
   const master = item ? masterData.api_mst_slotitem.find((slotItem) => slotItem.api_id === item.masterId) : undefined;
@@ -1731,6 +1904,31 @@ function toOptionSetting(options: SaveState["player"]["options"]) {
     api_skin_id: 101,
     api_language: 0
   };
+}
+
+function parseAirBaseStrikePoints(value: unknown): [number, number] | null {
+  let values: unknown[];
+  if (Array.isArray(value)) {
+    values = value;
+  } else if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        values = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return null;
+      }
+    } else {
+      values = trimmed.split(",");
+    }
+  } else {
+    return null;
+  }
+  const nodes = values.map((item) => Math.trunc(Number(item)));
+  return nodes.length === 2 && nodes.every((node) => Number.isInteger(node) && node > 0)
+    ? [nodes[0], nodes[1]]
+    : null;
 }
 
 function num(value: unknown, fallback: number) {

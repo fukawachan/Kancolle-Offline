@@ -1,0 +1,374 @@
+{
+  "domain": "map-progress",
+  "generatedAt": "2026-07-12T14:15:34.314Z",
+  "generator": "scripts/generate-map-progress-data.mjs",
+  "repositoryRevision": "a8018819ad330b73c714fbba195794453c8dfde3",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "bytes": 2996980,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"06efd538834c804205b465f8a710c50bd3266d8a57b18c2dc444e4e2e82caa63\"",
+      "evidence": "exact",
+      "file": "start2.json",
+      "finalUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "lastModified": null,
+      "license": {
+        "note": "Pinned community capture of the game master response",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwiki/kancolle-data/tree/a8018819ad330b73c714fbba195794453c8dfde3"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
+      "sha256": "7dde437696386aadf5b48c661c43f04a381dbcc145e84993b387c54cdf754dac",
+      "status": 200
+    },
+    {
+      "bytes": 275894,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-15.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E9%95%87%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F%2F1-5",
+      "lastModified": "Sat, 11 Jul 2026 14:15:38 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "镇守府海域/1-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E9%95%87%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F%2F1-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "5a515762eec6ef590d50739b478b40ec757af80a58516f619c7c6e1dc07e469f",
+      "status": 200
+    },
+    {
+      "bytes": 329500,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-16.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E9%95%87%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F%2F1-6",
+      "lastModified": "Sat, 11 Jul 2026 14:12:20 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "镇守府海域/1-6"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E9%95%87%E5%AE%88%E5%BA%9C%E6%B5%B7%E5%9F%9F%2F1-6",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "9269c1451fb18906063e27eae69b96af03c1dcf54ea50b314e41eafaaaad3ba5",
+      "status": 200
+    },
+    {
+      "bytes": 296046,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-25.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E7%BE%A4%E5%B2%9B%E6%B5%B7%E5%9F%9F%2F2-5",
+      "lastModified": "Sat, 11 Jul 2026 14:12:20 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西群岛海域/2-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E7%BE%A4%E5%B2%9B%E6%B5%B7%E5%9F%9F%2F2-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "213d8e33d561de4e3aa9384b90005f71c0861f392c1d4a30527aa56c2240a08d",
+      "status": 200
+    },
+    {
+      "bytes": 273323,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-35.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F3-5",
+      "lastModified": "Sat, 11 Jul 2026 14:12:21 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "北方海域/3-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8C%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F3-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "db4f0290b262ca249dddd80a994a2152608e74542722974b3f92b99531b0d9f7",
+      "status": 200
+    },
+    {
+      "bytes": 307871,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-45.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F%2F4-5",
+      "lastModified": "Sat, 11 Jul 2026 14:12:22 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "西方海域/4-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E8%A5%BF%E6%96%B9%E6%B5%B7%E5%9F%9F%2F4-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "2ae48e5c96a815b3d910ef3da29146479dae644308f44d1d985137379047b509",
+      "status": 200
+    },
+    {
+      "bytes": 311198,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-55.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F5-5",
+      "lastModified": "Sat, 11 Jul 2026 14:15:39 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南方海域/5-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F5-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "1c28e67aad59dc77c4c313890503e6084cbec8064cbd133896475c0d79bb799a",
+      "status": 200
+    },
+    {
+      "bytes": 505816,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-56.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F5-6",
+      "lastModified": "Sun, 12 Jul 2026 10:00:25 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南方海域/5-6"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F5-6",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "fc65cba268d731dfb7ec8ff376e0ff9a06e55b04910c9279a47e8552807c7284",
+      "status": 200
+    },
+    {
+      "bytes": 409157,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-65.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F%2F6-5",
+      "lastModified": "Sat, 11 Jul 2026 14:12:23 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "中部海域/6-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E4%B8%AD%E9%83%A8%E6%B5%B7%E5%9F%9F%2F6-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "9c8a03675742f274cb75910b73dca4e4acd9f25245f5d220e691941177e176ab",
+      "status": 200
+    },
+    {
+      "bytes": 283036,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-72.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-2",
+      "lastModified": "Sat, 11 Jul 2026 14:12:24 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西海域/7-2"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-2",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "c9949ca2e3ecd4b8e04bfdc181b0724dba68a1ebc40b316e147752e112351bee",
+      "status": 200
+    },
+    {
+      "bytes": 161272,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-73.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-3",
+      "lastModified": "Sat, 11 Jul 2026 14:12:24 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西海域/7-3"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-3",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "f13da5b8a5e855ebbce25e4131abdbb538f21eb40c566f7d3882b77358de1e96",
+      "status": 200
+    },
+    {
+      "bytes": 323136,
+      "contentType": "text/html; charset=UTF-8",
+      "etag": null,
+      "evidence": "exact",
+      "file": "wiki-75.html",
+      "finalUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-5",
+      "lastModified": "Sat, 11 Jul 2026 14:12:25 GMT",
+      "license": {
+        "note": "Frozen public rules page",
+        "spdx": "CC-BY-NC-SA-3.0",
+        "url": "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西海域/7-5"
+      },
+      "requestedUrl": "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "2aa048e17e648df541a9e58fd696560e5b8d5002cf23e7c63a343d1feaeeedc5",
+      "status": 200
+    },
+    {
+      "bytes": 354891,
+      "contentType": "text/html; charset=utf-8",
+      "etag": "W/\"e8705bb4f1ebc09e5de3a68331101392\"",
+      "evidence": "exact",
+      "file": "wikiwiki-56.html",
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F5-6",
+      "lastModified": null,
+      "license": {
+        "note": "Frozen public mechanics table; upstream terms retained for manual review",
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/ppolicy"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南方海域/5-6"
+      },
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F%2F5-6",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "c843dfc8e166c918a1196cc978a423d7645a67c271997f35c125c9d02c222cf5",
+      "status": 200
+    },
+    {
+      "bytes": 238965,
+      "contentType": "text/html; charset=utf-8",
+      "etag": "W/\"412c748ff03bd91b2c41341a6cc8ed1f\"",
+      "evidence": "exact",
+      "file": "wikiwiki-72.html",
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-2",
+      "lastModified": null,
+      "license": {
+        "note": "Frozen public mechanics table; upstream terms retained for manual review",
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/ppolicy"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西海域/7-2"
+      },
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-2",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "75f1213d614fab1c2acd44a4b9871368aafc29264c7aa3afce8776e7860add12",
+      "status": 200
+    },
+    {
+      "bytes": 224539,
+      "contentType": "text/html; charset=utf-8",
+      "etag": "W/\"aad4163ab7a504617bc65ba44f97767e\"",
+      "evidence": "exact",
+      "file": "wikiwiki-73.html",
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-3",
+      "lastModified": null,
+      "license": {
+        "note": "Frozen public mechanics table; upstream terms retained for manual review",
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/ppolicy"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西海域/7-3"
+      },
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-3",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "78e9bb370ec94ecae02b2f195a5e7d81fb28149876365d0d443408384737f49b",
+      "status": 200
+    },
+    {
+      "bytes": 300092,
+      "contentType": "text/html; charset=utf-8",
+      "etag": "W/\"a23e296b1efa46a1266a49728333fffe\"",
+      "evidence": "exact",
+      "file": "wikiwiki-75.html",
+      "finalUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-5",
+      "lastModified": null,
+      "license": {
+        "note": "Frozen public mechanics table; upstream terms retained for manual review",
+        "spdx": "NOASSERTION",
+        "url": "https://wikiwiki.jp/ppolicy"
+      },
+      "parameters": {
+        "locale": "ja-JP",
+        "title": "南西海域/7-5"
+      },
+      "requestedUrl": "https://wikiwiki.jp/kancolle/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F%2F7-5",
+      "retrievedAt": "2026-07-12T14:15:34.314Z",
+      "revision": null,
+      "sha256": "a39d294d6ceeae1211a969a306626841c2055dfe39aa5fdc7201986bc90bf46c",
+      "status": 200
+    }
+  ]
+}

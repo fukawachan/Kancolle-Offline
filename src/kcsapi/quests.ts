@@ -1,5 +1,6 @@
 import { QUEST_BY_ID, QUEST_DEFINITIONS, QUEST_PAGE_SIZE, type QuestDefinition, type QuestRequirement } from "../master/quest-data.js";
 import { masterData } from "../master/data.js";
+import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import type { JsonObject, Quest, SaveState, Ship } from "../state/types.js";
 
 export type QuestEvent =
@@ -21,6 +22,8 @@ export type QuestEvaluation = {
   progressFlag: number;
 };
 
+export const ACTIVE_QUEST_LIMIT = 5;
+
 type QuestListEntry = {
   definition: QuestDefinition;
   state: Quest;
@@ -36,6 +39,9 @@ const CLIENT_PERIOD_TABS: Record<number, QuestDefinition["period"]> = {
   4: "quarterly",
   5: "once"
 };
+const EXPEDITION_DISPLAY_ID_BY_MASTER_ID = new Map(
+  EXPEDITION_MASTERS.map((mission) => [mission.api_id, mission.api_disp_no] as const)
+);
 const SHIP_TYPE_ALIASES = new Map<string, number[]>([
   ["海防艦", [1]],
   ["駆逐", [2]],
@@ -96,6 +102,7 @@ export function buildQuestList(save: SaveState, options: QuestListOptions = {}) 
   const requestedPageNo = options.pageNo == null ? undefined : Math.max(1, Math.trunc(options.pageNo));
   const questStates = questStateMap(save.quests);
   const visible = QUEST_DEFINITIONS
+    .filter((definition) => questIsVisible(save, definition.id))
     .filter((definition) => definitionMatchesQuestListTab(definition, questStates.get(definition.id), tabId));
 
   const completedIds = visible
@@ -124,7 +131,13 @@ export function buildQuestList(save: SaveState, options: QuestListOptions = {}) 
 }
 
 export function questIsVisible(save: SaveState, questId: number) {
-  return QUEST_BY_ID.has(questId);
+  const definition = QUEST_BY_ID.get(questId);
+  if (!definition) return false;
+  if (definition.prerequisites.length === 0) return true;
+  const completed = new Set(
+    save.quests.filter((quest) => quest.completed === 1).map((quest) => quest.id)
+  );
+  return definition.prerequisites.every((id) => completed.has(id));
 }
 
 export function evaluateQuest(definition: QuestDefinition, save: SaveState, state: Quest): QuestEvaluation {
@@ -152,12 +165,14 @@ export function advanceQuestProgress(
 
 export function currentQuestPeriodKey(period: QuestDefinition["period"], now = Date.now()) {
   if (period === "once") return "once";
-  const jst = new Date(now + 9 * 60 * 60_000);
-  const year = jst.getUTCFullYear();
-  const month = jst.getUTCMonth() + 1;
-  const day = jst.getUTCDate();
+  // JST is UTC+9 and quest days roll over at 05:00, so UTC+4 exposes the
+  // correct business-date fields without depending on the host timezone.
+  const businessDate = new Date(now + 4 * 60 * 60_000);
+  const year = businessDate.getUTCFullYear();
+  const month = businessDate.getUTCMonth() + 1;
+  const day = businessDate.getUTCDate();
   if (period === "daily") return `${year}-${pad(month)}-${pad(day)}`;
-  if (period === "weekly") return `${year}-W${pad(jstWeek(jst))}`;
+  if (period === "weekly") return isoWeekKey(businessDate);
   if (period === "monthly") return `${year}-${pad(month)}`;
   const quarter = Math.floor((month - 1) / 3) + 1;
   return `${year}-Q${quarter}`;
@@ -234,6 +249,7 @@ function evaluateRequirement(requirement: QuestRequirement, save: SaveState, sta
     return combineAny(children);
   }
   if (category === "fleet") return evaluateFleetRequirement(requirement, save);
+  if (category === "expedition") return evaluateExpeditionProgress(requirement, state, path);
   if (category === "scrapequipment") return evaluateEquipmentProgress(scrapItems(requirement), state, path);
   if (category === "modelconversion") return evaluateEquipmentProgress(scrapItems(requirement), state, path);
   if (category === "equipexchange") {
@@ -264,6 +280,10 @@ function advanceRequirement(
     return;
   }
   if (category === "fleet") return;
+  if (category === "expedition") {
+    advanceExpeditionProgress(requirement, event, progressData, path);
+    return;
+  }
   if (category === "scrapequipment") {
     advanceEquipmentProgress(scrapItems(requirement), event, progressData, path, "scrapequipment");
     return;
@@ -297,7 +317,11 @@ function eventMatchesRequirement(requirement: QuestRequirement, save: SaveState,
     if (requirement.victory === true && event.victory === false) return false;
     return groupsMatch(requirement.groups, currentFleetShips(save));
   }
-  if (category === "expedition") return event.kind === "expedition" && event.success !== false;
+  if (category === "expedition") {
+    return event.kind === "expedition"
+      && event.success === true
+      && expeditionRequirementObjects(requirement).some((object) => expeditionMissionMatches(object.ids, event.missionId));
+  }
   if (category === "simple") {
     if (event.kind !== "simple") return false;
     const subcategory = String(requirement.subcategory ?? "");
@@ -372,6 +396,65 @@ function requirementTarget(requirement: QuestRequirement) {
   }
   if (String(requirement.category) === "a-gou") return 36;
   return 1;
+}
+
+type ExpeditionRequirementObject = {
+  ids: readonly unknown[];
+  target: number;
+};
+
+function expeditionRequirementObjects(requirement: QuestRequirement): ExpeditionRequirementObject[] {
+  const objects = Array.isArray(requirement.objects)
+    ? requirement.objects.filter(isRecord)
+    : [];
+  if (objects.length === 0) return [{ ids: [], target: requirementTarget(requirement) }];
+
+  return objects.map((object) => ({
+    ids: Array.isArray(object.id) ? object.id : object.id == null ? [] : [object.id],
+    target: Number.isFinite(Number(object.times))
+      ? Math.max(1, Math.trunc(Number(object.times)))
+      : requirementTarget(requirement)
+  }));
+}
+
+function evaluateExpeditionProgress(requirement: QuestRequirement, state: Quest, path: string): QuestEvaluation {
+  const objects = expeditionRequirementObjects(requirement);
+  return combineAll(objects.map((object, index) =>
+    countEvaluation(progressCount(state.progressData, expeditionProgressKey(path, index, objects.length)), object.target)
+  ));
+}
+
+function advanceExpeditionProgress(
+  requirement: QuestRequirement,
+  event: QuestEvent,
+  progressData: JsonObject,
+  path: string
+) {
+  if (event.kind !== "expedition" || event.success !== true) return;
+  const objects = expeditionRequirementObjects(requirement);
+  objects.forEach((object, index) => {
+    if (!expeditionMissionMatches(object.ids, event.missionId)) return;
+    const key = expeditionProgressKey(path, index, objects.length);
+    progressData[key] = progressCount(progressData, key) + 1;
+  });
+}
+
+function expeditionProgressKey(path: string, index: number, objectCount: number) {
+  return objectCount === 1 ? path : `${path}:expedition:${index}`;
+}
+
+function expeditionMissionMatches(ids: readonly unknown[], missionId: number | undefined) {
+  if (ids.length === 0) return true;
+  if (missionId == null || !Number.isFinite(missionId)) return false;
+  const normalizedMissionId = Math.trunc(missionId);
+  const displayId = EXPEDITION_DISPLAY_ID_BY_MASTER_ID.get(normalizedMissionId);
+  return ids.some((candidate) => {
+    const text = String(candidate).trim();
+    if (text === "") return false;
+    const numeric = Number(text);
+    if (Number.isFinite(numeric) && Math.trunc(numeric) === normalizedMissionId) return true;
+    return displayId != null && text === displayId;
+  });
 }
 
 type EquipmentRequirementItem = { name: string; amount: number };
@@ -499,10 +582,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function jstWeek(date: Date) {
-  const start = Date.UTC(date.getUTCFullYear(), 0, 1);
-  const day = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  return Math.floor((day - start) / (7 * 24 * 60 * 60_000)) + 1;
+function isoWeekKey(date: Date) {
+  const thursday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const weekday = thursday.getUTCDay() || 7;
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - weekday);
+
+  const weekYear = thursday.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(weekYear, 0, 4));
+  const firstWeekday = firstThursday.getUTCDay() || 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() + 4 - firstWeekday);
+  const week = 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 24 * 60 * 60_000));
+  return `${weekYear}-W${pad(week)}`;
 }
 
 function pad(value: number) {

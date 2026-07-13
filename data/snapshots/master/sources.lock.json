@@ -1,0 +1,69 @@
+{
+  "domain": "master",
+  "generatedAt": "2026-07-12T13:23:29.634Z",
+  "generator": "scripts/generate-master-data.cjs",
+  "repositoryRevision": "a8018819ad330b73c714fbba195794453c8dfde3",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "bytes": 2996980,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"06efd538834c804205b465f8a710c50bd3266d8a57b18c2dc444e4e2e82caa63\"",
+      "evidence": "exact",
+      "file": "api_start2.json",
+      "finalUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "lastModified": null,
+      "license": {
+        "note": "Community master-data snapshot; consult the upstream repository for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwiki/kancolle-data/tree/a8018819ad330b73c714fbba195794453c8dfde3"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "retrievedAt": "2026-07-12T13:23:29.634Z",
+      "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
+      "sha256": "7dde437696386aadf5b48c661c43f04a381dbcc145e84993b387c54cdf754dac",
+      "status": 200
+    },
+    {
+      "bytes": 1291128,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"bb366027fa38ff2981f4186b009053be776aed516eed61480c06720520d11a03\"",
+      "evidence": "exact",
+      "file": "equipment.json",
+      "finalUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/wiki/equipment.json",
+      "lastModified": null,
+      "license": {
+        "note": "Community master-data snapshot; consult the upstream repository for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwiki/kancolle-data/tree/a8018819ad330b73c714fbba195794453c8dfde3"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/wiki/equipment.json",
+      "retrievedAt": "2026-07-12T13:23:29.634Z",
+      "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
+      "sha256": "f3cd7273f62c6377e2277c6213f64f56df2ac145ef853e06417e077f08e10303",
+      "status": 200
+    },
+    {
+      "bytes": 1444676,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"098fe28e7df310f45960f3e79872c41f99bbe5cf81a1daa6667f58dc7a44754f\"",
+      "evidence": "exact",
+      "file": "ship.json",
+      "finalUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/wiki/ship.json",
+      "lastModified": null,
+      "license": {
+        "note": "Community master-data snapshot; consult the upstream repository for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwiki/kancolle-data/tree/a8018819ad330b73c714fbba195794453c8dfde3"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/wiki/ship.json",
+      "retrievedAt": "2026-07-12T13:23:29.634Z",
+      "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
+      "sha256": "bc6c3ca90b542fb11e02d43abaffc5e323f038a2382909cb174c87fe5f933db6",
+      "status": 200
+    }
+  ]
+}

@@ -1,21 +1,29 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFrozenSourceSession, generatedOutputPath } from "./lib/frozen-source.mjs";
+import {
+  compileRoutingPredicate,
+  inferRoutingRuleEvidence,
+  routingPredicateDiagnostics
+} from "../src/master/routing.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CACHE_DIR = path.join(ROOT, ".local", "routing-data-cache");
-const OUTPUT_PATH = path.join(ROOT, "src", "master", "routing-data.generated.json");
-const EDGE_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/map/edge.json";
-const SHIP_URL = "https://raw.githubusercontent.com/kcwiki/kancolle-data/master/wiki/ship.json";
-const KC3_NODES_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/nodes.json";
+const OUTPUT_PATH = generatedOutputPath(path.join(ROOT, "src", "master", "routing-data.generated.json"));
+const KANCOLLE_DATA_COMMIT = "a8018819ad330b73c714fbba195794453c8dfde3";
+const KC3_COMMIT = "27208e9b0f22fa6e3d98bd61c1873e97a85a5faa";
+const EDGE_URL = `https://raw.githubusercontent.com/kcwiki/kancolle-data/${KANCOLLE_DATA_COMMIT}/map/edge.json`;
+const SHIP_URL = `https://raw.githubusercontent.com/kcwiki/kancolle-data/${KANCOLLE_DATA_COMMIT}/wiki/ship.json`;
+const KC3_NODES_URL = `https://raw.githubusercontent.com/KC3Kai/KC3Kai/${KC3_COMMIT}/src/data/nodes.json`;
 const WIKI_API = "https://zh.kcwiki.cn/api.php";
-const REFRESH_CACHE = process.argv.includes("--refresh");
+const WIKIWIKI_56_URL = "https://wikiwiki.jp/kancolle/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-6";
+const COMPILE_EXISTING = process.argv.includes("--compile-existing");
 const NORMAL_MAP_IDS = [
   11, 12, 13, 14, 15, 16,
   21, 22, 23, 24, 25,
   31, 32, 33, 34, 35,
   41, 42, 43, 44, 45,
-  51, 52, 53, 54, 55,
+  51, 52, 53, 54, 55, 56,
   61, 62, 63, 64, 65,
   71, 72, 73, 74, 75
 ];
@@ -43,11 +51,16 @@ const SHIP_TYPE_TOKENS = new Set([
 const SHIP_CLASS_ALIASES = {
   大鹰级: [76]
 };
+const session = await createFrozenSourceSession("routing", {
+  generator: "scripts/generate-routing-data.mjs",
+  userAgent: "kancolle-local-routing-generator",
+  requireAllLockedSources: !COMPILE_EXISTING
+});
 
-await main();
+if (COMPILE_EXISTING) await compileExistingSnapshot();
+else await main();
 
 async function main() {
-  await mkdir(CACHE_DIR, { recursive: true });
   const [topology, shipData, kc3Nodes] = await Promise.all([
     fetchJsonCached("edge.json", EDGE_URL),
     fetchJsonCached("ship.json", SHIP_URL),
@@ -60,7 +73,9 @@ async function main() {
     process.stdout.write(`\rGenerating routing data ${mapId}...`);
     const areaId = Math.floor(mapId / 10);
     const mapNo = mapId % 10;
-    const page = `${AREA_TITLES[areaId]}/${areaId}-${mapNo}/带路条件`;
+    const page = mapId === 56
+      ? `${AREA_TITLES[areaId]}/${areaId}-${mapNo}`
+      : `${AREA_TITLES[areaId]}/${areaId}-${mapNo}/带路条件`;
     const params = new URLSearchParams({
       action: "parse",
       page,
@@ -70,9 +85,18 @@ async function main() {
     });
     const response = await fetchJsonCached(`wiki-${mapId}.json`, `${WIKI_API}?${params}`);
     if (!response.parse?.wikitext) throw new Error(`Missing routing wiki page for ${mapId}`);
+    if (mapId === 56) {
+      const published = await fetchTextCached("wikiwiki-56.html", WIKIWIKI_56_URL);
+      assertFiveSixRoutingEvidence(published);
+    }
 
     const edges = Object.entries(topology[String(mapId)] ?? topology[mapId] ?? {})
-      .map(([no, pair]) => ({ no: Number(no), from: normalizePoint(pair[0]), to: normalizePoint(pair[1]) }))
+      .map(([no, pair]) => ({
+        no: Number(no),
+        from: normalizeTopologyPoint(mapId, pair[0]),
+        to: normalizeTopologyPoint(mapId, pair[1])
+      }))
+      .filter((edge) => edge.from !== edge.to)
       .sort((left, right) => left.no - right.no);
     if (edges.length === 0) throw new Error(`Missing topology for map ${mapId}`);
 
@@ -84,6 +108,11 @@ async function main() {
     for (const [from, outgoing] of outgoingByPoint) {
       if (outgoing.length === 1) {
         branches[from] = [{ to: outgoing[0].to, source: "single outgoing edge" }];
+        continue;
+      }
+
+      if (mapId === 56) {
+        branches[from] = fiveSixRoutingRules(from);
         continue;
       }
 
@@ -116,7 +145,7 @@ async function main() {
       source: `${WIKI_API}?${params}`,
       edges,
       nodes: buildNodeMetadata(mapId, edges, kc3Nodes),
-      branches
+      branches: compileBranches(mapId, Number(response.parse.revid ?? 0), branches)
     };
     validateMap(map);
     maps.push(map);
@@ -124,11 +153,40 @@ async function main() {
 
   process.stdout.write("\n");
   await writeFile(OUTPUT_PATH, `${JSON.stringify({
-    generatedAt: new Date().toISOString(),
+    generatedAt: session.generatedAt,
     sources: { topology: EDGE_URL, ships: SHIP_URL, nodeMarkers: KC3_NODES_URL, routingWiki: WIKI_API },
     maps
   })}\n`);
+  await session.finalize({
+    repositoryRevisions: { kancolleData: KANCOLLE_DATA_COMMIT, kc3Kai: KC3_COMMIT }
+  });
   console.log(`Generated ${path.relative(ROOT, OUTPUT_PATH)} (${maps.length} maps)`);
+}
+
+async function compileExistingSnapshot() {
+  const generated = JSON.parse(await readFile(OUTPUT_PATH, "utf8"));
+  const { normalRoutingMaps } = await import("../src/master/routing-data.ts");
+  generated.maps = normalRoutingMaps();
+  await writeFile(OUTPUT_PATH, `${JSON.stringify(generated)}\n`);
+  console.log(`Compiled typed routing predicates in ${path.relative(ROOT, OUTPUT_PATH)}`);
+}
+
+function compileBranches(mapId, revision, branches) {
+  return Object.fromEntries(Object.entries(branches).map(([from, rules]) => [
+    from,
+    rules.map((rule, ruleIndex) => {
+      const evidence = rule.evidence
+        ? { ...rule.evidence, revision }
+        : inferRoutingRuleEvidence(rule, revision);
+      if (!rule.when) return { ...rule, evidence };
+      const diagnostics = routingPredicateDiagnostics(rule.when);
+      if (diagnostics.length > 0) {
+        const detail = diagnostics.map((diagnostic) => diagnostic.term).join(", ");
+        throw new Error(`Map ${mapId} ${from}[${ruleIndex}] has uncompiled routing term(s): ${detail}`);
+      }
+      return { ...rule, when: compileRoutingPredicate(rule.when), evidence };
+    })
+  ]));
 }
 
 function buildNodeMetadata(mapId, edges, kc3Nodes) {
@@ -421,6 +479,7 @@ function normalizeShipName(value) {
 }
 
 function parseDestination(mapId, from, outgoing, text) {
+  if (/目前没有去[A-Z]的记录/.test(text)) return null;
   if (mapId === 64 && from === "Start" && /从右出发/.test(text)) return { to: "M" };
   if (mapId === 65 && from === "Start" && /从1出发/.test(text)) return { to: "A" };
   if (mapId === 65 && from === "Start" && /从2出发/.test(text)) return { to: "B" };
@@ -431,7 +490,10 @@ function parseDestination(mapId, from, outgoing, text) {
     .filter(([to]) => outgoing.includes(to));
   if (percentages.length >= 2) return { weights: Object.fromEntries(percentages) };
 
-  const random = routeText.match(/随机去(.+)/);
+  // Only consume the immediate destination list.  Later prose can contain
+  // fleet-type tokens such as CV; treating every A-Z token in the remainder
+  // as a map point previously turned "随机去I/G，概率可能与CV系有关" into I/G/C.
+  const random = routeText.match(/随机去\s*([A-Z](?:[\/、,，][A-Z])*)/);
   if (random) {
     const destinations = [...new Set([...random[1].matchAll(/[A-Z]/g)].map((match) => match[0]).filter((to) => outgoing.includes(to)))];
     if (destinations.length === 1) return { to: destinations[0], chance: 0.5 };
@@ -452,10 +514,194 @@ function parseDestination(mapId, from, outgoing, text) {
 function destinationCondition(text) {
   return text
     .replace(/[：:]?\s*(?:约)?\d+(?:\.\d+)?\s*%\s*去[A-Z]/g, "")
-    .replace(/[：:]?\s*随机去(?:[A-Z](?:[\/、,，]|$))+/g, "")
+    .replace(/[：:]?\s*随机去[A-Z](?:[\/、,，][A-Z])*(?:[？?])?/g, "")
     .replace(/\s*去[A-Z].*$/g, "")
     .replace(/[：:，,；;]\s*$/, "")
     .trim();
+}
+
+/**
+ * 5-6 was published after the pinned Chinese route-subpage snapshot and that
+ * subpage is still a red link.  Keep its Japanese rules explicit and typed so
+ * an absent translation cannot silently turn every fork into a coin flip.
+ * The two public guide LoS values are deliberately labelled inferred.
+ */
+function fiveSixRoutingRules(from) {
+  const exact = (rule, source) => ({
+    ...rule,
+    source,
+    evidence: { level: "exact", source: WIKIWIKI_56_URL }
+  });
+  const inferred = (rule, source) => ({
+    ...rule,
+    source,
+    evidence: { level: "inferred", source: `${WIKIWIKI_56_URL} (${source})` }
+  });
+  const count = (terms, expected) => ({
+    countExpressions: [{ terms: terms.map((shipType) => ({ shipType })), count: expected }]
+  });
+  const all = (...predicates) => ({ all: predicates });
+  const any = (...predicates) => ({ any: predicates });
+  const slow = { not: { speedAtLeast: "fast" } };
+  const regularCarrier = (expected) => count(["CV", "CVB"], expected);
+
+  const rules = {
+    Start: [
+      exact({
+        when: all(
+          { phase: { gte: 3 } },
+          {
+            not: any(
+              all(count(["BB系"], { gte: 2 }), slow),
+              count(["AV", "LHA"], { gte: 1 })
+            )
+          }
+        ),
+        to: "I"
+      }, "5-6 unlocked start-2 selection"),
+      exact({ when: all(regularCarrier({ eq: 0 }), count(["DD"], { gte: 4 })), to: "A" }, "5-6 start-1: no regular carrier and DD>=4"),
+      exact({ when: all(count(["LHA"], { gte: 1 }), count(["DD"], { gte: 2 })), to: "A" }, "5-6 start-1: LHA>=1 and DD>=2"),
+      exact({ when: all(count(["BB系"], { gte: 2 }), count(["DD"], { lte: 2 })), to: "A1" }, "5-6 start-1: BB family>=2 and DD<=2"),
+      exact({ when: all(regularCarrier({ eq: 0 }), count(["DD"], { gte: 2 })), to: "A2" }, "5-6 start-1: no regular carrier and DD>=2"),
+      exact({ to: "A1" }, "5-6 start-1 fallback")
+    ],
+    A: [
+      exact({ when: all(count(["CA系"], { gte: 1 }), slow), to: "B" }, "5-6 A: CA family with a slow ship"),
+      exact({
+        when: all(
+          count(["BB系", "CV", "CVB"], { eq: 0 }),
+          { namedShips: { "あきつ丸": { eq: 0 } } }
+        ),
+        to: "C2"
+      }, "5-6 A: no BB family, regular carrier, or Akitsumaru"),
+      exact({ to: "B" }, "5-6 A fallback")
+    ],
+    A2: [
+      exact({
+        when: all(
+          { speedAtLeast: "fast" },
+          regularCarrier({ eq: 0 }),
+          count(["BB系", "CVL", "CA系"], { lte: 2 }),
+          count(["CA系"], { lte: 1 }),
+          any(
+            all(count(["CL"], { gte: 1 }), count(["DD"], { gte: 2 })),
+            count(["DD"], { gte: 3 })
+          )
+        ),
+        to: "C"
+      }, "5-6 A2 published fast composition"),
+      exact({ to: "B" }, "5-6 A2 fallback")
+    ],
+    B: [
+      exact({ when: all(count(["BBV"], { eq: 2 }), count(["DD"], { eq: 4 })), to: "C2" }, "5-6 B: BBV2 DD4"),
+      exact({
+        when: all(
+          count(["BB系", "CVL"], { lte: 1 }),
+          regularCarrier({ eq: 0 }),
+          any(
+            { speedAtLeast: "fast" },
+            count(["BB系", "CVL"], { eq: 0 }),
+            count(["DD"], { lte: 3 })
+          )
+        ),
+        to: "C"
+      }, "5-6 B published composition"),
+      exact({ to: "C1" }, "5-6 B fallback")
+    ],
+    C1: [
+      exact({ when: { visited: "A" }, to: "C2" }, "5-6 C1 after A"),
+      exact({ to: "C" }, "5-6 C1 fallback")
+    ],
+    E: [
+      inferred({ when: { los: { coefficient: 4, gte: 57 } }, to: "G" }, "guide threshold Cn4>=57"),
+      inferred({ to: "F" }, "guide threshold Cn4<57")
+    ],
+    I: [exact({ select: ["J", "O"] }, "5-6 I active route selection")],
+    J: [
+      exact({ when: all(slow, count(["BB系", "CV", "CVB"], { gte: 3 })), to: "K1" }, "5-6 J slow heavy fleet"),
+      exact({
+        when: any(
+          all(count(["CL"], { gte: 1 }), count(["DD"], { gte: 2 })),
+          count(["DD"], { gte: 3 })
+        ),
+        to: "K"
+      }, "5-6 J light escort composition"),
+      exact({ to: "K1" }, "5-6 J fallback")
+    ],
+    K: [
+      exact({
+        when: all(
+          { speedAtLeast: "fast" },
+          count(["BB系", "CV系"], { lte: 2 }),
+          count(["CL"], { gte: 1 }),
+          count(["DD"], { gte: 2 })
+        ),
+        to: "L"
+      }, "5-6 K published fast escort composition"),
+      exact({ to: "K2" }, "5-6 K fallback")
+    ],
+    L: [
+      inferred({ when: { los: { coefficient: 4, gte: 80 } }, to: "N" }, "guide threshold Cn4>=80"),
+      inferred({ to: "M" }, "guide threshold Cn4<80")
+    ],
+    O: [exact({ select: ["P", "Q"] }, "5-6 O active route selection")],
+    Q: [
+      exact({ when: { phase: { lte: 3 } }, to: "Q2" }, "5-6 Q before phase-2 gauge clear"),
+      exact({ when: { speedAtLeast: "fastPlus" }, to: "W" }, "5-6 Q fast+ fleet"),
+      exact({ when: all(count(["CL"], { gte: 1 }), count(["DD"], { gte: 3 })), to: "W" }, "5-6 Q CL>=1 DD>=3"),
+      exact({
+        when: all(
+          count(["BB系", "CV", "CVB"], { lte: 3 }),
+          any(
+            count(["BB系", "CV", "CVB"], { lte: 2 }),
+            all(count(["BB系", "CV", "CVB"], { eq: 3 }), count(["CL"], { gte: 1 }))
+          ),
+          count(["DD"], { gte: 2 })
+        ),
+        to: "U"
+      }, "5-6 Q published third-gauge composition"),
+      exact({ to: "Q2" }, "5-6 Q fallback")
+    ],
+    Q1: [
+      inferred({ when: { los: { coefficient: 4, lt: 80 } }, to: "S" }, "conservative Cn4<80 LoS failure"),
+      exact({ when: all(regularCarrier({ lte: 1 }), count(["DD"], { gte: 2 })), to: "T" }, "5-6 Q1 regular carrier<=1 DD>=2"),
+      exact({ to: "Q2" }, "5-6 Q1 fallback")
+    ],
+    Q2: [
+      exact({ when: { visited: "P" }, to: "T" }, "5-6 Q2 after P"),
+      exact({ to: "V" }, "5-6 Q2 fallback")
+    ],
+    V: [
+      exact({
+        when: all(
+          { speedAtLeast: "fast" },
+          count(["BB系", "CV系"], { lte: 3 }),
+          count(["CV系"], { lte: 2 }),
+          count(["DD"], { gte: 2 })
+        ),
+        to: "X"
+      }, "5-6 V published fast composition"),
+      exact({ to: "W" }, "5-6 V fallback")
+    ],
+    X: [
+      inferred({ when: { los: { coefficient: 4, gte: 88 } }, to: "Z" }, "guide threshold Cn4>=88"),
+      inferred({ to: "Y" }, "guide threshold Cn4<88")
+    ]
+  };
+  const selected = rules[from];
+  if (!selected) throw new Error(`Missing explicit 5-6 routing rules at ${from}`);
+  return selected;
+}
+
+function normalizeTopologyPoint(mapId, value) {
+  const point = normalizePoint(value);
+  return mapId === 56 && /^Start [12]$/.test(point) ? "Start" : point;
+}
+
+function assertFiveSixRoutingEvidence(html) {
+  const required = ["スタート2開放前", "高速+以上", "第二ゲージ破壊前", "駆逐2隻以上"];
+  const missing = required.filter((token) => !html.includes(token));
+  if (missing.length > 0) throw new Error(`5-6 routing evidence is missing: ${missing.join(", ")}`);
 }
 
 function oneOneRules() {
@@ -467,6 +713,130 @@ function oneOneRules() {
 }
 
 function applyKnownRuleCorrections(mapId, from, rules) {
+  if (mapId === 12 && from === "Start") {
+    return rules.flatMap((rule) => rule.when?.wiki === "舰队船数" && rule.source?.startsWith("舰队船数去A概率")
+      ? [
+          countTableRule("fleet", { gte: 1, lte: 3 }, { A: 70, B: 30 }, rule.source),
+          countTableRule("fleet", { eq: 4 }, { A: 60, B: 40 }, rule.source),
+          countTableRule("fleet", { eq: 5 }, { A: 50, B: 50 }, rule.source),
+          countTableRule("fleet", { eq: 6 }, { A: 40, B: 60 }, rule.source)
+        ]
+      : [rule]);
+  }
+  if (mapId === 23 && from === "D") {
+    return rules.flatMap((rule) => rule.when?.wiki === "DD+DE数量" && rule.source?.startsWith("DD+DE数量 去F概率")
+      ? [
+          countTableRule("DD+DE", { lte: 1 }, { F: 65, G: 35 }, rule.source),
+          countTableRule("DD+DE", { eq: 2 }, { F: 50, G: 50 }, rule.source),
+          countTableRule("DD+DE", { eq: 3 }, { F: 35, G: 65 }, rule.source),
+          countTableRule("DD+DE", { gte: 4 }, { F: 20, G: 80 }, rule.source)
+        ]
+      : [rule]);
+  }
+  if (mapId === 23 && from === "G") {
+    return rules.flatMap((rule) => rule.when?.wiki === "DD+DE数量" && rule.source?.startsWith("DD+DE数量 去I概率")
+      ? [
+          countTableRule("DD+DE", { eq: 0 }, { I: 0, K: 100 }, rule.source),
+          countTableRule("DD+DE", { gte: 1, lte: 2 }, { I: 35, K: 65 }, rule.source),
+          countTableRule("DD+DE", { gte: 3 }, { I: 45, K: 55 }, rule.source)
+        ]
+      : [rule]);
+  }
+  if (mapId === 42 && from === "Start") {
+    return rules.flatMap((rule) => rule.when?.wiki === "DD+DE数量" && rule.source?.startsWith("DD+DE数量 去A概率")
+      ? [
+          countTableRule("DD+DE", { eq: 0 }, { A: 9.96, B: 90.04 }, rule.source),
+          countTableRule("DD+DE", { eq: 1 }, { A: 17.2, B: 82.8 }, rule.source),
+          countTableRule("DD+DE", { eq: 2 }, { A: 57.72, B: 42.28 }, rule.source),
+          countTableRule("DD+DE", { eq: 3 }, { A: 71.69, B: 28.31 }, rule.source),
+          countTableRule("DD+DE", { eq: 4 }, { A: 86.06, B: 13.94 }, rule.source),
+          countTableRule("DD+DE", { eq: 5 }, { A: 91.44, B: 8.56 }, rule.source),
+          countTableRule("DD+DE", { eq: 6 }, { A: 91.14, B: 8.86 }, rule.source)
+        ]
+      : [rule]);
+  }
+  if (mapId === 25 && from === "J") {
+    return rules.map((rule) => rule.source?.startsWith("42~49之间随机去H")
+      ? {
+          ...rule,
+          when: { los: { coefficient: 1, gte: 42, lt: 49 } },
+          evidence: { level: "fallback", source: `${rule.source} (published monotonic tendency, no exact probability)` }
+        }
+      : rule);
+  }
+  if (mapId === 42 && from === "G") {
+    return rules.filter((rule) => !rule.source?.includes("另有7条"));
+  }
+  if (mapId === 44 && from === "E") {
+    return rules.map((rule) => {
+      if (rule.source?.includes("SS系>=5(4?)")) return {
+          ...rule,
+          when: {
+            countExpressions: [
+              { terms: [{ shipType: "DD" }, { shipType: "DE" }], count: { lte: 1 } },
+              { terms: [{ shipType: "SS系" }], count: { gte: 5 } }
+            ]
+          },
+          evidence: { level: "inferred", source: `${rule.source} (conservative threshold 5; source notes possible 4)` }
+        };
+      if (rule.source?.includes("其余随机去I/G")) return {
+        ...rule,
+        weights: { I: 1, G: 1 },
+        evidence: {
+          level: "fallback",
+          source: `${rule.source} (destinations published; exact probability unknown)`
+        }
+      };
+      return rule;
+    });
+  }
+  if (mapId === 51 && from === "G") {
+    return rules.map((rule) => rule.source?.includes("[高速+]或以上")
+      ? {
+          ...rule,
+          when: {
+            all: [
+              { shipTypes: { "CA系": { gte: 2 } } },
+              { speedAtLeast: "fastPlus" }
+            ]
+          }
+        }
+      : rule);
+  }
+  if (mapId === 52 && from === "G") {
+    return rules.map((rule) => rule.source?.startsWith("随机去J/L")
+      ? {
+          ...rule,
+          when: undefined,
+          evidence: { level: "fallback", source: `${rule.source} (no published exact probability; equal deterministic routing)` }
+        }
+      : rule);
+  }
+  if (mapId === 52 && from === "L") {
+    return rules.filter((rule) => !rule.source?.includes("目前没有去N的记录"));
+  }
+  if (mapId === 53 && from === "G") {
+    return rules.map((rule) => rule.source?.startsWith("低速BB>=2")
+      ? {
+          ...rule,
+          when: { shipTypeSpeedCounts: [{ shipType: "BB", speed: "slow", count: { gte: 2 } }] }
+        }
+      : rule);
+  }
+  if (mapId === 53 && from === "J") {
+    return rules.map((rule) => rule.source?.includes("DD<=1 随机去L/N")
+      ? { ...rule, when: { wiki: "CVL=1 且 DD<=1" } }
+      : rule);
+  }
+  if (mapId === 62 && from === "H") {
+    return rules.map((rule) => rule.source?.includes("样本太少索敌边界不明")
+      ? {
+          ...rule,
+          when: { los: { coefficient: 3, gte: 40 } },
+          evidence: { level: "inferred", source: `${rule.source} (provisional Cn3 LoS >= 40 boundary)` }
+        }
+      : rule);
+  }
   if (mapId === 75 && from === "F") {
     return [
       { when: { phase: { lte: 2 } }, to: "G", source: "7-5 phases 1-2 use the western route" },
@@ -539,6 +909,21 @@ function applyKnownRuleCorrections(mapId, from, rules) {
   return rules;
 }
 
+function countTableRule(expression, count, weights, source) {
+  return {
+    when: expression === "fleet"
+      ? { fleetSize: count }
+      : {
+          countExpressions: [{
+            terms: [{ shipType: "DD" }, { shipType: "DE" }],
+            count
+          }]
+        },
+    weights,
+    source
+  };
+}
+
 function validateMap(map) {
   const edgeKeys = new Set(map.edges.map((edge) => `${edge.from}:${edge.to}`));
   for (const [from, rules] of Object.entries(map.branches)) {
@@ -595,17 +980,51 @@ function clearDeeper(map, depth) {
 }
 
 async function fetchJsonCached(filename, url) {
-  const cachePath = path.join(CACHE_DIR, filename);
-  if (!REFRESH_CACHE) {
-    try {
-      return JSON.parse(await readFile(cachePath, "utf8"));
-    } catch {
-      // Fetch below.
+  const repository = filename === "edge.json" || filename === "ship.json" || filename === "kc3-nodes.json";
+  const revision = filename === "kc3-nodes.json" ? KC3_COMMIT : KANCOLLE_DATA_COMMIT;
+  const upstream = filename === "kc3-nodes.json"
+    ? `https://github.com/KC3Kai/KC3Kai/tree/${KC3_COMMIT}`
+    : `https://github.com/kcwiki/kancolle-data/tree/${KANCOLLE_DATA_COMMIT}`;
+  return session.readJson(filename, url, repository
+    ? {
+        revision,
+        evidence: "exact",
+        license: {
+          spdx: filename === "kc3-nodes.json" ? "MIT" : "NOASSERTION",
+          url: upstream,
+          note: "Pinned community repository snapshot"
+        }
+      }
+    : {
+        evidence: "exact",
+        parameters: routingWikiParameters(url),
+        license: {
+          spdx: "CC-BY-NC-SA-3.0",
+          url: "https://zh.kcwiki.cn/wiki/%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E7%89%88%E6%9D%83",
+          note: "Per-page revision is retained in both the raw response and generated rules"
+        }
+      });
+}
+
+async function fetchTextCached(filename, url) {
+  return session.readText(filename, url, {
+    evidence: "exact",
+    parameters: { page: "南方海域/5-6", locale: "ja-JP" },
+    license: {
+      spdx: "NOASSERTION",
+      url: "https://wikiwiki.jp/ppolicy",
+      note: "Frozen published route table; upstream terms retained for manual review"
     }
-  }
-  const response = await fetch(url, { headers: { "user-agent": "kancolle-local-offline-api" } });
-  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
-  const body = await response.text();
-  await writeFile(cachePath, body);
-  return JSON.parse(body);
+  });
+}
+
+function routingWikiParameters(url) {
+  const parsed = new URL(url);
+  return {
+    action: parsed.searchParams.get("action"),
+    page: parsed.searchParams.get("page"),
+    prop: parsed.searchParams.get("prop"),
+    format: parsed.searchParams.get("format"),
+    formatversion: parsed.searchParams.get("formatversion")
+  };
 }

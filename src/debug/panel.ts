@@ -271,19 +271,19 @@ export function renderDebugPanel(): string {
         <div class="material-grid">
           <div class="material-field">
             <label for="material-fuel">Fuel</label>
-            <input id="material-fuel" type="number" min="0" max="1000000" step="1">
+            <input id="material-fuel" type="number" min="0" max="350000" step="1">
           </div>
           <div class="material-field">
             <label for="material-ammo">Ammo</label>
-            <input id="material-ammo" type="number" min="0" max="1000000" step="1">
+            <input id="material-ammo" type="number" min="0" max="350000" step="1">
           </div>
           <div class="material-field">
             <label for="material-steel">Steel</label>
-            <input id="material-steel" type="number" min="0" max="1000000" step="1">
+            <input id="material-steel" type="number" min="0" max="350000" step="1">
           </div>
           <div class="material-field">
             <label for="material-bauxite">Bauxite</label>
-            <input id="material-bauxite" type="number" min="0" max="1000000" step="1">
+            <input id="material-bauxite" type="number" min="0" max="350000" step="1">
           </div>
           <button class="btn-set" onclick="setBasicMaterials()">Set</button>
         </div>

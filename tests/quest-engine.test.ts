@@ -65,6 +65,79 @@ describe("quest condition engine", () => {
     expect(evaluateQuest(sortie, save, withProgress(emptySortieState, correctMap))).toMatchObject({ achieved: true });
   });
 
+  it("only advances expedition progress for a successful matching mission", () => {
+    const save = store.getSave();
+    const quest = QUEST_BY_ID.get(405)!;
+    let state = questState(quest.id);
+
+    state = withProgress(state, advanceQuestProgress(quest, save, state, {
+      kind: "expedition",
+      missionId: 1,
+      success: true
+    }));
+    expect(evaluateQuest(quest, save, state)).toMatchObject({ achieved: false, progressFlag: 0 });
+
+    state = withProgress(state, advanceQuestProgress(quest, save, state, {
+      kind: "expedition",
+      missionId: 30,
+      success: false
+    }));
+    expect(evaluateQuest(quest, save, state)).toMatchObject({ achieved: false, progressFlag: 0 });
+
+    state = withProgress(state, advanceQuestProgress(quest, save, state, {
+      kind: "expedition",
+      missionId: 30,
+      success: true
+    }));
+    expect(evaluateQuest(quest, save, state)).toMatchObject({ achieved: true, progressFlag: 0 });
+  });
+
+  it("supports display IDs, alternative mission IDs, and independent expedition targets", () => {
+    const save = store.getSave();
+    const displayIdQuest = expeditionQuest(910427, [{ times: 1, id: "A1" }]);
+    const displayIdState = withProgress(
+      questState(displayIdQuest.id),
+      advanceQuestProgress(displayIdQuest, save, questState(displayIdQuest.id), {
+        kind: "expedition",
+        missionId: 100,
+        success: true
+      })
+    );
+    expect(evaluateQuest(displayIdQuest, save, displayIdState)).toMatchObject({ achieved: true });
+
+    const alternativeQuest = expeditionQuest(910410, [{ times: 2, id: [37, 38] }]);
+    let alternativeState = questState(alternativeQuest.id);
+    alternativeState = withProgress(alternativeState, advanceQuestProgress(alternativeQuest, save, alternativeState, {
+      kind: "expedition",
+      missionId: 37,
+      success: true
+    }));
+    alternativeState = withProgress(alternativeState, advanceQuestProgress(alternativeQuest, save, alternativeState, {
+      kind: "expedition",
+      missionId: 38,
+      success: true
+    }));
+    expect(evaluateQuest(alternativeQuest, save, alternativeState)).toMatchObject({ achieved: true });
+
+    const sequenceQuest = expeditionQuest(910420, [
+      { times: 1, id: 26 },
+      { times: 1, id: 35 }
+    ]);
+    let sequenceState = questState(sequenceQuest.id);
+    sequenceState = withProgress(sequenceState, advanceQuestProgress(sequenceQuest, save, sequenceState, {
+      kind: "expedition",
+      missionId: 26,
+      success: true
+    }));
+    expect(evaluateQuest(sequenceQuest, save, sequenceState)).toMatchObject({ achieved: false, progressFlag: 1 });
+    sequenceState = withProgress(sequenceState, advanceQuestProgress(sequenceQuest, save, sequenceState, {
+      kind: "expedition",
+      missionId: 35,
+      success: true
+    }));
+    expect(evaluateQuest(sequenceQuest, save, sequenceState)).toMatchObject({ achieved: true });
+  });
+
   it("combines and/or/then requirement trees with independent branch progress", () => {
     const save = store.getSave();
     const andQuest = syntheticQuest("and", [
@@ -185,5 +258,16 @@ function syntheticQuest(category: "and" | "or" | "then", list: QuestDefinition["
     rewards: [],
     prerequisites: [],
     requirements: { category, list }
+  };
+}
+
+function expeditionQuest(id: number, objects: unknown[]): QuestDefinition {
+  return {
+    ...syntheticQuest("and", []),
+    id,
+    wikiId: `D-${id}`,
+    title: `expedition-${id}`,
+    detail: `expedition-${id}`,
+    requirements: { category: "expedition", objects }
   };
 }

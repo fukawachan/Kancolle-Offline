@@ -29,8 +29,9 @@ const REQUIRED_MASTER_KEYS = [
 
 describe("expedition data contract", () => {
   it("contains the complete current mission master set", () => {
-    expect(EXPEDITION_MASTERS).toHaveLength(63);
-    expect(new Set(EXPEDITION_MASTERS.map((mission) => mission.api_id)).size).toBe(63);
+    expect(EXPEDITION_MASTERS).toHaveLength(65);
+    expect(new Set(EXPEDITION_MASTERS.map((mission) => mission.api_id)).size).toBe(65);
+    expect(EXPEDITION_MASTERS.map((mission) => mission.api_id)).toEqual(expect.arrayContaining([301, 302]));
 
     for (const mission of EXPEDITION_MASTERS) {
       for (const key of REQUIRED_MASTER_KEYS) {
@@ -50,6 +51,10 @@ describe("expedition data contract", () => {
       expect(definition.rewards.materials).toHaveLength(4);
       expect(definition.requirementsText).toEqual(expect.any(String));
       expect(definition.shipGroups).toEqual(expect.any(Array));
+      expect(
+        definition.shipGroups.every((group) => group.count <= definition.minimumShips),
+        `expedition ${definition.id} contains an impossible composition count`
+      ).toBe(true);
       expect(definition.statRequirements).toEqual(expect.any(Object));
     }
   });

@@ -1,0 +1,54 @@
+{
+  "domain": "improvement",
+  "generatedAt": "2026-07-12T13:23:48.841Z",
+  "generator": "scripts/generate-improvement-data.mjs",
+  "repositoryRevisions": {
+    "kc3Kai": "27208e9b0f22fa6e3d98bd61c1873e97a85a5faa"
+  },
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "bytes": 3027627,
+      "contentType": "text/html; charset=utf-8",
+      "etag": "W/\"65ea1078-2e32ab\"",
+      "evidence": "exact",
+      "file": "arsenal.html",
+      "finalUrl": "https://fleet.diablohu.com/arsenal/",
+      "lastModified": "Thu, 07 Mar 2024 19:07:36 GMT",
+      "license": {
+        "note": "Public community mechanics table; no machine-readable license was published",
+        "spdx": "NOASSERTION",
+        "url": "https://fleet.diablohu.com/arsenal/"
+      },
+      "parameters": {
+        "locale": "zh-CN",
+        "table": "all improvement recipes"
+      },
+      "requestedUrl": "https://fleet.diablohu.com/arsenal/",
+      "retrievedAt": "2026-07-12T13:23:48.841Z",
+      "revision": null,
+      "sha256": "23ec915d399e89567beb813e0779d254c6c487a97d02484a6af51c0007b47bf7",
+      "status": 200
+    },
+    {
+      "bytes": 49139,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"f7c791620619e11086a3f479167e6138606f67a2f02fed2d0b151081289d244f\"",
+      "evidence": "exact",
+      "file": "kc3-akashi.json",
+      "finalUrl": "https://raw.githubusercontent.com/KC3Kai/KC3Kai/27208e9b0f22fa6e3d98bd61c1873e97a85a5faa/src/data/akashi.json",
+      "lastModified": null,
+      "license": {
+        "note": "KC3Kai repository license",
+        "spdx": "MIT",
+        "url": "https://github.com/KC3Kai/KC3Kai/blob/27208e9b0f22fa6e3d98bd61c1873e97a85a5faa/LICENSE"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/KC3Kai/KC3Kai/27208e9b0f22fa6e3d98bd61c1873e97a85a5faa/src/data/akashi.json",
+      "retrievedAt": "2026-07-12T13:23:48.841Z",
+      "revision": "27208e9b0f22fa6e3d98bd61c1873e97a85a5faa",
+      "sha256": "cd8809bb4cdb3d2e268dde9c7cb4b3888e4ecdedd0d97bbe11cfc035cbd4f917",
+      "status": 200
+    }
+  ]
+}

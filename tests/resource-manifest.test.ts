@@ -2,12 +2,38 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildSlotMasters } from "../src/master/catalog.js";
+import {
+  buildShipMasters,
+  buildSlotMasters,
+  masterAssetClosureReport
+} from "../src/master/catalog.js";
 import { masterData } from "../src/master/data.js";
 import { normalRoutingMaps } from "../src/master/routing-data.js";
 import { createResourceManifest, resolveMappedResource } from "../src/resources/manifest.js";
 
 describe("cached resource manifest", () => {
+  it("exposes only cache-backed, known masters and reports snapshot drift", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+    const ships = buildShipMasters(manifest);
+    const slots = buildSlotMasters(manifest);
+    const report = masterAssetClosureReport(manifest);
+
+    expect(ships).toHaveLength(961);
+    expect(slots).toHaveLength(630);
+    expect(ships.some((ship) => String(ship.api_name).startsWith("Ship "))).toBe(false);
+    expect(slots.some((slot) => String(slot.api_name).startsWith("Equipment "))).toBe(false);
+    expect(report.shipMastersWithoutDisplayResources).toEqual([
+      743, 744, 745, 982, 1031, 1033, 1034, 1035, 1040
+    ]);
+    expect(report.slotMastersWithoutDisplayResources).toEqual([
+      547, 548, 569, 570, 571, 572, 573, 574, 575, 576, 577, 578, 1990
+    ]);
+    expect(report.shipResourcesWithoutMasters).toHaveLength(711);
+    expect(report.slotResourcesWithoutMasters).toEqual([]);
+    expect(new Set(report.exposedShipIds).size).toBe(report.exposedShipIds.length);
+    expect(new Set(report.exposedSlotIds).size).toBe(report.exposedSlotIds.length);
+  });
+
   it("derives ship, furniture, and BGM mappings from the cache index without writing into cache", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
 
@@ -305,13 +331,21 @@ describe("cached resource manifest", () => {
 
   it("contains every topology edge number across all normal-map resource variants", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
+    const rulesOnlyMaps: number[] = [];
 
     for (const map of normalRoutingMaps()) {
+      if (!manifest.map.spots.has(map.mapId)) {
+        rulesOnlyMaps.push(map.mapId);
+        continue;
+      }
       const spotNos = new Set((manifest.map.spots.get(map.mapId) ?? []).map((spot) => spot.no));
       for (const edge of map.edges) {
         expect(spotNos.has(edge.no), `map ${map.mapId} contains edge ${edge.no}`).toBe(true);
       }
     }
+    // 5-6 is available to the 2026 rules validator, but the bundled 6.2.3.1
+    // client predates its map assets and therefore hides it by profile.
+    expect(rulesOnlyMaps).toEqual([56]);
   });
 });
 

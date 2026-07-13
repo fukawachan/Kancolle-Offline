@@ -25,16 +25,31 @@ export type ArsenalContext = {
 export type WeightedOutcome = {
   masterId: number;
   weight: number;
+  observedCount?: number;
+  confidence95?: [number, number];
+};
+
+export type ArsenalProbabilityEvidence = {
+  level: "community-statistical" | "unsupported";
+  recipeKey: string;
+  generatedAt: string;
+  snapshot: string | string[] | null;
+  sampleSize: number;
+  method: "observed-recipe-aggregate" | "no-observed-recipe";
+  confidenceMethod: "wilson-95-per-raw-outcome" | "not-applicable";
+  missingContext: readonly string[];
 };
 
 export type ConstructionDistribution = {
-  source: "exact" | "interpolated";
+  source: "statistical" | "unsupported";
   sampleSize: number;
   outcomes: WeightedOutcome[];
+  evidence: ArsenalProbabilityEvidence;
 };
 
 export type DevelopmentDistribution = ConstructionDistribution & {
   failureWeight: number;
+  failureConfidence95?: [number, number];
 };
 
 type RecipeData = {
@@ -57,6 +72,12 @@ type EquipmentMetadata = {
 };
 
 type ArsenalData = {
+  generatedAt: string;
+  snapshots: {
+    construction?: string;
+    development?: string;
+    developmentTimeRange?: string[];
+  };
   construction: Record<string, RecipeData>;
   specialConstruction: Record<string, Record<string, { sample: number; count: number }>>;
   development: Record<string, RecipeData>;
@@ -82,17 +103,17 @@ export function constructionDistribution(
 ): ConstructionDistribution {
   const recipe = normalizeConstructionRecipe(rawRecipe);
   const key = constructionKey(recipe);
-  const exact = ARSENAL_DATA.construction[key];
-  const base = exact
-    ? distributionFromRecipe(exact)
-    : interpolateConstruction(recipe);
+  const observed = ARSENAL_DATA.construction[key];
+  if (!observed) return unsupportedConstructionDistribution(key);
+  const base = distributionFromRecipe(observed, key, "construction");
   const filtered = base.outcomes.filter((outcome) => shipAllowed(outcome.masterId, recipe.large));
   const withSpecial = addSpecialConstructionOutcomes(filtered, key, context.secretaryMasterId);
 
   return {
-    source: exact ? "exact" : "interpolated",
+    source: "statistical",
     sampleSize: base.sampleSize,
-    outcomes: normalizeOutcomes(withSpecial)
+    outcomes: normalizeOutcomes(withSpecial),
+    evidence: base.evidence
   };
 }
 
@@ -102,15 +123,14 @@ export function developmentDistribution(
 ): DevelopmentDistribution {
   const recipe = normalizeDevelopmentRecipe(rawRecipe);
   const key = developmentKey(recipe);
-  const exact = ARSENAL_DATA.development[key];
-  const base = exact
-    ? developmentFromRecipe(exact)
-    : interpolateDevelopment(recipe);
+  const observed = ARSENAL_DATA.development[key];
+  if (!observed) return unsupportedDevelopmentDistribution(key);
+  const base = developmentFromRecipe(observed, key);
   const outcomes: WeightedOutcome[] = [];
   let rejectedWeight = 0;
 
   for (const outcome of base.outcomes) {
-    if (equipmentAllowed(outcome.masterId, recipe, context, exact == null)) {
+    if (equipmentAllowed(outcome.masterId, recipe, context)) {
       outcomes.push(outcome);
     } else {
       rejectedWeight += outcome.weight;
@@ -118,10 +138,12 @@ export function developmentDistribution(
   }
 
   return {
-    source: exact ? "exact" : "interpolated",
+    source: "statistical",
     sampleSize: base.sampleSize,
     outcomes,
-    failureWeight: clampProbability(base.failureWeight + rejectedWeight)
+    failureWeight: clampProbability(base.failureWeight + rejectedWeight),
+    failureConfidence95: base.failureConfidence95,
+    evidence: base.evidence
   };
 }
 
@@ -130,7 +152,9 @@ export function rollConstruction(
   context: ArsenalContext,
   roll = Math.random()
 ) {
-  return rollOutcome(constructionDistribution(recipe, context).outcomes, roll)?.masterId ?? 9;
+  const distribution = constructionDistribution(recipe, context);
+  if (distribution.source === "unsupported") return null;
+  return rollOutcome(distribution.outcomes, roll)?.masterId ?? null;
 }
 
 export function rollDevelopment(
@@ -139,6 +163,7 @@ export function rollDevelopment(
   roll = Math.random()
 ) {
   const distribution = developmentDistribution(recipe, context);
+  if (distribution.source === "unsupported") return null;
   return rollOutcome(distribution.outcomes, roll)?.masterId ?? null;
 }
 
@@ -150,100 +175,87 @@ export function shipInitialEquipment(masterId: number) {
   return [...(ARSENAL_DATA.ships[String(masterId)]?.loadout ?? [])];
 }
 
-function distributionFromRecipe(recipe: RecipeData): ConstructionDistribution {
+function distributionFromRecipe(
+  recipe: RecipeData,
+  recipeKey: string,
+  kind: "construction" | "development"
+): ConstructionDistribution {
   return {
-    source: "exact",
+    source: "statistical",
     sampleSize: recipe.sample,
     outcomes: recipe.outcomes.map(([masterId, count]) => ({
       masterId,
-      weight: count / recipe.sample
-    }))
+      weight: count / recipe.sample,
+      observedCount: count,
+      confidence95: wilsonInterval(count, recipe.sample)
+    })),
+    evidence: statisticalEvidence(kind, recipeKey, recipe.sample)
   };
 }
 
-function developmentFromRecipe(recipe: RecipeData): DevelopmentDistribution {
-  const distribution = distributionFromRecipe(recipe);
+function developmentFromRecipe(recipe: RecipeData, recipeKey: string): DevelopmentDistribution {
+  const distribution = distributionFromRecipe(recipe, recipeKey, "development");
   const successWeight = distribution.outcomes.reduce((sum, outcome) => sum + outcome.weight, 0);
+  const successCount = recipe.outcomes.reduce((sum, [, count]) => sum + count, 0);
+  const failureCount = Math.max(0, recipe.sample - successCount);
   return {
     ...distribution,
-    failureWeight: clampProbability(1 - successWeight)
+    failureWeight: clampProbability(1 - successWeight),
+    failureConfidence95: wilsonInterval(failureCount, recipe.sample)
   };
 }
 
-function interpolateConstruction(recipe: ConstructionRecipe): ConstructionDistribution {
-  const candidates = nearestRecipes(ARSENAL_DATA.construction, constructionVector(recipe), recipe.large);
-  const mixed = mixCandidates(candidates, false);
+function unsupportedConstructionDistribution(recipeKey: string): ConstructionDistribution {
   return {
-    source: "interpolated",
-    sampleSize: mixed.sampleSize,
-    outcomes: mixed.outcomes
+    source: "unsupported",
+    sampleSize: 0,
+    outcomes: [],
+    evidence: unsupportedEvidence("construction", recipeKey)
   };
 }
 
-function interpolateDevelopment(recipe: DevelopmentRecipe): DevelopmentDistribution {
-  const candidates = nearestRecipes(ARSENAL_DATA.development, developmentVector(recipe));
-  const mixed = mixCandidates(candidates, true);
-  const successWeight = mixed.outcomes.reduce((sum, outcome) => sum + outcome.weight, 0);
+function unsupportedDevelopmentDistribution(recipeKey: string): DevelopmentDistribution {
   return {
-    source: "interpolated",
-    sampleSize: mixed.sampleSize,
-    outcomes: mixed.outcomes,
-    failureWeight: clampProbability(1 - successWeight)
+    ...unsupportedConstructionDistribution(recipeKey),
+    failureWeight: 0,
+    evidence: unsupportedEvidence("development", recipeKey)
   };
 }
 
-function nearestRecipes(
-  table: Record<string, RecipeData>,
-  target: number[],
-  large?: boolean
-) {
-  return Object.entries(table)
-    .map(([key, data]) => {
-      const values = key.split("-").map(Number);
-      if (large != null && candidateIsLarge(values) !== large) return null;
-      return {
-        data,
-        distance: recipeDistance(target, values),
-      };
-    })
-    .filter((candidate): candidate is { data: RecipeData; distance: number } => candidate != null)
-    .sort((a, b) => a.distance - b.distance || b.data.sample - a.data.sample)
-    .slice(0, 3);
+function statisticalEvidence(
+  kind: "construction" | "development",
+  recipeKey: string,
+  sampleSize: number
+): ArsenalProbabilityEvidence {
+  return {
+    level: "community-statistical",
+    recipeKey,
+    generatedAt: ARSENAL_DATA.generatedAt,
+    snapshot: kind === "construction"
+      ? ARSENAL_DATA.snapshots.construction ?? null
+      : ARSENAL_DATA.snapshots.developmentTimeRange ?? ARSENAL_DATA.snapshots.development ?? null,
+    sampleSize,
+    method: "observed-recipe-aggregate",
+    confidenceMethod: "wilson-95-per-raw-outcome",
+    missingContext: ["server", "date", "secretary-level", "headquarters-level-distribution"]
+  };
 }
 
-function mixCandidates(
-  candidates: { data: RecipeData; distance: number }[],
-  includeFailure: boolean
-) {
-  const weights = candidates.map(({ data, distance }) =>
-    Math.min(1000, data.sample) / Math.pow(0.05 + distance, 2)
-  );
-  const totalCandidateWeight = weights.reduce((sum, weight) => sum + weight, 0) || 1;
-  const outcomes = new Map<number, number>();
-  let sampleSize = 0;
-
-  candidates.forEach(({ data }, index) => {
-    const blendWeight = weights[index] / totalCandidateWeight;
-    sampleSize += data.sample * blendWeight;
-    for (const [masterId, count] of data.outcomes) {
-      outcomes.set(masterId, (outcomes.get(masterId) ?? 0) + blendWeight * count / data.sample);
-    }
-    if (!includeFailure) {
-      const success = data.outcomes.reduce((sum, [, count]) => sum + count, 0) / data.sample;
-      if (success < 1 && success > 0) {
-        for (const [masterId, count] of data.outcomes) {
-          outcomes.set(
-            masterId,
-            (outcomes.get(masterId) ?? 0) + blendWeight * (count / data.sample) * ((1 - success) / success)
-          );
-        }
-      }
-    }
-  });
-
+function unsupportedEvidence(
+  kind: "construction" | "development",
+  recipeKey: string
+): ArsenalProbabilityEvidence {
   return {
-    sampleSize: Math.round(sampleSize),
-    outcomes: [...outcomes.entries()].map(([masterId, weight]) => ({ masterId, weight }))
+    level: "unsupported",
+    recipeKey,
+    generatedAt: ARSENAL_DATA.generatedAt,
+    snapshot: kind === "construction"
+      ? ARSENAL_DATA.snapshots.construction ?? null
+      : ARSENAL_DATA.snapshots.developmentTimeRange ?? ARSENAL_DATA.snapshots.development ?? null,
+    sampleSize: 0,
+    method: "no-observed-recipe",
+    confidenceMethod: "not-applicable",
+    missingContext: ["observed-recipe", "server", "date", "secretary", "headquarters-level"]
   };
 }
 
@@ -258,7 +270,12 @@ function addSpecialConstructionOutcomes(
     if (!allowedSecretaries.has(secretaryMasterId)) continue;
     const row = ARSENAL_DATA.specialConstruction[shipIdText]?.[recipeKey];
     if (!row || row.sample <= 0 || row.count <= 0) continue;
-    specials.push({ masterId: shipId, weight: row.count / row.sample });
+    specials.push({
+      masterId: shipId,
+      weight: row.count / row.sample,
+      observedCount: row.count,
+      confidence95: wilsonInterval(row.count, row.sample)
+    });
   }
   const specialWeight = Math.min(0.5, specials.reduce((sum, item) => sum + item.weight, 0));
   if (specialWeight <= 0) return outcomes;
@@ -272,8 +289,7 @@ function addSpecialConstructionOutcomes(
 function equipmentAllowed(
   masterId: number,
   recipe: DevelopmentRecipe,
-  context: ArsenalContext,
-  enforceTheory: boolean
+  context: ArsenalContext
 ) {
   const metadata = ARSENAL_DATA.equipment[String(masterId)];
   if (!metadata?.buildable) return false;
@@ -281,7 +297,8 @@ function equipmentAllowed(
   if (secretaryCategory(context.secretaryMasterId) === "torpedo" && CARRIER_EQUIPMENT_TYPES.has(metadata.type)) {
     return false;
   }
-  if (!enforceTheory) return true;
+  // The recipe itself is observed, but filter impossible results if the raw
+  // aggregate spans a context not represented by this local account.
   const resources = developmentVector(recipe);
   return metadata.scrap.every((scrap, index) => resources[index] >= scrap * 10);
 }
@@ -304,7 +321,7 @@ function requiredHeadquartersLevel(rarity: number) {
 
 function normalizeOutcomes(outcomes: WeightedOutcome[]) {
   const total = outcomes.reduce((sum, outcome) => sum + Math.max(0, outcome.weight), 0);
-  if (total <= 0) return [{ masterId: 9, weight: 1 }];
+  if (total <= 0) return [];
   return outcomes
     .filter((outcome) => outcome.weight > 0)
     .map((outcome) => ({ ...outcome, weight: outcome.weight / total }));
@@ -319,19 +336,17 @@ function rollOutcome(outcomes: WeightedOutcome[], rawRoll: number) {
   return undefined;
 }
 
-function recipeDistance(target: number[], candidate: number[]) {
-  const length = Math.min(target.length, candidate.length);
-  let sum = 0;
-  for (let index = 0; index < length; index += 1) {
-    const scale = Math.max(index === 4 ? 1 : 10, target[index], candidate[index]);
-    const delta = (target[index] - candidate[index]) / scale;
-    sum += delta * delta;
-  }
-  return Math.sqrt(sum);
-}
-
-function candidateIsLarge(values: number[]) {
-  return values[0] >= 1000 && values[1] >= 1000 && values[2] >= 1000 && values[3] >= 1000;
+function wilsonInterval(successes: number, sampleSize: number): [number, number] {
+  const n = Math.max(0, Math.trunc(sampleSize));
+  if (n === 0) return [0, 1];
+  const count = Math.max(0, Math.min(n, Math.trunc(successes)));
+  const p = count / n;
+  const z = 1.959963984540054;
+  const z2 = z * z;
+  const denominator = 1 + z2 / n;
+  const center = (p + z2 / (2 * n)) / denominator;
+  const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n) / denominator;
+  return [Math.max(0, center - margin), Math.min(1, center + margin)];
 }
 
 function normalizeConstructionRecipe(recipe: ConstructionRecipe): ConstructionRecipe {

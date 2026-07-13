@@ -32,6 +32,7 @@ export function validateSlotEquip(
     const slotCount = Math.max(0, Number(shipMaster.api_slot_num) || 0);
     if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= slotCount) return invalid("Invalid ship slot");
   }
+  if (targetSlot === "extra" && ship.exSlotId < 0) return invalid("Reinforcement expansion is not open");
 
   if (itemId <= 0) return valid();
 

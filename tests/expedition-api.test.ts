@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/server/app.js";
+import { SYNTHETIC_EVENT_GAMEPLAY_PROFILE } from "../src/master/gameplay-profile.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
+
+const API_TOKEN = "test-api-token-0000000000000003";
 
 describe("expedition kcsapi contract", () => {
   let tempDir: string;
@@ -12,7 +15,10 @@ describe("expedition kcsapi contract", () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-expedition-api-"));
-    store = createStateStore({ databasePath: path.join(tempDir, "save.sqlite") });
+    store = createStateStore({
+      databasePath: path.join(tempDir, "save.sqlite"),
+      allowSyntheticEvents: true
+    });
     store.registerAccount(15);
     store.changeDeckShip(2, 0, 1);
     store.changeDeckShip(2, 1, 2);
@@ -20,6 +26,8 @@ describe("expedition kcsapi contract", () => {
       cacheDir: path.resolve("cache"),
       stateStore: store,
       unknownLogPath: path.join(tempDir, "unknown.jsonl"),
+      apiToken: API_TOKEN,
+      gameplayProfile: SYNTHETIC_EVENT_GAMEPLAY_PROFILE,
     });
   });
 
@@ -34,7 +42,10 @@ describe("expedition kcsapi contract", () => {
       method: "POST",
       url: `/kcsapi/${pathname}`,
       payload: new URLSearchParams(
-        Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        {
+          api_token: API_TOKEN,
+          ...Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        }
       ).toString(),
       headers: { "content-type": "application/x-www-form-urlencoded" },
     });
@@ -48,7 +59,7 @@ describe("expedition kcsapi contract", () => {
       api_list_items: expect.any(Array),
       api_limit_time: [expect.any(Number)],
     });
-    expect(data.api_list_items).toHaveLength(63);
+    expect(data.api_list_items).toHaveLength(65);
     expect(data.api_list_items[0]).toEqual({ api_mission_id: 1, api_state: 1 });
   });
 
@@ -88,7 +99,7 @@ describe("expedition kcsapi contract", () => {
     );
 
     const activeMissionState = (await post("api_get_member/mission")).json().api_data;
-    expect(activeMissionState.api_list_items).toHaveLength(65);
+    expect(activeMissionState.api_list_items).toHaveLength(67);
     expect(activeMissionState.api_list_items).toEqual(
       expect.arrayContaining([
         { api_mission_id: 61033, api_state: 1 },
@@ -98,7 +109,7 @@ describe("expedition kcsapi contract", () => {
 
     store.setActiveEventArea(null);
     const deactivatedMissionState = (await post("api_get_member/mission")).json().api_data;
-    expect(deactivatedMissionState.api_list_items).toHaveLength(63);
+    expect(deactivatedMissionState.api_list_items).toHaveLength(65);
     expect(deactivatedMissionState.api_list_items.map((item: any) => item.api_mission_id)).not.toEqual(
       expect.arrayContaining([61033, 61034])
     );

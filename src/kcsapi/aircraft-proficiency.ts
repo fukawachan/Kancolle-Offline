@@ -10,6 +10,32 @@ export type AircraftProficiencyBattleResultInput = {
   previousCount: number;
   currentCount: number;
   mode: AircraftProficiencyBattleMode;
+  /**
+   * Non-wipe losses are not backed by an exact public formula. Callers may
+   * opt into a named statistical model; the default preserves proficiency.
+   */
+  nonWipeLossProfile?: AircraftProficiencyNonWipeLossProfile;
+  lossRoll?: number;
+};
+
+export type AircraftProficiencyNonWipeLossProfile = {
+  id: string;
+  enabled: boolean;
+  evidence: {
+    level: "missing" | "statistical-baseline";
+    source: string | null;
+  };
+  maximumPenalty: number;
+  spread: number;
+};
+
+export type AircraftProficiencyTrainingRule = {
+  typeId: number;
+  sortieGain: number;
+  evidence: {
+    level: "published-table" | "compatibility-baseline";
+    source: string;
+  };
 };
 
 export const MAX_AIRCRAFT_PROFICIENCY_EXP = 120;
@@ -35,6 +61,55 @@ const INITIAL_SKILLED_NAME_PATTERNS = [
   "352空",
   "八幡部隊"
 ];
+
+export const NO_UNVERIFIED_PROFICIENCY_LOSS: AircraftProficiencyNonWipeLossProfile = Object.freeze({
+  id: "fail-closed-no-non-wipe-loss",
+  enabled: false,
+  evidence: { level: "missing" as const, source: null },
+  maximumPenalty: 0,
+  spread: 0
+});
+
+export const STATISTICAL_PROFICIENCY_LOSS_BASELINE: AircraftProficiencyNonWipeLossProfile = Object.freeze({
+  id: "configurable-statistical-v1",
+  enabled: true,
+  evidence: {
+    level: "statistical-baseline" as const,
+    source: "local configurable baseline; not asserted as an exact server formula"
+  },
+  maximumPenalty: 20,
+  spread: 0.25
+});
+
+/**
+ * Training gain is deliberately table-driven so newly introduced aircraft
+ * types cannot silently inherit a plausible-looking value.
+ */
+export const AIRCRAFT_PROFICIENCY_TRAINING_RULES: readonly AircraftProficiencyTrainingRule[] = Object.freeze([
+  trainingRule(6, 1, "carrier fighter"),
+  trainingRule(7, 2, "carrier dive bomber"),
+  trainingRule(8, 2, "carrier torpedo bomber"),
+  trainingRule(9, 1, "carrier reconnaissance"),
+  trainingRule(10, 1, "seaplane reconnaissance"),
+  trainingRule(11, 2, "seaplane bomber"),
+  trainingRule(25, 1, "autogyro"),
+  trainingRule(26, 1, "liaison aircraft"),
+  trainingRule(41, 1, "large flying boat"),
+  trainingRule(45, 1, "seaplane fighter"),
+  trainingRule(47, 2, "land attack/patrol aircraft"),
+  trainingRule(48, 1, "land interceptor"),
+  trainingRule(49, 1, "land reconnaissance"),
+  trainingRule(53, 2, "heavy land aircraft"),
+  trainingRule(56, 1, "jet fighter", "compatibility-baseline"),
+  trainingRule(57, 2, "jet fighter-bomber", "compatibility-baseline"),
+  trainingRule(58, 2, "jet attacker", "compatibility-baseline"),
+  trainingRule(59, 1, "jet reconnaissance", "compatibility-baseline"),
+  trainingRule(60, 1, "advanced fighter", "compatibility-baseline"),
+  trainingRule(91, 2, "jet fighter-bomber II", "compatibility-baseline"),
+  trainingRule(94, 1, "carrier reconnaissance II", "compatibility-baseline")
+]);
+
+const TRAINING_RULE_BY_TYPE = new Map(AIRCRAFT_PROFICIENCY_TRAINING_RULES.map((rule) => [rule.typeId, rule] as const));
 
 export function visibleProficiency(exp: number) {
   const value = clampProficiencyExp(exp);
@@ -76,10 +151,39 @@ export function applyAircraftProficiencyBattleResult(input: AircraftProficiencyB
   const currentCount = Math.max(0, Math.trunc(Number(input.currentCount) || 0));
   if (previousCount > 0 && currentCount <= 0) return 0;
 
-  const lost = Math.max(0, previousCount - currentCount);
-  const lossPenalty = previousCount > 0 ? Math.ceil((lost / previousCount) * 20) : 0;
-  const gained = proficiencyGain(input.master);
+  const lossPenalty = aircraftProficiencyNonWipeLossPenalty({
+    previousCount,
+    currentCount,
+    profile: input.nonWipeLossProfile ?? NO_UNVERIFIED_PROFICIENCY_LOSS,
+    roll: input.lossRoll
+  });
+  const gained = aircraftProficiencyTrainingGain(input.master);
   return clampProficiencyExp(input.previousExp - lossPenalty + gained);
+}
+
+export function aircraftProficiencyTrainingGain(master: SlotMaster | undefined) {
+  if (!master || !isProficiencyAircraft(master)) return 0;
+  return TRAINING_RULE_BY_TYPE.get(slotType(master))?.sortieGain ?? 0;
+}
+
+export function aircraftProficiencyTrainingRule(master: SlotMaster | undefined) {
+  return master ? TRAINING_RULE_BY_TYPE.get(slotType(master)) : undefined;
+}
+
+export function aircraftProficiencyNonWipeLossPenalty(input: {
+  previousCount: number;
+  currentCount: number;
+  profile: AircraftProficiencyNonWipeLossProfile;
+  roll?: number;
+}) {
+  const previousCount = Math.max(0, Math.trunc(Number(input.previousCount) || 0));
+  const currentCount = Math.max(0, Math.trunc(Number(input.currentCount) || 0));
+  if (!input.profile.enabled || input.profile.evidence.level !== "statistical-baseline") return 0;
+  if (!input.profile.evidence.source || previousCount <= 0 || currentCount <= 0 || currentCount >= previousCount) return 0;
+  const lossFraction = (previousCount - currentCount) / previousCount;
+  const centeredRoll = Math.max(0, Math.min(1, Number(input.roll ?? 0.5))) - 0.5;
+  const spreadModifier = 1 + centeredRoll * 2 * Math.max(0, input.profile.spread);
+  return Math.max(0, Math.round(lossFraction * Math.max(0, input.profile.maximumPenalty) * spreadModifier));
 }
 
 export function clampProficiencyExp(value: number) {
@@ -94,13 +198,22 @@ function aircraftTypeAirPowerBonus(master: SlotMaster, rank: number) {
   return 0;
 }
 
-function proficiencyGain(master: SlotMaster) {
-  const type = slotType(master);
-  if (type === 6 || type === 45 || type === 48 || type === 56) return 1;
-  if (type === 7 || type === 8 || type === 11 || type === 47 || type === 53 || type === 57) return 2;
-  return 1;
-}
-
 function slotType(master: SlotMaster) {
   return Math.trunc(Number(master.api_type?.[2]) || 0);
+}
+
+function trainingRule(
+  typeId: number,
+  sortieGain: number,
+  label: string,
+  level: AircraftProficiencyTrainingRule["evidence"]["level"] = "published-table"
+): AircraftProficiencyTrainingRule {
+  return {
+    typeId,
+    sortieGain,
+    evidence: {
+      level,
+      source: `${label} training-gain table`
+    }
+  };
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   enemyTargetKind,
-  INSTALLATION_ENEMY_MASTER_IDS
+  INSTALLATION_ENEMY_MASTER_IDS,
+  PT_IMP_ENEMY_MASTER_IDS
 } from "../src/master/enemy-classification.js";
 
 describe("enemy target classification", () => {
@@ -19,5 +20,11 @@ describe("enemy target classification", () => {
   it("keeps submarine classification separate from surface targets", () => {
     expect(enemyTargetKind(1530, 13)).toBe("submarine");
     expect(enemyTargetKind(1501, 2)).toBe("surface");
+  });
+
+  it("classifies PT Imp groups separately for their dedicated combat modifiers", () => {
+    expect([...PT_IMP_ENEMY_MASTER_IDS]).toEqual([1637, 1638, 1639, 1640]);
+    expect(enemyTargetKind(1637, 2)).toBe("pt");
+    expect(enemyTargetKind(1640, 2)).toBe("pt");
   });
 });

@@ -178,6 +178,7 @@ function renderLocalOsapiBridgeScript() {
           body.set("api_payitem_id", String(purchase.id));
           body.set("api_price", String(purchase.price));
           body.set("api_count", String(purchase.count));
+          if (query.api_token) body.set("api_token", String(query.api_token));
 
           fetch(checkoutUrl, {
             method: "POST",

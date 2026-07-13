@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "policy": {
+    "networkDuringRebuild": false,
+    "digest": "sha256",
+    "githubSourcesRequireCommitSha": true,
+    "evidenceLevels": [
+      "exact",
+      "statistical",
+      "inferred",
+      "fallback"
+    ]
+  },
+  "artifacts": [
+    {
+      "id": "master",
+      "generatedAt": "2026-07-12T13:23:29.634Z",
+      "artifact": {
+        "path": "src/master/generated-data.ts",
+        "sha256": "1f6a805f188d63a871f1212cb1d48633e5d068bf77fe1d157666ea5f17e4b904",
+        "bytes": 1460235
+      },
+      "generator": "scripts/generate-master-data.cjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-master-data.cjs",
+          "sha256": "ad4020f81aa6095e08ad2d704a94da6e13ecf38fa781f70557269097a245bf61",
+          "bytes": 18369
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/master/sources.lock.json",
+        "sha256": "8d50e8e016e919e1bc948434c0aa0b73d2486f506ff8e92f2734a1aa5b7df055",
+        "bytes": 3324
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-master-data.cjs"
+      ]
+    },
+    {
+      "id": "quest",
+      "generatedAt": "2026-07-12T13:23:48.836Z",
+      "artifact": {
+        "path": "src/master/quest-data.generated.ts",
+        "sha256": "53f4ee93b53c62f2002ef21e0255fd6caa54bea332c2c69817d656dedced8a4f",
+        "bytes": 571003
+      },
+      "generator": "scripts/generate-quest-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-quest-data.mjs",
+          "sha256": "792c018e3b79370781b91a16e72be446b2cc0ee9004d4c6d26b0a8af5562f338",
+          "bytes": 6192
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        },
+        {
+          "path": "src/master/generated-data.ts",
+          "sha256": "1f6a805f188d63a871f1212cb1d48633e5d068bf77fe1d157666ea5f17e4b904",
+          "bytes": 1460235
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/quest/sources.lock.json",
+        "sha256": "bfa704dffa4b95c8e49cb0659468d9f66ca0d8870d3bd885404e9f0b07dd106e",
+        "bytes": 1177
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-quest-data.mjs"
+      ]
+    },
+    {
+      "id": "expedition",
+      "generatedAt": "2026-07-12T13:24:35.889Z",
+      "artifact": {
+        "path": "src/master/expedition-data.ts",
+        "sha256": "7fd80910bd99353006d33b412f994e624c05ab6c310c55dfe97cdf54ed40ce28",
+        "bytes": 163064
+      },
+      "generator": "scripts/generate-expedition-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-expedition-data.mjs",
+          "sha256": "4264d191a54eb3be9927b919811f8c0979bb466588934f4660fe9c2ad54fa645",
+          "bytes": 12483
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/expedition/sources.lock.json",
+        "sha256": "4faabb57c628b437f045bf7b9c421fa82919b01b2b5d6f90b85bb453e7206cce",
+        "bytes": 2424
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-expedition-data.mjs"
+      ]
+    },
+    {
+      "id": "shop",
+      "generatedAt": "2026-07-12T13:23:48.831Z",
+      "artifact": {
+        "path": "src/master/shop-data.ts",
+        "sha256": "42ff65609951a5176f664addf441b8db179d2d9bd706c5ad44d400be01b347bd",
+        "bytes": 15399
+      },
+      "generator": "scripts/generate-shop-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-shop-data.mjs",
+          "sha256": "21164277ae4499ee10b565c1c0c701692ad52ca759781d82e9be374863d49f04",
+          "bytes": 4250
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/shop/sources.lock.json",
+        "sha256": "8bd8dab39f3cb76b2ee7856ef6dc8140a248294f5ef0508d1be895b8b10573ad",
+        "bytes": 1266
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-shop-data.mjs"
+      ]
+    },
+    {
+      "id": "sortie",
+      "generatedAt": "2026-07-12T14:07:08.808Z",
+      "artifact": {
+        "path": "src/master/sortie-data.generated.json",
+        "sha256": "a9d3ec9a51a8e6fdd5e04f6142de7c2bf13e2cbed3936f0809fcb0242fa80134",
+        "bytes": 10004687
+      },
+      "generator": "scripts/generate-sortie-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-sortie-data.mjs",
+          "sha256": "00d51418f53810a6db744595cca5f90137712281932fa1ad832f7868a26d7e2c",
+          "bytes": 22482
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/sortie/sources.lock.json",
+        "sha256": "eecb48253672eb640de1547eb0cb3b5e8cb79082a56d2b37eca4ba2a42cd1604",
+        "bytes": 289882
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-sortie-data.mjs"
+      ]
+    },
+    {
+      "id": "routing",
+      "generatedAt": "2026-07-12T14:04:25.788Z",
+      "artifact": {
+        "path": "src/master/routing-data.generated.json",
+        "sha256": "93cd0ed16537732b2a2fbeb8667e3d5337176a715fc0c31da401f265a1f81a9d",
+        "bytes": 549701
+      },
+      "generator": "scripts/generate-routing-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-routing-data.mjs",
+          "sha256": "98affadc09f59de8a2e8d90496a4504a762a62749b6d428b660ff3c1f4ee72e7",
+          "bytes": 37751
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        },
+        {
+          "path": "src/master/routing.ts",
+          "sha256": "a15ab861504634484aa1131f26f1f4b9ada4eb8f4f27c89305ed21a4e16585b6",
+          "bytes": 34856
+        },
+        {
+          "path": "src/master/routing-data.ts",
+          "sha256": "fc6f85a3959504e9c162b49079fff1d765144cfa2b52d069d8d3f2f2a39392c3",
+          "bytes": 9715
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/routing/sources.lock.json",
+        "sha256": "9a48a07686ee57e35f1b0fd7205cba73e4f2b50eb95e0fbd6e5c64e0ddfb3b37",
+        "bytes": 49813
+      },
+      "rebuildCommand": [
+        "node_modules/.bin/tsx",
+        "scripts/generate-routing-data.mjs"
+      ]
+    },
+    {
+      "id": "map-progress",
+      "generatedAt": "2026-07-12T14:15:34.314Z",
+      "artifact": {
+        "path": "src/master/map-progress-data.generated.json",
+        "sha256": "39d88c7bfff8cf3e9c14c32c0ded886926de11faf6d59b56f26920899f09e671",
+        "bytes": 6937
+      },
+      "generator": "scripts/generate-map-progress-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-map-progress-data.mjs",
+          "sha256": "d5874e4abd903d42bd056d8abe3d08407e5ca3b7ed4e9507596366f71c75b0f8",
+          "bytes": 8038
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/map-progress/sources.lock.json",
+        "sha256": "c4a003ffc94f19928d5a32262aa3284bfe8972b3c748066e049b677484ebdcd3",
+        "bytes": 14544
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-map-progress-data.mjs"
+      ]
+    },
+    {
+      "id": "arsenal",
+      "generatedAt": "2026-07-12T13:31:56.564Z",
+      "artifact": {
+        "path": "src/master/arsenal-data.generated.json",
+        "sha256": "be987fa1d1b9b2a94681978278f26643679d39a9f98d89b3a96d6ed942697b43",
+        "bytes": 208038
+      },
+      "generator": "scripts/generate-arsenal-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-arsenal-data.mjs",
+          "sha256": "0959a0b894fed5d81dfac5bc95b0f91e2132066699ccfd018f9b895548cd6d1f",
+          "bytes": 9453
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/arsenal/sources.lock.json",
+        "sha256": "d72653b614bcd73cc3b06fd699fbef52c4829cbccf95676ad964e5ebb3ac58cc",
+        "bytes": 209638
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-arsenal-data.mjs"
+      ]
+    },
+    {
+      "id": "improvement",
+      "generatedAt": "2026-07-12T13:23:48.841Z",
+      "artifact": {
+        "path": "src/master/improvement-data.generated.json",
+        "sha256": "188583ba939db6b61b3ae952de2b3bd7dc0a6498d9937727236381182d7fffb3",
+        "bytes": 202760
+      },
+      "generator": "scripts/generate-improvement-data.mjs",
+      "codeInputs": [
+        {
+          "path": "scripts/generate-improvement-data.mjs",
+          "sha256": "d35d6feb154daba1e71ed3c133b4bfe3c44435e55ea4cd7872788b7b82e71d17",
+          "bytes": 10021
+        },
+        {
+          "path": "scripts/lib/frozen-source.mjs",
+          "sha256": "c8d18c679dce7793eb820a605c78e665ddf6342afa1d5589f74e9dcbb622dc52",
+          "bytes": 7271
+        }
+      ],
+      "sourceLock": {
+        "path": "data/snapshots/improvement/sources.lock.json",
+        "sha256": "69404a49ae7fb759ee7bed2c4405744389c1f3e4e16cef4e5a103add3758ae53",
+        "bytes": 2069
+      },
+      "rebuildCommand": [
+        "node",
+        "scripts/generate-improvement-data.mjs"
+      ]
+    }
+  ]
+}

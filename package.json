@@ -14,9 +14,11 @@
     "generate:expedition-data": "node scripts/generate-expedition-data.mjs",
     "generate:shop-data": "node scripts/generate-shop-data.mjs",
     "generate:sortie-data": "node scripts/generate-sortie-data.mjs",
-    "generate:routing-data": "node scripts/generate-routing-data.mjs",
+    "generate:routing-data": "tsx scripts/generate-routing-data.mjs",
     "generate:arsenal-data": "node scripts/generate-arsenal-data.mjs",
     "generate:improvement-data": "node scripts/generate-improvement-data.mjs",
+    "update:data-lock": "node scripts/update-generated-data-lock.mjs",
+    "verify:data": "node scripts/verify-generated-data.mjs --rebuild",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"

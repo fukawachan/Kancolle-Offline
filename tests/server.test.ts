@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
+const API_TOKEN = "test-api-token-0000000000000005";
+
 describe("local Fastify server", () => {
   let tempDir: string;
   let store: StateStore;
@@ -104,7 +106,7 @@ describe("local Fastify server", () => {
     ];
     const listeners: Record<string, Array<(event: FakeMessageEvent) => void>> = {};
     const fakeWindow: any = {
-      __KANCOLLE_LOCAL__: { query: { osapi_root: "osapi.dmm.com" } },
+      __KANCOLLE_LOCAL__: { query: { osapi_root: "osapi.dmm.com", api_token: "test-token" } },
       location: {
         href: "http://127.0.0.1:3020/kcs2/index.php?osapi_root=osapi.dmm.com",
         search: "?osapi_root=osapi.dmm.com"
@@ -200,19 +202,19 @@ describe("local Fastify server", () => {
     expect(checkoutRequests).toEqual([
       {
         url: "/kcsapi/api_dmm_payment/paycheck",
-        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=2"
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=2&api_token=test-token"
       },
       {
         url: "/kcsapi/api_dmm_payment/paycheck",
-        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1"
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1&api_token=test-token"
       },
       {
         url: "/kcsapi/api_dmm_payment/paycheck",
-        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1"
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1&api_token=test-token"
       },
       {
         url: "/kcsapi/api_dmm_payment/paycheck",
-        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1"
+        body: "api_local_purchase=1&api_payitem_id=26&api_price=500&api_count=1&api_token=test-token"
       }
     ]);
     expect(originalPostMessages).toEqual([]);
@@ -809,12 +811,15 @@ describe("local Fastify server", () => {
       cacheDir: path.resolve("cache"),
       stateStore: store,
       unknownLogPath: path.join(tempDir, "unknown.jsonl"),
-      responseFormat: "svdata"
+      responseFormat: "svdata",
+      apiToken: API_TOKEN
     });
 
     const response = await app.inject({
       method: "POST",
-      url: "/kcsapi/api_start2/get_option_setting"
+      url: "/kcsapi/api_start2/get_option_setting",
+      payload: `api_token=${API_TOKEN}`,
+      headers: { "content-type": "application/x-www-form-urlencoded" }
     });
 
     expect(response.statusCode).toBe(200);
@@ -838,13 +843,14 @@ describe("local Fastify server", () => {
     const app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
-      unknownLogPath
+      unknownLogPath,
+      apiToken: API_TOKEN
     });
 
     const response = await app.inject({
       method: "POST",
       url: "/kcsapi/api_missing/example?api_verno=1",
-      payload: "api_id=42",
+      payload: `api_id=42&api_token=${API_TOKEN}`,
       headers: { "content-type": "application/x-www-form-urlencoded" }
     });
 

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
+const API_TOKEN = "test-api-token-0000000000000002";
+
 describe("quest api", () => {
   let tempDir: string;
   let store: StateStore;
@@ -17,7 +19,8 @@ describe("quest api", () => {
     app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
-      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+      unknownLogPath: path.join(tempDir, "unknown.jsonl"),
+      apiToken: API_TOKEN
     });
   });
 
@@ -32,22 +35,26 @@ describe("quest api", () => {
       method: "POST",
       url: `/kcsapi/${pathname}`,
       payload: new URLSearchParams(
-        Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        {
+          api_token: API_TOKEN,
+          ...Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        }
       ).toString(),
       headers: { "content-type": "application/x-www-form-urlencoded" }
     });
   }
 
-  it("serves the full quest list by client period tabs while advertising an unlimited active quest cap", async () => {
+  it("serves only unlocked quests by client period tabs and advertises the five-quest cap", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const questCap = start2.api_mst_const.api_parallel_quest_max.api_int_value;
-    expect(questCap).toBeGreaterThan(5);
+    expect(questCap).toBe(5);
 
     const port = (await post("api_port/port")).json().api_data;
     expect(port.api_parallel_quest_count).toBe(questCap);
 
     const page = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
-    expect(page.api_count).toBe(446);
+    expect(page.api_count).toBeGreaterThan(5);
+    expect(page.api_count).toBeLessThan(446);
     expect(page.api_page_count).toBe(Math.ceil(page.api_count / 5));
     expect(page.api_disp_page).toBe(1);
     expect(page.api_completed_kind).toEqual(expect.any(Number));
@@ -61,6 +68,8 @@ describe("quest api", () => {
       api_get_material: [20, 20, 0, 0],
       api_state: 1
     });
+    expect(page.api_list.map((quest: any) => quest.api_no)).toContain(101);
+    expect(page.api_list.map((quest: any) => quest.api_no)).not.toContain(102);
 
     const secondPage = (await post("api_get_member/questlist", { api_tab_id: 0, api_pageno: 2 })).json().api_data;
     expect(secondPage.api_disp_page).toBe(2);
@@ -68,42 +77,56 @@ describe("quest api", () => {
     expect(secondPage.api_list.map((quest: any) => quest.api_no)).toEqual(page.api_list.slice(5, 10).map((quest: any) => quest.api_no));
 
     const tabs = [
-      { tabId: 1, count: 23, types: [2, 4, 5], sampleId: 201 },
-      { tabId: 2, count: 19, types: [3], sampleId: 213 },
-      { tabId: 3, count: 14, types: [6], sampleId: 249 },
-      { tabId: 4, count: 27, types: [7], sampleId: 284 },
-      { tabId: 5, count: 363, types: [1], sampleId: 101 }
+      { tabId: 1, types: [2, 4, 5] },
+      { tabId: 2, types: [3] },
+      { tabId: 3, types: [6] },
+      { tabId: 4, types: [7] },
+      { tabId: 5, types: [1] }
     ];
-    for (const { tabId, count, types, sampleId } of tabs) {
+    for (const { tabId, types } of tabs) {
       const tab = (await post("api_get_member/questlist", { api_tab_id: tabId })).json().api_data;
-      expect(tab.api_count).toBe(count);
-      expect(tab.api_list).toHaveLength(count);
+      const expectedIds = page.api_list
+        .filter((quest: any) => types.includes(quest.api_type))
+        .map((quest: any) => quest.api_no);
+      expect(tab.api_count).toBe(expectedIds.length);
+      expect(tab.api_list).toHaveLength(expectedIds.length);
       expect(tab.api_list.every((quest: any) => types.includes(quest.api_type))).toBe(true);
-      expect(tab.api_list.map((quest: any) => quest.api_no)).toContain(sampleId);
+      expect(tab.api_list.map((quest: any) => quest.api_no)).toEqual(expectedIds);
     }
   });
 
-  it("allows more than five active quests and returns the real active count", async () => {
+  it("rejects a sixth active quest and returns the real active count", async () => {
     const start2 = (await post("api_start2/getData")).json().api_data;
     const questCap = start2.api_mst_const.api_parallel_quest_max.api_int_value;
-    for (const questId of [101, 202, 235, 301, 601, 701]) {
+    const visible = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data.api_list;
+    const questIds = visible.slice(0, questCap + 1).map((quest: any) => quest.api_no);
+    expect(questIds).toHaveLength(6);
+
+    for (const questId of questIds.slice(0, questCap)) {
       const started = await post("api_req_quest/start", { api_quest_id: questId });
       expect(started.json().api_result).toBe(1);
     }
+    const rejected = await post("api_req_quest/start", { api_quest_id: questIds[questCap] });
+    expect(rejected.json()).toMatchObject({ api_result: 400 });
 
     const port = (await post("api_port/port")).json().api_data;
     const list = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
 
     expect(port.api_parallel_quest_count).toBe(questCap);
-    expect(list.api_exec_count).toBe(6);
+    expect(list.api_exec_count).toBe(questCap);
 
-    const stopped = await post("api_req_quest/stop", { api_quest_id: 235 });
+    const stopped = await post("api_req_quest/stop", { api_quest_id: questIds[0] });
     expect(stopped.json().api_result).toBe(1);
+    const admitted = await post("api_req_quest/start", { api_quest_id: questIds[questCap] });
+    expect(admitted.json().api_result).toBe(1);
     expect((await post("api_port/port")).json().api_data.api_parallel_quest_count).toBe(questCap);
+    expect((await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data.api_exec_count).toBe(questCap);
   });
 
   it("serves accepted quests in the client active quest tab", async () => {
-    for (const questId of [101, 202, 235, 301, 601, 701]) {
+    const visible = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data.api_list;
+    const questIds = visible.slice(0, 3).map((quest: any) => quest.api_no);
+    for (const questId of questIds) {
       const started = await post("api_req_quest/start", { api_quest_id: questId });
       expect(started.json().api_result).toBe(1);
     }
@@ -111,10 +134,22 @@ describe("quest api", () => {
     const activeTab = (await post("api_get_member/questlist", { api_tab_id: 9 })).json().api_data;
     const activeQuestIds = activeTab.api_list.map((quest: any) => quest.api_no);
 
-    expect(activeTab.api_count).toBe(6);
-    expect(activeTab.api_exec_count).toBe(6);
-    expect(activeQuestIds).toEqual([101, 202, 235, 301, 601, 701]);
+    expect(activeTab.api_count).toBe(questIds.length);
+    expect(activeTab.api_exec_count).toBe(questIds.length);
+    expect(activeQuestIds).toEqual(questIds);
     expect(activeTab.api_list.every((quest: any) => quest.api_state === 2 || quest.api_state === 3)).toBe(true);
+  });
+
+  it("keeps prerequisite quests hidden and unstartable until every prerequisite is complete", async () => {
+    const before = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
+    expect(before.api_list.map((quest: any) => quest.api_no)).not.toContain(405);
+    expect((await post("api_req_quest/start", { api_quest_id: 405 })).json()).toMatchObject({ api_result: 400 });
+
+    store.setQuestState(127, 0, 1);
+
+    const after = (await post("api_get_member/questlist", { api_tab_id: 0 })).json().api_data;
+    expect(after.api_list.map((quest: any) => quest.api_no)).toContain(405);
+    expect((await post("api_req_quest/start", { api_quest_id: 405 })).json()).toMatchObject({ api_result: 1 });
   });
 
   it("evaluates A01 from the current fleet, grants client-compatible rewards once, and keeps A02 visible", async () => {

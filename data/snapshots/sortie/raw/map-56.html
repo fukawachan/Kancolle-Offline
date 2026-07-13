@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset='utf-8'>
+<meta content='IE=edge' http-equiv='X-UA-Compatiable'>
+<meta content='width=device-width, initial-scale=1' name='viewport'>
+<title>poi-statistics @ 舰娘百科 × poi # 掉落统计 - ラバウル方面海域(Z)</title>
+<link href='//static.kcwiki.cn/bootstrap/3.3.7/css/bootstrap.min.css' rel='stylesheet'>
+<link href='//static.kcwiki.cn/bootstrap-table/1.11.0/bootstrap-table.min.css' rel='stylesheet'>
+<link href='//static.kcwiki.cn/db/stylesheets/offcanvas.css' rel='stylesheet'>
+<link href='//static.kcwiki.cn/db/stylesheets/chartist.min.css' rel='stylesheet'>
+<link href='//static.kcwiki.cn/db/stylesheets/backTop.css' rel='stylesheet'>
+<link href='//static.kcwiki.cn/db/stylesheets/custom.css' rel='stylesheet'>
+<script src='//static.kcwiki.cn/jquery/2.2.4/jquery.min.js'></script>
+<script src='//static.kcwiki.cn/db/scripts/chartist.min.js'></script>
+<!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+<!--[if lt IE 9]>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/html5shiv/r29/html5.min.js'></script>
+<script src='https://cdnjs.cloudflare.com/ajax/libs/respond.js/1.4.2/respond.min.js'></script>
+<![endif]-->
+<!-- WEB PUSH -->
+<link href='/manifest.json' rel='manifest'>
+<link href='//disqus.kcwiki.cn/dist/iDisqus.min.css' rel='stylesheet'>
+<script src='//disqus.kcwiki.cn/dist/iDisqus.min.js'></script>
+</head>
+<body>
+<nav class='navbar navbar-inverse navbar-fixed-top'>
+<div class='container'>
+<div class='navbar-header'>
+<button aria-expanded='false' class='navbar-toggle collapsed' data-target='#navbar-main' data-toggle='collapse' type='button'>
+<span class='sr-only'>展开导航栏</span>
+<span class='icon-bar'></span>
+<span class='icon-bar'></span>
+<span class='icon-bar'></span>
+</button>
+<a class='navbar-brand' href='/'>poi-statistics</a>
+</div>
+<div class='navbar-collapse collapse' id='navbar-main'>
+<ul class='nav navbar-nav hover-trigger'>
+<li>
+<a href='/construction/'>建造统计</a>
+</li>
+<li>
+<a href='/development/'>开发统计</a>
+</li>
+<li class='active'>
+<a href='/drop/'>掉落统计</a>
+</li>
+<li class='dropdown'>
+<a href='/event-sanma2024/'>活动限定统计(2024年秋刀鱼活动)</a>
+</li>
+<li>
+<a href='https://zh.kcwiki.org/'>舰娘百科</a>
+</li>
+<li>
+<a href='/about/'>关于</a>
+</li>
+<li>
+<a href='/settings/'>设置</a>
+</li>
+</ul>
+</div>
+</div>
+</nav>
+
+<!-- %div.container -->
+<!-- %div.alert.alert-info{:role=>'alert'} -->
+<!-- %button.close{:"data-dismiss"=>'alert',:type=>'button'} -->
+<!-- %span &times; -->
+<!-- %p -->
+
+<div class='container'>
+<div class='row row-offcanvas row-offcanvas-right'>
+<div class='col-xs-12 col-sm-9'>
+<p class='pull-right visible-xs'>
+<button class='btn btn-primary btn-xs' data-toggle='offcanvas' type='button'>
+展开侧边栏
+</button>
+</p>
+<ol class='breadcrumb'>
+<li>主页</li>
+<li>掉落</li>
+<li>南方海域</li>
+<li>ラバウル方面海域</li>
+</ol>
+<div class='row'>
+<div class='col-xs-12 col-md-4'>
+<div>
+<b>数据查询时间:</b>
+</div>
+<div class='text-right' id='cache-time'></div>
+<div>
+<b>查询结果总数:</b>
+</div>
+<div class='text-right' id='query-count'></div>
+<div>
+<b>战斗点:</b>
+</div>
+<ul class='nav nav-pills'>
+<li role='presentation'>
+<a href='/drop/map/56/A1-SAB.html' title='深海南方艦隊 先遣偵察戦隊 I群 (1)'>A1</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/A2-SAB.html' title='深海南方艦隊 先遣偵察戦隊 II群 (2,12)'>A2</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/A-SAB.html' title='深海南方艦隊 前方遊撃哨戒群 (3)'>A</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/B-SAB.html' title='深海南方潜水艦隊 前方哨戒線 (4,13)'>B</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/C1-SAB.html' title='深海南方方面 基地航空隊 (5)'>C1</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/C2-SAB.html' title='深海南方根拠地隊 水雷艇集団 (6,14,15)'>C2</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/C-SAB.html' title='深海南方方面 基地航空隊 (7,16,17)'>C</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/D-SAB.html' title='深海南方方面 基地航空隊 (8)'>D</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/G-SAB.html' title='深海南方艦隊 ラエ増援阻止集団 (11)'>G</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/H-SAB.html' title='深海潜水艦隊 ラバウル哨戒線 (18)'>H</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/J-SAB.html' title='深海南方任務部隊 前方哨戒群 (21)'>J</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/K1-SAB.html' title='深海南方任務部隊 艦載機群 (22)'>K1</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/K-SAB.html' title='深海南方潜水艦隊 東南哨戒線 (23,33)'>K</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/K2-SAB.html' title='深海南方任務部隊 艦載機群 (24)'>K2</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/L-SAB.html' title='深海南方任務部隊 機動部隊 III群 (25,34)'>L</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/N-SAB.html' title='深海南方任務部隊 機動部隊 II群 (27)'>N</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/P-SAB.html' title='深海南方任務部隊 前衛艦隊 II群 (29)'>P</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Q-SAB.html' title='深海南方任務部隊 前衛艦隊 I群 (30)'>Q</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Q1-SAB.html' title='深海南方任務部隊 艦載機群 (31)'>Q1</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Q2-SAB.html' title='深海潜水艦隊 機動部隊随伴 II群 (32,46)'>Q2</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/T-SAB.html' title='深海南方任務部隊 随伴補給部隊 (37,47)'>T</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/U-SAB.html' title='深海南方任務部隊 新鋭戦艦戦隊 (38)'>U</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/V-SAB.html' title='深海南方任務部隊 機動部隊 I群 (39)'>V</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/W-SAB.html' title='深海潜水艦隊 機動部隊随伴 I群 (40,48)'>W</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/X-SAB.html' title='深海南方任務部隊 艦載機群 (41,44,45)'>X</a>
+</li>
+<li class='active' role='presentation'>
+<a href='/drop/map/56/Z-SAB.html' title='深海南方任務部隊 機動部隊主力 (43)'>Z (Boss)</a>
+</li>
+</ul>
+<div>
+<b>评价:</b>
+</div>
+<ul class='nav nav-pills'>
+<li class='active' role='presentation'>
+<a href='/drop/map/56/Z-SAB.html'>SAB</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Z-SA.html'>SA</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Z-S.html'>S</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Z-A.html'>A</a>
+</li>
+<li role='presentation'>
+<a href='/drop/map/56/Z-B.html'>B</a>
+</li>
+</ul>
+</div>
+<div class='col-xs-12 col-md-8'>
+<img class='img-responsive' src='https://uploads.kcwiki.cn/commons/thumb/3/3e/MapHD5-6.png/600px-MapHD5-6.png'>
+</div>
+</div>
+<div class='row top10 hidden'>
+<div id='toolbar'></div>
+<table class='table table-hover table-striped' data-detail-formatter='detailFormatter' data-detail-view='true' data-search='true' data-show-columns='true' data-show-export='true' data-toolbar='#toolbar'>
+<thead>
+<tr>
+<th data-field='name' data-formatter='nameFormatter' data-switchable='false'>舰娘</th>
+<th data-field='type' data-sortable='true'>舰种</th>
+<th data-field='totalCount' data-sortable='true'>数量</th>
+<th data-field='sCount' data-sortable='true' data-visible='true'>S胜</th>
+<th data-field='aCount' data-sortable='true' data-visible='true'>A胜</th>
+<th data-field='bCount' data-sortable='true' data-visible='true'>B胜</th>
+<th data-field='hqLvRange'>提督等级</th>
+<th data-field='dropRate' data-formatter='dropRateFormatter' data-sortable='true'>掉落率</th>
+</tr>
+</thead>
+</table>
+</div>
+<div class='top17 busy-indicator'>
+<span class='glyphicon glyphicon-refresh glyphicon-spin'></span>
+<span>少女祈祷中...</span>
+</div>
+</div>
+<div class='class col-xs-6 col-sm-3 sidebar-offcanvas' id='sidebar'>
+<div class='panel-group' id='accordion'>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map1'>鎮守府海域 (1)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map1'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/11/'>鎮守府正面海域 (1-1)</a>
+<a class='list-group-item' href='/drop/map/12/'>南西諸島沖 (1-2)</a>
+<a class='list-group-item' href='/drop/map/13/'>製油所地帯沿岸 (1-3)</a>
+<a class='list-group-item' href='/drop/map/14/'>南西諸島防衛線 (1-4)</a>
+<a class='list-group-item' href='/drop/map/15/'>鎮守府近海 (1-5)</a>
+<a class='list-group-item' href='/drop/map/16/'>鎮守府近海航路 (1-6)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map2'>南西諸島海域 (2)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map2'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/21/'>南西諸島近海 (2-1)</a>
+<a class='list-group-item' href='/drop/map/22/'>バシー海峡 (2-2)</a>
+<a class='list-group-item' href='/drop/map/23/'>東部オリョール海 (2-3)</a>
+<a class='list-group-item' href='/drop/map/24/'>沖ノ島海域 (2-4)</a>
+<a class='list-group-item' href='/drop/map/25/'>沖ノ島沖 (2-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map3'>北方海域 (3)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map3'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/31/'>モーレイ海 (3-1)</a>
+<a class='list-group-item' href='/drop/map/32/'>キス島沖 (3-2)</a>
+<a class='list-group-item' href='/drop/map/33/'>アルフォンシーノ方面 (3-3)</a>
+<a class='list-group-item' href='/drop/map/34/'>北方海域全域 (3-4)</a>
+<a class='list-group-item' href='/drop/map/35/'>北方AL海域 (3-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map7'>南西海域 (7)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map7'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/71/'>ブルネイ泊地沖 (7-1)</a>
+<a class='list-group-item' href='/drop/map/72/'>タウイタウイ泊地沖 (7-2)</a>
+<a class='list-group-item' href='/drop/map/73/'>ペナン島沖 (7-3)</a>
+<a class='list-group-item' href='/drop/map/74/'>昭南本土航路 (7-4)</a>
+<a class='list-group-item' href='/drop/map/75/'>ジャワ島沖 (7-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map4'>西方海域 (4)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map4'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/41/'>ジャム島沖 (4-1)</a>
+<a class='list-group-item' href='/drop/map/42/'>カレー洋海域 (4-2)</a>
+<a class='list-group-item' href='/drop/map/43/'>リランカ島 (4-3)</a>
+<a class='list-group-item' href='/drop/map/44/'>カスガダマ島 (4-4)</a>
+<a class='list-group-item' href='/drop/map/45/'>カレー洋リランカ島沖 (4-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map5'>南方海域 (5)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse in' id='map5'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/51/'>南方海域前面 (5-1)</a>
+<a class='list-group-item' href='/drop/map/52/'>珊瑚諸島沖 (5-2)</a>
+<a class='list-group-item' href='/drop/map/53/'>サブ島沖海域 (5-3)</a>
+<a class='list-group-item' href='/drop/map/54/'>サーモン海域 (5-4)</a>
+<a class='list-group-item' href='/drop/map/55/'>サーモン海域北方 (5-5)</a>
+<a class='list-group-item active' href='/drop/map/56/'>ラバウル方面海域 (5-6)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map6'>中部海域 (6)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map6'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/61/'>中部海域哨戒線 (6-1)</a>
+<a class='list-group-item' href='/drop/map/62/'>MS諸島沖 (6-2)</a>
+<a class='list-group-item' href='/drop/map/63/'>グアノ環礁沖海域 (6-3)</a>
+<a class='list-group-item' href='/drop/map/64/'>中部北海域ピーコック島沖 (6-4)</a>
+<a class='list-group-item' href='/drop/map/65/'>KW環礁沖海域 (6-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map52'>帰ってきた鎮守府秋刀魚祭り (52)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map52'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/521/'>三陸沖/北海道根室半島沖 (52-1)</a>
+<a class='list-group-item' href='/drop/map/522/'>昭南方面～本土航路 (52-2)</a>
+<a class='list-group-item' href='/drop/map/523/'>八丈島沖/房総半島東方沖 (52-3)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map53'>発令！「捷三号作戦警戒」 (53)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map53'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/531/'>九州沖/南西諸島方面 (53-1)</a>
+<a class='list-group-item' href='/drop/map/532/'>高雄警備府～比島北部沖 (53-2)</a>
+<a class='list-group-item' href='/drop/map/533/'>関東/太平洋沖 (53-3)</a>
+<a class='list-group-item' href='/drop/map/534/'>昭南～マニラ航路 (53-4)</a>
+<a class='list-group-item' href='/drop/map/535/'>東シナ海～北九州沖 (53-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map54'>激闘！R方面作戦 (54)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map54'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/541/'>ニューブリテン島ラバウル沖 (54-1)</a>
+<a class='list-group-item' href='/drop/map/542/'>ショートランド沖/レカタ沖 (54-2)</a>
+<a class='list-group-item' href='/drop/map/543/'>ビスマルク海/ダンピール海峡沖 (54-3)</a>
+<a class='list-group-item' href='/drop/map/544/'>豊後水道/佐世保沖/坊ノ岬沖 (54-4)</a>
+<a class='list-group-item' href='/drop/map/545/'>坊ノ岬沖/台湾沖/南西諸島海域 (54-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map55'>大規模反攻上陸！トーチ作戦！ (55)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map55'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/551/'>インド洋/アラビア海 (55-1)</a>
+<a class='list-group-item' href='/drop/map/552/'>アラビア海/アデン湾/紅海 (55-2)</a>
+<a class='list-group-item' href='/drop/map/553/'>スエズ湾/地中海 (55-3)</a>
+<a class='list-group-item' href='/drop/map/554/'>大西洋/ジブラルタル沖 (55-4)</a>
+<a class='list-group-item' href='/drop/map/555/'>ジブラルタル沖/北アフリカ沖 (55-5)</a>
+<a class='list-group-item' href='/drop/map/556/'>カサブランカ沖 (55-6)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map56'>絶対防衛線！「小笠原兵団」救援 (56)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map56'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/561/'>日本本土近海哨戒圏 (56-1)</a>
+<a class='list-group-item' href='/drop/map/562/'>南西諸島沖/台湾沖 (56-2)</a>
+<a class='list-group-item' href='/drop/map/563/'>九州沖/四国沖/八丈島沖 (56-3)</a>
+<a class='list-group-item' href='/drop/map/564/'>小笠原諸島航路/父島沖 (56-4)</a>
+<a class='list-group-item' href='/drop/map/565/'>父島沖/硫黄島沖 (56-5)</a>
+<a class='list-group-item' href='/drop/map/566/'>硫黄島沖 (56-6)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map57'>船団護衛！輸送航路防衛戦 (57)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map57'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/571/'>横須賀鎮守府/呉鎮守府沖 (57-1)</a>
+<a class='list-group-item' href='/drop/map/572/'>南沙諸島沖/カムラン湾沖 (57-2)</a>
+<a class='list-group-item' href='/drop/map/573/'>八戸港沖/三陸沖 (57-3)</a>
+<a class='list-group-item' href='/drop/map/574/'>津軽海峡/北海道釧路沖 (57-4)</a>
+<a class='list-group-item' href='/drop/map/575/'>大西洋/イギリス海峡沖 (57-5)</a>
+<a class='list-group-item' href='/drop/map/576/'>ポートランド島沖/ライム湾 (57-6)</a>
+<a class='list-group-item' href='/drop/map/577/'>ノルマンディー沖 (57-7)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map58'>発動！竜巻作戦 (58)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map58'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/581/'>日本列島沖/呉Q基地 (58-1)</a>
+<a class='list-group-item' href='/drop/map/582/'>九州南方沖/マリアナ諸島方面 (58-2)</a>
+<a class='list-group-item' href='/drop/map/583/'>マリアナ諸島/ウルシー環礁沖 (58-3)</a>
+<a class='list-group-item' href='/drop/map/584/'>サイパン沖/マーシャル諸島沖正面 (58-4)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map59'>Operation Menace/新MO作戦 (59)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map59'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/591/'>ケルト海/イギリス海峡 (59-1)</a>
+<a class='list-group-item' href='/drop/map/592/'>ジブラルタル/アルボラン海 (59-2)</a>
+<a class='list-group-item' href='/drop/map/593/'>北大西洋/フリータウン/ダカール (59-3)</a>
+<a class='list-group-item' href='/drop/map/594/'>太平洋南部/ダバオ沖/ビアク島沖 (59-4)</a>
+<a class='list-group-item' href='/drop/map/595/'>ラバウル沖/珊瑚海方面 (59-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map60'>北海道防衛作戦/第二次礼号作戦 (60)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map60'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/601/'>大湊警備府/津軽海峡/北海道東部 (60-1)</a>
+<a class='list-group-item' href='/drop/map/602/'>北海道北東沖/宗谷海峡沖 (60-2)</a>
+<a class='list-group-item' href='/drop/map/603/'>北海道北東沖/留萌沖正面/樺太南部沖 (60-3)</a>
+<a class='list-group-item' href='/drop/map/604/'>カムラン湾沖/昭南方面航路/南シナ海 (60-4)</a>
+<a class='list-group-item' href='/drop/map/605/'>ミンドロ島沖/キャビテ沖/サンホセ沖 (60-5)</a>
+<a class='list-group-item' href='/drop/map/606/'>南沙諸島沖/カムラン湾沖 (60-6)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map61'>逆転！ナルヴィク攻防戦 (61)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map61'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/611/'>ノルウェー沖/ナルヴィク沖 (61-1)</a>
+<a class='list-group-item' href='/drop/map/612/'>ナルヴィク沖 (61-2)</a>
+<a class='list-group-item' href='/drop/map/613/'>ノルウェー沖 (61-3)</a>
+<a class='list-group-item' href='/drop/map/614/'>南沙諸島沖/仏印沖 (61-4)</a>
+<a class='list-group-item' href='/drop/map/615/'>銚子沖/北海道沖/三陸沖太平洋 (61-5)</a>
+</div>
+</div>
+</div>
+<div class='panel panel-default'>
+<div class='panel-heading'>
+<h4 class='panel-title'>
+<a data-parent='#accordion' data-toggle='collapse' href='#map62'>反撃！第三十一戦隊の戦い (62)</a>
+</h4>
+</div>
+<div class='panel-collapse collapse' id='map62'>
+<div class='list-group'>
+<a class='list-group-item' href='/drop/map/621/'>九州沖/南西諸島沖 (62-1)</a>
+<a class='list-group-item' href='/drop/map/622/'>南沙諸島沖/オルモック沖/サンベルナルジノ海峡沖 (62-2)</a>
+<a class='list-group-item' href='/drop/map/623/'>パラオ沖/ウルシ―泊地沖/中部太平洋 (62-3)</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<script src='https://zh.kcwiki.cn/index.php?title=MediaWiki:Gadget-StaticticsConstant.js&amp;action=raw&amp;ctype=text/javascript'></script>
+<script src='/scripts/drop/map2.js'></script>
+<!-- %script{:src => "//static.kcwiki.cn/db/scripts/drop/map.js"} -->
+<script>
+window.MAP_ID = 56;
+$(document).ready(function() {
+  loadData({id: 56, point: "Z", rank: "SAB", level: 0});
+});
+
+</script>
+<div class='container top15'>
+<div id='comment'></div>
+</div>
+<script>
+  var emojiList = [{
+    code:'smile',
+    title:'笑脸',
+    unicode:'1f604'
+  },{
+    code:'mask',
+    title:'生病',
+    unicode:'1f637'
+  },{
+    code:'joy',
+    title:'破涕为笑',
+    unicode:'1f602'
+  },{
+    code:'stuck_out_tongue_closed_eyes',
+    title:'吐舌',
+    unicode:'1f61d'
+  },{
+    code:'flushed',
+    title:'脸红',
+    unicode:'1f633'
+  },{
+    code:'scream',
+    title:'恐惧',
+    unicode:'1f631'
+  },{
+    code:'pensive',
+    title:'失望',
+    unicode:'1f614'
+  },{
+    code:'unamused',
+    title:'无语',
+    unicode:'1f612'
+  },{
+    code:'grin',
+    title:'露齿笑',
+    unicode:'1f601'
+  },{
+    code:'heart_eyes',
+    title:'色',
+    unicode:'1f60d'
+  },{
+    code:'sweat',
+    title:'汗',
+    unicode:'1f613'
+  },{
+    code:'smirk',
+    title:'得意',
+    unicode:'1f60f'
+  }];
+  
+  // if (window.MAP_ID && window.MAP_ID > 560) {
+  //   var disq = new iDisqus('comment', {
+  //     forum: 'poi-statistics',
+  //     url: 'drop/map/56',
+  //     site: 'https://db.kcwiki.org',
+  //     api: 'https://disqus.kcwiki.cn/api',
+  //     mode: 2,
+  //     timeout: 3000,
+  //     init: true,
+  //     emoji_list: emojiList,
+  //     emoji_preview: true,
+  //     auto: true
+  //   });
+  //   document.getElementsByClassName("comment-form-url")[0].style.display = 'none';
+  // }
+</script>
+
+
+<a id='backTop'>Back To Top</a>
+<footer>
+<div class='container'>
+<div>
+<span>本站海域信息点图片由</span>
+<a href='https://kancolle.fandom.com/wiki/KanColle_Wiki'>KanColle Wiki</a>
+<span>友情提供。感谢Flatchi和Kruss的优秀工作！</span>
+</div>
+<div>
+<span>感谢</span>
+<a href='https://github.com/poooi/poi'>poi</a>
+<span>为本站提供数据支持。如果你在使用的过程中发现什么Bug 抑或是一些好的建议都欢迎在</span>
+<a href='https://github.com/kcwikizh/poi-statistics/issues'>Github Issue</a>
+<span>上提交。</span>
+</div>
+</div>
+</footer>
+<script src='//static.kcwiki.cn/poi-static/jquery.backTop.min.js'></script>
+<script src='//static.kcwiki.cn/poi-static/tableExport.min.js'></script>
+<script src='//static.kcwiki.cn/FileSaver.js/2014-11-29/FileSaver.min.js'></script>
+<script src='//static.kcwiki.cn/poi-static/bootstrap-table-filter.min.js'></script>
+<script src='//static.kcwiki.cn/poi-static/bs-table.js'></script>
+<script src='//static.kcwiki.cn/bootstrap/3.3.7/js/bootstrap.min.js'></script>
+<script src='//static.kcwiki.cn/bootstrap-table/1.11.0/bootstrap-table.min.js'></script>
+<script src='//static.kcwiki.cn/bootstrap-table/1.11.0/extensions/export/bootstrap-table-export.min.js'></script>
+<script src='//static.kcwiki.cn/bootstrap-table/1.11.0/extensions/filter/bootstrap-table-filter.min.js'></script>
+<!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
+<script src='//static.kcwiki.cn/db/scripts/ie10-viewport-bug-workaround.js'></script>
+<script src='//static.kcwiki.cn/db/scripts/offcanvas.js'></script>
+<script>
+  $(document).ready(function() {
+    $('#backTop').backTop({
+        'position' : 500,
+        'speed' : 500,
+        'color' : 'black'
+    });
+  });
+</script>
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+  ga('create', 'UA-66145274-1', 'auto');
+  ga('send', 'pageview');
+</script>
+</body>
+</html>

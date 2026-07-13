@@ -8,8 +8,14 @@ import {
 import {
   mapGaugeRequirement,
   mapGaugeStage,
+  mapGaugeType,
   mapPhaseDefinitions
 } from "../master/map-progress.js";
+import {
+  DEFAULT_GAMEPLAY_PROFILE,
+  profileSupportsNormalMap,
+  type GameplayProfile
+} from "../master/gameplay-profile.js";
 import {
   eventDefinition,
   eventMapById,
@@ -18,6 +24,7 @@ import {
   eventRankDefinition
 } from "../master/event-data.js";
 import { effectiveShipSpeedValue } from "../master/ship-speed.js";
+import { playerShipStatVector } from "../master/ship-stat-growth.js";
 import { DEFAULT_PORT_BGM_ID, type ResourceManifest } from "../resources/types.js";
 import { normalizeDeckShipIds } from "../state/decks.js";
 import type {
@@ -126,9 +133,11 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     : [0, 0, 0, 0, 0, 0, 0];
   const kyouka = (i: number) => safeNum(kyoukaRaw[i]);
 
-  const kahiBase = ship.level + equipSum("api_houk");
-  const taisenBase = ship.level + equipSum("api_tais");
-  const sakutekiBase = ship.level + equipSum("api_saku");
+  const growingStats = playerShipStatVector(ship.masterId, ship.level);
+  const level99Stats = playerShipStatVector(ship.masterId, 99);
+  const equipmentEvasion = equipSum("api_houk");
+  const equipmentAsw = equipSum("api_tais");
+  const equipmentLos = equipSum("api_saku");
 
   return {
     api_id: ship.id,
@@ -153,7 +162,8 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_soku: effectiveShipSpeedValue(
       safeNum(master?.api_soku),
       safeNum(master?.api_ctype),
-      equippedSlotItems.map((item) => ({ masterId: item.masterId, improvement: item.level }))
+      equippedSlotItems.map((item) => ({ masterId: item.masterId, improvement: item.level })),
+      { masterId: ship.masterId, shipType: safeNum(master?.api_stype) }
     ),
     api_srate: 0,
     api_cond: ship.condition,
@@ -161,9 +171,9 @@ export function toShip(ship: Ship, slotItems?: SlotItem[]) {
     api_raisou: [arrVal(master?.api_raig, 0) + equipSum("api_raig") + kyouka(1), arrVal(master?.api_raig, 1) + equipSum("api_raig")],
     api_taiku: [arrVal(master?.api_tyku, 0) + equipSum("api_tyku") + kyouka(2), arrVal(master?.api_tyku, 1) + equipSum("api_tyku")],
     api_soukou: [arrVal(master?.api_souk, 0) + equipSum("api_souk") + kyouka(3), arrVal(master?.api_souk, 1) + equipSum("api_souk")],
-    api_kaihi: [kahiBase, ship.level + 49 + equipSum("api_houk")],
-    api_taisen: [taisenBase + kyouka(6), taisenBase + kyouka(6)],
-    api_sakuteki: [sakutekiBase, sakutekiBase],
+    api_kaihi: [growingStats.evasion + equipmentEvasion, level99Stats.evasion + equipmentEvasion],
+    api_taisen: [growingStats.asw + equipmentAsw + kyouka(6), level99Stats.asw + equipmentAsw + kyouka(6)],
+    api_sakuteki: [growingStats.los + equipmentLos, level99Stats.los + equipmentLos],
     api_lucky: [arrVal(master?.api_luck, 0) + equipSum("api_luck") + kyouka(4) + ship.marriageLuckBonus, arrVal(master?.api_luck, 1) + equipSum("api_luck")],
     api_locked: ship.locked,
     api_locked_equip: 0,
@@ -223,7 +233,7 @@ function fixedAirBaseSquadrons(base: AirBase) {
       state: 0,
       count: 0,
       maxCount: 0,
-      condition: 49
+      condition: 0
     }
   );
 }
@@ -360,7 +370,16 @@ export function toPort(save: SaveState, resourceManifest?: ResourceManifest) {
     api_p_bgm_id: normalizePortBgmId(save.player.portBgmId, resourceManifest),
     api_parallel_quest_count: masterData.api_mst_const.api_parallel_quest_max.api_int_value,
     api_combined_flag: save.player.combinedFleet,
-    api_event_object: toEventObject(save)
+    api_event_object: toEventObject(save),
+    api_dest_ship_slot: 1,
+    api_c_flags: [],
+    api_c_flag2: 0,
+    api_friendly_setting: {
+      api_request_flag: save.player.options.friendlyRequestFlag,
+      api_request_type: save.player.options.friendlyRequestType
+    },
+    api_plane_info: null,
+    api_furniture_affect_items: {}
   };
 }
 
@@ -369,8 +388,12 @@ export function toRequireInfo(save: SaveState, resourceManifest?: ResourceManife
     api_basic: toBasic(save.player, save.furniture, save.useItems, resourceManifest),
     api_extra_supply: [0, 0],
     api_oss_setting: {
-      api_oss_items: [0, 0, 0, 0],
-      api_language_type: 0
+      api_oss_items: [...save.player.options.ossItems],
+      api_language_type: save.player.options.languageType
+    },
+    api_friendly_setting: {
+      api_request_flag: save.player.options.friendlyRequestFlag,
+      api_request_type: save.player.options.friendlyRequestType
     },
     api_position_id: 0,
     api_slot_item: save.slotItems.map(toSlotItem),
@@ -423,7 +446,11 @@ export function toUseItems(materials: Materials, useItems: SaveState["useItems"]
 }
 
 export function toUnsetSlot(save: SaveState) {
-  const equipped = new Set(save.ships.flatMap((ship) => [...ship.slotIds, ship.exSlotId]).filter((id) => id > 0));
+  const equipped = new Set([
+    ...save.ships.flatMap((ship) => [...ship.slotIds, ship.exSlotId]),
+    ...save.airBases.flatMap((base) => base.squadrons.map((squadron) => squadron.slotItemId)),
+    ...(save.relocatingSlotItemIds ?? [])
+  ].filter((id) => id > 0));
   const groups: Record<string, number[]> = {};
   for (const item of save.slotItems) {
     if (equipped.has(item.id)) continue;
@@ -447,10 +474,16 @@ export function toUnsetSlotItems(save: SaveState) {
     .sort((a, b) => a.api_type3 - b.api_type3);
 }
 
-export function toMapInfo(save: SaveState) {
+export function toMapInfo(save: SaveState, gameplayProfile: GameplayProfile = DEFAULT_GAMEPLAY_PROFILE) {
   const activeEventAreaId = save.eventSettings.activeAreaId;
   return save.maps
-  .filter((map) => !eventMapById(map.id) || map.areaId === activeEventAreaId)
+  .filter((map) => {
+    const eventMap = eventMapById(map.id);
+    return eventMap
+      ? map.areaId === activeEventAreaId
+      : profileSupportsNormalMap(gameplayProfile, map.id)
+        && masterData.api_mst_mapinfo.some((master) => master.api_id === map.id);
+  })
   .map((map) => {
     const eventMap = eventMapById(map.id);
     const master = eventMap ? eventMapMaster(eventMap) : masterData.api_mst_mapinfo.find((item) => item.api_id === map.id);
@@ -458,11 +491,12 @@ export function toMapInfo(save: SaveState) {
       ? eventRankDefinition(eventMap, map.selectedRank || 3).maxMapHp
       : mapGaugeRequirement(map.id, map.phase, master?.api_required_defeat_count);
     const phaseDefinitions = eventMap ? eventMapPhaseDefinitions(map.id, map.selectedRank || 3) : mapPhaseDefinitions(map.id);
-    const gauge = required == null
+    const normalGaugeType = eventMap ? "hp" : mapGaugeType(map.id, map.phase);
+    const gauge = required == null || normalGaugeType === "none"
       ? { api_gauge_num: 1, api_gauge_type: 0, api_required_defeat_count: null }
       : {
           api_gauge_num: eventMap ? 1 : mapGaugeStage(map.id, map.phase),
-          api_gauge_type: 1,
+          api_gauge_type: normalGaugeType === "transport" ? 2 : 1,
           ...(map.cleared === 1
             ? {}
             : {

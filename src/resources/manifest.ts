@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { buildSlotMasters } from "../master/catalog.js";
+import { masterData } from "../master/data.js";
+import { DEEP_SEA_SLOT_MASTERS } from "../master/sortie-data.js";
 import {
   DEFAULT_PORT_BGM_ID,
   type CachedResourceMeta,
@@ -360,7 +361,8 @@ function slotMastersById(manifest: ResourceManifest) {
   if (cached) return cached;
 
   cached = new Map<number, SlotMasterForResourceFallback>(
-    (buildSlotMasters(manifest) as SlotMasterForResourceFallback[]).map((slot) => [Number(slot.api_id), slot])
+    ([...masterData.api_mst_slotitem, ...DEEP_SEA_SLOT_MASTERS] as SlotMasterForResourceFallback[])
+      .map((slot) => [Number(slot.api_id), slot])
   );
   slotMasterCache.set(manifest, cached);
   return cached;

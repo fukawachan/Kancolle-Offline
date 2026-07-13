@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   MARRIED_SHIP_LEVEL_CAP,
+  playerLevelForExp,
+  playerTotalExpForLevel,
   shipApiExp,
   shipLevelForExp,
   shipLevelupInfo,
@@ -32,16 +34,40 @@ describe("battle experience helpers", () => {
   });
 
   it("uses the official post-marriage ship level cap and cumulative experience", () => {
-    expect(MARRIED_SHIP_LEVEL_CAP).toBe(185);
+    expect(MARRIED_SHIP_LEVEL_CAP).toBe(188);
     expect(shipTotalExpForLevel(99)).toBe(1_000_000);
     expect(shipTotalExpForLevel(100, MARRIED_SHIP_LEVEL_CAP)).toBe(1_000_000);
     expect(shipTotalExpForLevel(120, MARRIED_SHIP_LEVEL_CAP)).toBe(1_255_000);
     expect(shipTotalExpForLevel(185, MARRIED_SHIP_LEVEL_CAP)).toBe(16_000_000);
-    expect(shipTotalExpForLevel(186, MARRIED_SHIP_LEVEL_CAP)).toBe(16_000_000);
+    expect(shipTotalExpForLevel(186, MARRIED_SHIP_LEVEL_CAP)).toBe(17_200_000);
+    expect(shipTotalExpForLevel(187, MARRIED_SHIP_LEVEL_CAP)).toBe(18_600_000);
+    expect(shipTotalExpForLevel(188, MARRIED_SHIP_LEVEL_CAP)).toBe(20_200_000);
+    expect(shipTotalExpForLevel(189, MARRIED_SHIP_LEVEL_CAP)).toBe(20_200_000);
     expect(shipLevelForExp(1_254_999, MARRIED_SHIP_LEVEL_CAP)).toBe(119);
     expect(shipLevelForExp(1_255_000, MARRIED_SHIP_LEVEL_CAP)).toBe(120);
-    expect(shipLevelForExp(99_999_999, MARRIED_SHIP_LEVEL_CAP)).toBe(185);
-    expect(shipApiExp(16_000_000, 185, MARRIED_SHIP_LEVEL_CAP)).toEqual([16_000_000, 0, 100]);
+    expect(shipLevelForExp(17_199_999, MARRIED_SHIP_LEVEL_CAP)).toBe(185);
+    expect(shipLevelForExp(17_200_000, MARRIED_SHIP_LEVEL_CAP)).toBe(186);
+    expect(shipLevelForExp(99_999_999, MARRIED_SHIP_LEVEL_CAP)).toBe(188);
+    expect(shipApiExp(20_200_000, 188, MARRIED_SHIP_LEVEL_CAP)).toEqual([20_200_000, 0, 100]);
+  });
+
+  it("uses the complete discrete HQ experience table through level 120", () => {
+    expect(playerTotalExpForLevel(1)).toBe(0);
+    expect(playerTotalExpForLevel(20)).toBe(19_000);
+    expect(playerTotalExpForLevel(21) - playerTotalExpForLevel(20)).toBe(2_000);
+    expect(playerTotalExpForLevel(80)).toBe(383_000);
+    expect(playerTotalExpForLevel(81) - playerTotalExpForLevel(80)).toBe(14_000);
+    expect(playerTotalExpForLevel(99)).toBe(1_000_000);
+    expect(playerTotalExpForLevel(100)).toBe(1_300_000);
+    expect(playerTotalExpForLevel(120)).toBe(15_000_000);
+    expect(playerTotalExpForLevel(121)).toBe(15_000_000);
+
+    for (let level = 1; level <= 120; level += 1) {
+      expect(playerLevelForExp(playerTotalExpForLevel(level))).toBe(level);
+    }
+    expect(playerLevelForExp(20_999)).toBe(20);
+    expect(playerLevelForExp(396_999)).toBe(80);
+    expect(playerLevelForExp(99_999_999)).toBe(120);
   });
 
   it("calculates practice ship experience from the enemy flagship and second ship levels", () => {
@@ -61,7 +87,7 @@ describe("battle experience helpers", () => {
     expect(shipTotalExpForPracticeLevel(100)).toBe(1_000_000);
     expect(shipTotalExpForPracticeLevel(120)).toBe(1_255_000);
     expect(shipTotalExpForPracticeLevel(185)).toBe(16_000_000);
-    expect(shipTotalExpForPracticeLevel(188)).toBe(16_000_000);
+    expect(shipTotalExpForPracticeLevel(188)).toBe(20_200_000);
   });
 
   it("calculates practice member experience from commander level difference and rank", () => {

@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { dirname } from "node:path";
-import { mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { mapMasterId, masterData } from "../master/data.js";
 import { SHIP_REMODEL_EXTRA_COSTS } from "../master/generated-data.js";
 import {
@@ -11,19 +11,23 @@ import {
 } from "../master/furniture.js";
 import {
   initialMapGauge,
-  isMonthlyExtraOperationMap,
-  mapMedalRewardCount,
+  isMonthlyResetMap,
+  mapClearRewards,
   mapPhaseDefinitions,
+  mapUnlockPrerequisites,
   terminalMapPhase,
-  type MapPhaseCondition
+  type MapPhaseDefinition,
+  type MapVictoryRank
 } from "../master/map-progress.js";
 import {
+  EVENT_PACKAGE_PRODUCTION_ELIGIBLE,
   eventDefinition,
   eventInitialMapGauge,
   eventMapById,
   eventMapClearRewards,
   eventMapIds,
   eventMapPhaseDefinitions,
+  eventMapUnlockPrerequisites,
   eventRoutingMap,
   eventSupportExpeditionMasters,
   eventSupportExpeditionDefinitions,
@@ -31,6 +35,8 @@ import {
   validateEventPackage
 } from "../master/event-data.js";
 import { normalRoutingMap } from "../master/routing-data.js";
+import { publishedLandBaseRange } from "../master/land-base-range.js";
+import { playerShipStatBounds } from "../master/ship-stat-growth.js";
 import { EXPEDITION_MASTERS } from "../master/expedition-data.js";
 import { QUEST_BY_ID, QUEST_DEFINITIONS, type QuestDefinition, type QuestReward } from "../master/quest-data.js";
 import {
@@ -48,6 +54,10 @@ import {
 } from "../kcsapi/aircraft-proficiency.js";
 import { validateCombinedFleet } from "../kcsapi/combined-fleet.js";
 import {
+  buildTransportLandingSnapshot,
+  transportPointsForRank
+} from "../kcsapi/transport.js";
+import {
   MARRIED_SHIP_LEVEL_CAP,
   SHIP_LEVEL_CAP,
   playerLevelForExp,
@@ -61,6 +71,7 @@ import {
   expeditionDefinition,
   expeditionMaster,
   expeditionMasters,
+  expeditionUnlockRule,
   resolveExpedition,
   supportExpeditionMissionIds,
   type ExpeditionOutcome,
@@ -71,6 +82,7 @@ import {
   generatePracticeBatch,
   type GeneratePracticeBatchOptions,
   isPracticeBatch,
+  normalizeMatchingKind,
   practiceBatchMatchesOptions,
   practicePeriodKey
 } from "../kcsapi/practice.js";
@@ -82,6 +94,7 @@ import {
   type DevelopmentRecipe
 } from "../kcsapi/arsenal.js";
 import {
+  ACTIVE_QUEST_LIMIT,
   advanceQuestProgress,
   currentQuestPeriodKey,
   evaluateQuest,
@@ -97,6 +110,15 @@ import {
 } from "../kcsapi/supply.js";
 import { DEFAULT_PORT_BGM_ID } from "../resources/types.js";
 import { normalizeDeckShipIds } from "./decks.js";
+import {
+  buildStateReferenceIndex,
+  shipReferences,
+  slotItemOwners,
+  stateIntegrityIssues,
+  type BattleShipReferences,
+  type ShipReference,
+  type SlotItemOwner
+} from "./invariants.js";
 import type {
   BuildDock,
   Deck,
@@ -128,16 +150,39 @@ import type {
 
 export type StateStoreOptions = {
   databasePath: string;
+  /** Enables protocol testing with packages explicitly marked synthetic-debug. */
+  allowSyntheticEvents?: boolean;
+  /** Test-only crash hook. Throwing from a point must roll back its transaction. */
+  faultInjector?: (point: StateFaultPoint) => void;
 };
+
+export type StateFaultPoint =
+  | "settle.after-repairs"
+  | "settle.after-builds"
+  | "settle.after-expeditions"
+  | "settle.after-materials"
+  | "settle.after-air-bases"
+  | "settle.after-quests"
+  | "settle.after-ranking"
+  | "settle.after-maps"
+  | "settle.after-relocations"
+  | "battle.before-quest-event"
+  | "expedition.before-quest-event"
+  | "improvement.before-quest-event";
 
 export type StateStore = ReturnType<typeof createStateStore>;
 
 type Row = Record<string, unknown>;
 
+const ALLOW_SYNTHETIC_EVENTS_BY_DB = new WeakMap<Database.Database, boolean>();
+const FAULT_INJECTOR_BY_DB = new WeakMap<Database.Database, (point: StateFaultPoint) => void>();
+
 type RepairStartResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
 type RepairCompleteResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
+type RepairDockOpenResult = { ok: true; dock: RepairDock } | { ok: false; error: string };
 type BuildStartResult = { ok: true; dock: BuildDock } | { ok: false; error: string };
 type BuildSpeedResult = { ok: true; dock: BuildDock } | { ok: false; error: string };
+type BuildDockOpenResult = { ok: true; dock: BuildDock } | { ok: false; error: string };
 type BuildClaimResult =
   | { ok: true; ship: Ship; slotItems: SlotItem[]; docks: BuildDock[] }
   | { ok: false; error: string };
@@ -162,6 +207,11 @@ type UseItemSetResult = { ok: true; item: UseItemInventory } | { ok: false; erro
 type BasicMaterialCounts = Pick<Materials, "fuel" | "ammo" | "steel" | "bauxite">;
 type BasicMaterialSetResult = { ok: true; materials: Materials } | { ok: false; error: string };
 type AirBaseResult = { ok: true; airBase: AirBase; materials: Materials } | { ok: false; error: string };
+type AirBaseListResult = { ok: true; airBases: AirBase[]; materials: Materials } | { ok: false; error: string };
+type AirBaseMaintenanceResult =
+  | { ok: true; areaId: number; maintenanceLevel: number; materials: Materials }
+  | { ok: false; error: string };
+type ExSlotOpenResult = { ok: true; ship: Ship } | { ok: false; error: string };
 type PresetSlotEquipTarget = "normal" | "extra";
 type PresetSlotEquipValidator = (itemId: number, slotIndex: number, targetSlot: PresetSlotEquipTarget) => boolean;
 type PresetSlotSelectResult =
@@ -191,8 +241,8 @@ type UseItemAction = {
   furnitureCoins: number;
   getItems: UseItemGetItemReward[];
 };
-type ModernizeResult = { ship: Ship; keptSlotItems: boolean };
-type ModernizeOptions = { destroyConsumedEquipment?: boolean };
+type ModernizeResult = { ship: Ship; keptSlotItems: boolean; gains: number[] };
+type ModernizeOptions = { destroyConsumedEquipment?: boolean; random?: () => number };
 type QuestClearResult =
   | { ok: true; save: SaveState; materialRewards: readonly [number, number, number, number]; bonuses: QuestBonus[] }
   | { ok: false; error: string };
@@ -203,6 +253,36 @@ type QuestBonus = {
   item?: JsonObject;
 };
 type QuestMaterialRewardName = Extract<QuestReward, { kind: "material" }>["material"];
+type SupplyResult = {
+  ok: boolean;
+  ships: Ship[];
+  consumed: Pick<Materials, "fuel" | "ammo" | "bauxite">;
+  error?: string;
+};
+type DestroyReward = readonly [number, number, number, number];
+export type DestroyResult = Materials & {
+  ok: boolean;
+  reward: DestroyReward;
+  destroyedIds: number[];
+  error?: string;
+};
+export type SlotLocationKind = "normal" | "extra";
+export type SlotMoveRequest = {
+  sourceShipId: number;
+  sourceIndex: number;
+  sourceKind: SlotLocationKind;
+  targetShipId: number;
+  targetIndex: number;
+  targetKind: SlotLocationKind;
+  expectedItemId?: number;
+};
+export type SlotMoveResult =
+  | { ok: true; sourceShip: Ship; targetShip: Ship; movedItemId: number; displacedItemId: number }
+  | { ok: false; error: string };
+export type InitialShipClaimResult =
+  | { ok: true; ship: Ship; save: SaveState }
+  | { ok: false; error: string };
+type DestroyShipOptions = { destroyEquipment?: boolean };
 
 const defaultOptions: PlayerOptions = {
   bgmFlag: 1,
@@ -210,11 +290,18 @@ const defaultOptions: PlayerOptions = {
   seFlag: 1,
   volBgm: 80,
   volSe: 80,
-  volVoice: 80
+  volVoice: 80,
+  friendlyRequestFlag: 0,
+  friendlyRequestType: 0,
+  ossItems: [0, 0, 0, 0],
+  languageType: 0
 };
 
 export const LOCAL_WORLD_ID = 15;
-const SCHEMA_VERSION = 19;
+export const STATE_SCHEMA_VERSION = 23;
+const SCHEMA_VERSION = STATE_SCHEMA_VERSION;
+const MIN_SUPPORTED_SCHEMA_VERSION = 3;
+const INITIAL_SHIP_MASTER_IDS = new Set([9, 15, 37, 43, 94]);
 const DEFAULT_MAX_SHIP_COUNT = 300;
 const DEFAULT_MAX_SLOT_ITEM_COUNT = 500;
 const OFFICIAL_MAX_SHIP_COUNT = 740;
@@ -222,7 +309,11 @@ const OFFICIAL_MAX_SLOT_ITEM_COUNT = DEFAULT_MAX_SLOT_ITEM_COUNT
   + ((OFFICIAL_MAX_SHIP_COUNT - DEFAULT_MAX_SHIP_COUNT) / 10) * 40;
 const PRACTICE_BATCH_SESSION_ID = "practice_batch";
 const PRACTICE_STATES_SESSION_ID = "practice_states";
+const PRACTICE_MATCHING_SESSION_ID = "practice_matching";
 const MARRIAGE_RING_ITEM_ID = 55;
+const DOCK_OPEN_USEITEM_ID = 49;
+const INITIAL_DOCK_COUNT = 2;
+const MAX_DOCK_COUNT = 4;
 const DEFAULT_PRESET_SLOT_COUNT = 4;
 const MAX_PRESET_SLOT_COUNT = 18;
 const PRESET_SLOT_EXPAND_STEP = 2;
@@ -237,10 +328,22 @@ const EMPTY_ONSLOT = [0, 0, 0, 0, 0];
 const AIR_BASE_SQUADRON_COUNT = 4;
 const AIR_BASE_DEFAULT_SQUADRON_MAX = 18;
 const AIR_BASE_DEFAULT_ACTION = 0;
+const AIR_BASE_CONSTRUCTION_CORPS_ITEM_ID = 73;
+const AIR_BASE_SPECIAL_RATION_ITEM_ID = 102;
+const AIR_BASE_MAX_COUNT = 3;
+const AIR_BASE_MAX_MAINTENANCE_LEVEL = 3;
+const AIR_BASE_INITIAL_CONDITION = 40;
+const AIR_BASE_NATURAL_CONDITION_CAP = 46;
+const AIR_BASE_CONDITION_INTERVAL_MS = 3 * 60_000;
+const AIR_BASE_RECON_EQUIP_TYPES = new Set([9, 10, 41, 49]);
+const AIR_BASE_HEAVY_BOMBER_MASTER_IDS = new Set([395, 396, 403, 404, 444, 484]);
+const AIR_BASE_RELOCATION_MAX_MS = 12 * 60_000;
+const AIR_BASE_RELOCATION_MIN_MS = 6 * 60_000;
 const IMMEDIATE_REPAIR_THRESHOLD_MS = 60_000;
 const REPAIR_COMPLETE_CONDITION = 40;
 const MATERIAL_RECOVERY_INTERVAL_MS = 180_000;
-const BASIC_MATERIAL_CAP = 1_000_000;
+export const BASIC_MATERIAL_HARD_CAP = 350_000;
+export const SECONDARY_MATERIAL_HARD_CAP = 3_000;
 const QUEST_CONSUMPTION_MATERIALS: Record<string, keyof Materials> = {
   "高速修復材": "repairKit",
   "高速建造材": "buildKit",
@@ -335,19 +438,55 @@ const QUEST_REWARD_MATERIAL_IDS: Record<QuestMaterialRewardName, number> = {
   screw: 8
 };
 
+export class StateDatabaseCompatibilityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StateDatabaseCompatibilityError";
+  }
+}
+
+export class StateDatabaseIntegrityError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StateDatabaseIntegrityError";
+  }
+}
+
 export function createStateStore(options: StateStoreOptions) {
   mkdirSync(dirname(options.databasePath), { recursive: true });
+  const inspection = inspectDatabaseBeforeWrite(options.databasePath);
+  if (inspection.kind === "existing" && inspection.version < SCHEMA_VERSION) {
+    backupDatabaseFiles(options.databasePath, inspection.version);
+  }
+
   const db = new Database(options.databasePath);
-  db.pragma("journal_mode = WAL");
-  migrate(db);
+  ALLOW_SYNTHETIC_EVENTS_BY_DB.set(db, options.allowSyntheticEvents === true);
+  if (options.faultInjector) FAULT_INJECTOR_BY_DB.set(db, options.faultInjector);
+  try {
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+    migrate(db, inspection.kind === "new");
+  } catch (error) {
+    ALLOW_SYNTHETIC_EVENTS_BY_DB.delete(db);
+    FAULT_INJECTOR_BY_DB.delete(db);
+    db.close();
+    throw error;
+  }
 
   return {
     db,
-    close: () => db.close(),
+    close: () => {
+      ALLOW_SYNTHETIC_EVENTS_BY_DB.delete(db);
+      FAULT_INJECTOR_BY_DB.delete(db);
+      db.close();
+    },
+    allowsSyntheticEvents: () => ALLOW_SYNTHETIC_EVENTS_BY_DB.get(db) === true,
     hasAccount: () => hasAccount(db),
     getWorldId: () => getWorldId(db),
     registerAccount: (worldId: number) => registerAccount(db, worldId),
     getSave: () => getSave(db),
+    settle: (now = Date.now()) => settleState(db, now),
+    integrityIssues: () => stateIntegrityIssues(getSave(db), activeBattleReferences(db)),
     getActiveEventAreaId: () => getEventSettings(db).activeAreaId,
     setActiveEventArea: (areaId: number | null) => setActiveEventArea(db, areaId),
     resetEventProgress: (areaId: number) => resetEventProgress(db, areaId),
@@ -502,39 +641,60 @@ export function createStateStore(options: StateStoreOptions) {
       addPendingPayItem(db, payitemId, count),
     pickupPendingPayItem: (payitemId: number, force = false): PayItemPickupResult =>
       pickupPendingPayItem(db, payitemId, force),
-    supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }) => {
+    supplyShips: (shipIds: number[], options: SupplyOptions = { kind: 3, refillAircraft: true }): SupplyResult => {
       const save = getSave(db);
+      const normalized = strictUniquePositiveIds(shipIds, "ship ids");
+      if (!normalized.ok) return failedSupply(normalized.error);
       const awayShips = activeExpeditionShipIds(db);
-      const availableShipIds = shipIds.filter((id) => !awayShips.has(id));
+      const availableShipIds = normalized.ids;
+      if (availableShipIds.some((id) => awayShips.has(id))) {
+        return failedSupply("Ship is away on expedition");
+      }
+      const ships = availableShipIds.map((id) => save.ships.find((item) => item.id === id));
+      if (ships.some((ship) => ship == null)) return failedSupply("Unknown ship");
+
       let fuel = 0;
       let ammo = 0;
       let bauxite = 0;
+      const plans = ships.map((ship) => {
+        const resolved = ship!;
+        const master = masterData.api_mst_ship.find((item) => item.api_id === resolved.masterId);
+        const maxFuel = master?.api_fuel_max ?? resolved.maxFuel;
+        const maxAmmo = master?.api_bull_max ?? resolved.maxAmmo;
+        const targetFuel = suppliesFuel(options.kind) ? maxFuel : resolved.fuel;
+        const targetAmmo = suppliesAmmo(options.kind) ? maxAmmo : resolved.ammo;
+        const targetOnSlot = options.refillAircraft
+          ? onSlotForShip(master, save.slotItems, resolved.slotIds)
+          : normalizeFixed(resolved.onSlot, 5, 0);
+        fuel += marriageSupplyCost(Math.max(0, targetFuel - resolved.fuel), resolved);
+        ammo += marriageSupplyCost(Math.max(0, targetAmmo - resolved.ammo), resolved);
+        bauxite += aircraftRefillCount(resolved.onSlot, targetOnSlot) * 5;
+        return { ship: resolved, maxFuel, maxAmmo, targetFuel, targetAmmo, targetOnSlot };
+      });
+      const materialCost = { fuel, ammo, bauxite };
+      if (!hasMaterials(save.materials, materialCost)) {
+        return failedSupply("Insufficient supply materials");
+      }
+
       const update = db.prepare("UPDATE ships SET fuel = ?, ammo = ?, max_fuel = ?, max_ammo = ?, onslot_json = ? WHERE id = ?");
       const tx = db.transaction(() => {
-        for (const shipId of availableShipIds) {
-          const ship = save.ships.find((item) => item.id === shipId);
-          if (!ship) continue;
-          const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
-          const maxFuel = master?.api_fuel_max ?? ship.maxFuel;
-          const maxAmmo = master?.api_bull_max ?? ship.maxAmmo;
-          const targetFuel = suppliesFuel(options.kind) ? maxFuel : ship.fuel;
-          const targetAmmo = suppliesAmmo(options.kind) ? maxAmmo : ship.ammo;
-          const targetOnSlot = options.refillAircraft
-            ? onSlotForShip(master, save.slotItems, ship.slotIds)
-            : normalizeFixed(ship.onSlot, 5, 0);
-          fuel += marriageSupplyCost(Math.max(0, targetFuel - ship.fuel), ship);
-          ammo += marriageSupplyCost(Math.max(0, targetAmmo - ship.ammo), ship);
-          bauxite += aircraftRefillCount(ship.onSlot, targetOnSlot) * 5;
-          update.run(targetFuel, targetAmmo, maxFuel, maxAmmo, JSON.stringify(targetOnSlot), ship.id);
+        consumeMaterials(db, materialCost);
+        for (const plan of plans) {
+          update.run(
+            plan.targetFuel,
+            plan.targetAmmo,
+            plan.maxFuel,
+            plan.maxAmmo,
+            JSON.stringify(plan.targetOnSlot),
+            plan.ship.id
+          );
         }
-        consumeMaterials(db, { fuel, ammo, bauxite });
+        recordQuestEvent(db, { kind: "simple", subcategory: "resupply", amount: availableShipIds.length });
       });
       tx();
-      if (availableShipIds.length > 0) {
-        recordQuestEvent(db, { kind: "simple", subcategory: "resupply", amount: availableShipIds.length });
-      }
       const nextSave = getSave(db);
       return {
+        ok: true,
         ships: nextSave.ships.filter((ship) => availableShipIds.includes(ship.id)),
         consumed: { fuel, ammo, bauxite }
       };
@@ -543,6 +703,14 @@ export function createStateStore(options: StateStoreOptions) {
       const save = getSave(db);
       const ship = save.ships.find((item) => item.id === shipId);
       if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
+      if (itemId > 0) {
+        if (!save.slotItems.some((item) => item.id === itemId)) return null;
+        if (save.relocatingSlotItemIds?.includes(itemId)) return null;
+        const owners = slotItemOwners(save, itemId);
+        if (owners.length > 0) {
+          return ship.slotIds.includes(itemId) ? ship : null;
+        }
+      }
       const master = masterData.api_mst_ship.find((s) => s.api_id === ship.masterId);
       const { slotIds, onSlot } = equipOrdinarySlot(
         master,
@@ -556,13 +724,28 @@ export function createStateStore(options: StateStoreOptions) {
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     equipExSlotItem: (shipId: number, itemId: number) => {
-      if (activeExpeditionShipIds(db).has(shipId)) return null;
-      db.prepare("UPDATE ships SET ex_slot_id = ? WHERE id = ?").run(itemId, shipId);
+      const save = getSave(db);
+      const ship = save.ships.find((item) => item.id === shipId);
+      if (!ship || activeExpeditionShipIds(db).has(shipId)) return null;
+      if (ship.exSlotId < 0) return null;
+      if (itemId > 0) {
+        if (!save.slotItems.some((item) => item.id === itemId)) return null;
+        if (save.relocatingSlotItemIds?.includes(itemId)) return null;
+        const owners = slotItemOwners(save, itemId);
+        if (owners.length > 0) return ship.exSlotId === itemId ? ship : null;
+      }
+      db.prepare("UPDATE ships SET ex_slot_id = ? WHERE id = ?").run(itemId > 0 ? itemId : 0, shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
+    openShipExSlot: (shipId: number): ExSlotOpenResult => openShipExSlot(db, shipId),
+    moveSlotItem: (request: SlotMoveRequest): SlotMoveResult => moveSlotItem(db, request),
     unsetAllSlots: (shipId: number) => {
       if (activeExpeditionShipIds(db).has(shipId)) return null;
-      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = -1 WHERE id = ?").run(JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT), shipId);
+      db.prepare(`
+        UPDATE ships
+        SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = CASE WHEN ex_slot_id >= 0 THEN 0 ELSE -1 END
+        WHERE id = ?
+      `).run(JSON.stringify([-1, -1, -1, -1, -1]), JSON.stringify(EMPTY_ONSLOT), shipId);
       return getSave(db).ships.find((item) => item.id === shipId);
     },
     exchangeSlotIndex: (shipId: number, from: number, to: number) => {
@@ -606,17 +789,24 @@ export function createStateStore(options: StateStoreOptions) {
         .map((id) => save.ships.find((item) => item.id === id))
         .filter((item): item is Ship => item != null);
       if (consumedShips.length !== uniqueConsumedShipIds.length || consumedShips.length === 0) return null;
+      const battleReferences = activeBattleReferences(db);
+      if (consumedShips.some((item) => item.locked !== 0)) return null;
+      if (consumedShips.some((item) => shipReferences(save, item.id, battleReferences).length > 0)) return null;
       const master = masterData.api_mst_ship.find((item) => item.api_id === ship.masterId);
       const kyouka = normalizeKyouka(ship.stats);
-      const gains = modernizationGains(ship, master, consumedShips);
+      const gains = modernizationGains(ship, master, consumedShips, options.random ?? Math.random);
       const nextKyouka = kyouka.map((value, index) => value + gains[index]);
       const stats = { ...ship.stats, api_kyouka: nextKyouka, modernized: true };
       const consumedSlotItemIds = consumedShips.flatMap((item) =>
         [...normalizeFixed(item.slotIds, 5, -1), item.exSlotId].filter((id) => id > 0)
       );
       const destroyConsumedEquipment = options.destroyConsumedEquipment === true;
+      const hpGain = gains[5];
+      const nextMaxHp = ship.maxHp + hpGain;
+      const nextHp = Math.min(nextMaxHp, ship.hp + hpGain);
       const tx = db.transaction(() => {
-        db.prepare("UPDATE ships SET stats_json = ? WHERE id = ?").run(JSON.stringify(stats), shipId);
+        db.prepare("UPDATE ships SET stats_json = ?, hp = ?, max_hp = ? WHERE id = ?")
+          .run(JSON.stringify(stats), nextHp, nextMaxHp, shipId);
         if (destroyConsumedEquipment) {
           for (const slotItemId of consumedSlotItemIds) {
             db.prepare("DELETE FROM slot_items WHERE id = ?").run(slotItemId);
@@ -625,11 +815,11 @@ export function createStateStore(options: StateStoreOptions) {
         for (const consumed of uniqueConsumedShipIds) {
           db.prepare("DELETE FROM ships WHERE id = ?").run(consumed);
         }
+        recordQuestEvent(db, { kind: "simple", subcategory: "modernization" });
       });
       tx();
-      recordQuestEvent(db, { kind: "simple", subcategory: "modernization" });
       const modernized = getSave(db).ships.find((item) => item.id === shipId);
-      return modernized ? { ship: modernized, keptSlotItems: !destroyConsumedEquipment } : null;
+      return modernized ? { ship: modernized, keptSlotItems: !destroyConsumedEquipment, gains } : null;
     },
     remodelShip: (shipId: number, requestedMasterId?: number) => {
       if (activeExpeditionShipIds(db).has(shipId)) return null;
@@ -706,45 +896,95 @@ export function createStateStore(options: StateStoreOptions) {
     },
     createSlotItem: (masterId: number) => createSlotItem(db, masterId),
     openAirBaseArea: (areaId: number) => openAirBaseArea(db, areaId),
+    renameAirBase: (areaId: number, baseId: number, name: string) =>
+      renameAirBase(db, areaId, baseId, name),
+    recoverAirBaseCondition: (areaId: number, baseId: number) =>
+      recoverAirBaseCondition(db, areaId, baseId),
+    exchangeAirBasePlane: (areaId: number, targetBaseId: number, sourceBaseId: number, squadronId: number, itemId: number) =>
+      exchangeAirBasePlane(db, areaId, targetBaseId, sourceBaseId, squadronId, itemId),
+    expandAirBase: (areaId: number) => expandAirBase(db, areaId),
+    expandAirBaseMaintenance: (areaId: number) => expandAirBaseMaintenance(db, areaId),
     setAirBasePlane: (areaId: number, baseId: number, squadronId: number, itemId: number) =>
       setAirBasePlane(db, areaId, baseId, squadronId, itemId),
     setAirBaseAction: (areaId: number, baseId: number, actionKind: number) =>
       setAirBaseAction(db, areaId, baseId, actionKind),
     supplyAirBase: (areaId: number, baseId?: number) => supplyAirBase(db, areaId, baseId),
     destroySlotItem: (itemIds: number[]) => {
-      const awayItems = activeExpeditionSlotItemIds(db);
-      const availableIds = itemIds.filter((id) => !awayItems.has(id));
       const save = getSave(db);
-      const destroyedNames = availableIds
-        .map((id) => save.slotItems.find((item) => item.id === id))
-        .map((item) => masterData.api_mst_slotitem.find((master) => master.api_id === item?.masterId)?.api_name)
-        .filter((name): name is string => typeof name === "string");
+      const normalized = strictUniquePositiveIds(itemIds, "slot item ids");
+      if (!normalized.ok) return failedDestroy(save.materials, normalized.error);
+      const items = normalized.ids.map((id) => save.slotItems.find((item) => item.id === id));
+      if (items.some((item) => item == null)) return failedDestroy(save.materials, "Unknown slot item");
+      if (items.some((item) => item!.locked !== 0)) return failedDestroy(save.materials, "Locked slot item");
+      if (normalized.ids.some((id) => slotItemOwners(save, id).length > 0)) {
+        return failedDestroy(save.materials, "Assigned slot item cannot be destroyed");
+      }
+      if (normalized.ids.some((id) => activeExpeditionSlotItemIds(db).has(id))) {
+        return failedDestroy(save.materials, "Slot item is away on expedition");
+      }
+      if (normalized.ids.some((id) => save.relocatingSlotItemIds?.includes(id))) {
+        return failedDestroy(save.materials, "Relocating slot item cannot be destroyed");
+      }
+      const masters = items.map((item) =>
+        masterData.api_mst_slotitem.find((master) => master.api_id === item!.masterId)
+      );
+      if (masters.some((master) => master == null)) return failedDestroy(save.materials, "Unknown slot item master");
+      const reward = destructionReward(masters.map((master) => master!.api_broken));
+      const destroyedNames = masters.map((master) => master!.api_name);
       const tx = db.transaction(() => {
-        for (const id of availableIds) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
-        addMaterials(db, { fuel: availableIds.length, ammo: availableIds.length, steel: availableIds.length * 2, bauxite: 0 });
+        for (const id of normalized.ids) db.prepare("DELETE FROM slot_items WHERE id = ?").run(id);
+        addMaterials(db, rewardDelta(reward));
+        recordQuestEvent(db, { kind: "simple", subcategory: "scrapequipment", amount: normalized.ids.length });
+        recordQuestEvent(db, { kind: "scrapequipment", names: destroyedNames, amount: normalized.ids.length });
+        recordQuestEvent(db, { kind: "modelconversion", names: destroyedNames, amount: normalized.ids.length });
+        recordQuestEvent(db, { kind: "equipexchange", names: destroyedNames, amount: normalized.ids.length });
       });
       tx();
-      if (availableIds.length > 0) {
-        recordQuestEvent(db, { kind: "simple", subcategory: "scrapequipment", amount: availableIds.length });
-        recordQuestEvent(db, { kind: "scrapequipment", names: destroyedNames, amount: availableIds.length });
-        recordQuestEvent(db, { kind: "modelconversion", names: destroyedNames, amount: availableIds.length });
-        recordQuestEvent(db, { kind: "equipexchange", names: destroyedNames, amount: availableIds.length });
-      }
-      return getSave(db).materials;
+      return successfulDestroy(getSave(db).materials, reward, normalized.ids);
     },
     createShip: (masterId: number) => createShip(db, masterId),
-    destroyShip: (shipIds: number[]) => {
-      const awayShips = activeExpeditionShipIds(db);
-      const availableIds = shipIds.filter((id) => !awayShips.has(id));
+    claimInitialShip: (masterId: number): InitialShipClaimResult => claimInitialShip(db, masterId),
+    destroyShip: (shipIds: number[], options: DestroyShipOptions = {}) => {
+      const save = getSave(db);
+      const normalized = strictUniquePositiveIds(shipIds, "ship ids");
+      if (!normalized.ok) return failedDestroy(save.materials, normalized.error);
+      const ships = normalized.ids.map((id) => save.ships.find((ship) => ship.id === id));
+      if (ships.some((ship) => ship == null)) return failedDestroy(save.materials, "Unknown ship");
+      if (ships.some((ship) => ship!.locked !== 0)) return failedDestroy(save.materials, "Locked ship");
+      const battleReferences = activeBattleReferences(db);
+      const blocked = normalized.ids.find((id) => shipReferences(save, id, battleReferences).length > 0);
+      if (blocked != null) {
+        const blockers = shipReferences(save, blocked, battleReferences).map(shipReferenceLabel).join(", ");
+        return failedDestroy(save.materials, `Ship ${blocked} is still referenced by ${blockers}`);
+      }
+      for (const ship of ships) {
+        for (const itemId of [...ship!.slotIds, ship!.exSlotId]) {
+          if (itemId > 0 && slotItemOwners(save, itemId).length !== 1) {
+            return failedDestroy(save.materials, `Ship ${ship!.id} has invalid equipment ownership`);
+          }
+        }
+      }
+      const equippedItemIds = ships.flatMap((ship) =>
+        [...ship!.slotIds, ship!.exSlotId].filter((itemId) => itemId > 0)
+      );
+      if (options.destroyEquipment && equippedItemIds.some((itemId) =>
+        save.slotItems.find((item) => item.id === itemId)?.locked !== 0
+      )) {
+        return failedDestroy(save.materials, "Locked equipment cannot be destroyed with its ship");
+      }
+      const masters = ships.map((ship) => masterData.api_mst_ship.find((master) => master.api_id === ship!.masterId));
+      if (masters.some((master) => master == null)) return failedDestroy(save.materials, "Unknown ship master");
+      const reward = destructionReward(masters.map((master) => master!.api_broken));
       const tx = db.transaction(() => {
-        for (const id of availableIds) db.prepare("DELETE FROM ships WHERE id = ?").run(id);
-        addMaterials(db, { fuel: availableIds.length, ammo: availableIds.length, steel: availableIds.length * 2, bauxite: 0 });
+        if (options.destroyEquipment) {
+          for (const itemId of equippedItemIds) db.prepare("DELETE FROM slot_items WHERE id = ?").run(itemId);
+        }
+        for (const id of normalized.ids) db.prepare("DELETE FROM ships WHERE id = ?").run(id);
+        addMaterials(db, rewardDelta(reward));
+        recordQuestEvent(db, { kind: "simple", subcategory: "scrapship", amount: normalized.ids.length });
       });
       tx();
-      if (availableIds.length > 0) {
-        recordQuestEvent(db, { kind: "simple", subcategory: "scrapship", amount: availableIds.length });
-      }
-      return getSave(db).materials;
+      return successfulDestroy(getSave(db).materials, reward, normalized.ids);
     },
     consumeMaterials: (delta: MaterialDelta) => {
       consumeMaterials(db, delta);
@@ -812,9 +1052,9 @@ export function createStateStore(options: StateStoreOptions) {
           const completeTime = Date.now() + repairTime;
           db.prepare("UPDATE repair_docks SET ship_id = ?, complete_time = ?, state = 1 WHERE id = ?").run(ship.id, completeTime, dock.id);
         }
+        recordQuestEvent(db, { kind: "simple", subcategory: "repair" });
       });
       tx();
-      recordQuestEvent(db, { kind: "simple", subcategory: "repair" });
 
       const updatedDock = getSave(db).repairDocks.find((item) => item.id === dock.id)!;
       return { ok: true, dock: updatedDock };
@@ -834,6 +1074,7 @@ export function createStateStore(options: StateStoreOptions) {
 
       return { ok: true, dock: getSave(db).repairDocks.find((item) => item.id === dock.id)! };
     },
+    openRepairDock: (): RepairDockOpenResult => openRepairDock(db),
     startBuild: (input: {
       dockId: number;
       recipe: ConstructionRecipe;
@@ -921,6 +1162,7 @@ export function createStateStore(options: StateStoreOptions) {
       tx();
       return { ok: true, ship, slotItems, docks: getSave(db).buildDocks };
     },
+    openBuildDock: (): BuildDockOpenResult => openBuildDock(db),
     developEquipment: (
       recipe: DevelopmentRecipe,
       resultMasterIds: (number | null)[]
@@ -1056,6 +1298,8 @@ export function createStateStore(options: StateStoreOptions) {
       }));
       return getSave(db).sortieSession;
     },
+    setSortieAirBaseTargets: (targets: readonly AirBaseTargetRequest[]) =>
+      setSortieAirBaseTargets(db, targets),
     recordSortieBattle: (record: JsonObject) => {
       const session = getSave(db).sortieSession;
       if (!session) return null;
@@ -1088,6 +1332,8 @@ export function createStateStore(options: StateStoreOptions) {
     applyPracticeBattleResult: () => applyBattleResult(db, "practice"),
     practiceBatch: (options?: GeneratePracticeBatchOptions) => practiceBatch(db, options),
     practiceStates: () => practiceStates(db),
+    practiceMatchingKind: () => practiceMatchingKind(db),
+    setPracticeMatchingKind: (kind: number) => setPracticeMatchingKind(db, kind),
     recordCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
     updateCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
     lastCombinedBattle: () => lastBattleSession(db, "combined"),
@@ -1112,15 +1358,29 @@ function missionMemberState(db: Database.Database) {
   );
   const settings = getExpeditionSettings(db);
   const currentPeriod = expeditionPeriodKey(expeditionNow(db));
+  const save = getSave(db);
+  const completedOnce = new Set(
+    [...progress.values()].filter((item) => item.completedCount > 0).map((item) => item.missionId)
+  );
+  const completedThisPeriod = new Set(
+    [...progress.values()]
+      .filter((item) => item.periodKey === currentPeriod && item.periodCount > 0)
+      .map((item) => item.missionId)
+  );
+  const clearedMaps = new Set(save.maps.filter((map) => map.cleared === 1).map((map) => map.id));
   return {
     api_list_items: expeditionMasters(activeEventAreaId).map((master) => {
       const item = progress.get(master.api_id);
       const completed = master.api_reset_type === 1
         ? item?.periodKey === currentPeriod && (item?.periodCount ?? 0) > 0
         : (item?.completedCount ?? 0) > 0;
+      const rule = expeditionUnlockRule(master.api_id);
+      const prerequisitesMet = rule.completedIds.every((id) => completedOnce.has(id))
+        && rule.periodCompletedIds.every((id) => completedThisPeriod.has(id))
+        && rule.clearedMapIds.every((id) => clearedMaps.has(id));
       return {
         api_mission_id: master.api_id,
-        api_state: completed ? 2 : settings.unlockAll || item?.unlocked ? 1 : 0
+        api_state: completed ? 2 : settings.unlockAll || prerequisitesMet ? 1 : 0
       };
     }),
     api_limit_time: [nextExpeditionResetAt(expeditionNow(db))]
@@ -1138,11 +1398,18 @@ function startExpedition(db: Database.Database, deckId: number, missionId: numbe
   }
   if (deckId < 2 || deckId > 4) return { ok: false as const, error: "Only fleets 2-4 can start expeditions" };
 
+  const sameMission = db.prepare(`
+    SELECT deck_id FROM expedition_runs
+    WHERE mission_id = ? AND deck_id != ? AND status IN ('active', 'returning')
+  `).get(missionId, deckId) as Row | undefined;
+  if (sameMission) return { ok: false as const, error: "Another fleet is already on this expedition" };
+
   const save = getSave(db);
   const deck = save.decks.find((item) => item.id === deckId);
   if (!deck) return { ok: false as const, error: "Unknown fleet" };
+  const definition = expeditionDefinition(missionId);
   const missionState = missionMemberState(db).api_list_items.find((item) => item.api_mission_id === missionId);
-  if (!missionState || missionState.api_state !== 1) {
+  if (!missionState || missionState.api_state === 0 || (definition.resetType === 1 && missionState.api_state === 2)) {
     return { ok: false as const, error: "Expedition is locked or already used this period" };
   }
   const ships = deck.shipIds
@@ -1168,8 +1435,9 @@ function startExpedition(db: Database.Database, deckId: number, missionId: numbe
     seed: settings.fixedSeed ?? undefined,
     serialCid
   });
-  const definition = expeditionDefinition(missionId);
-  const periodKey = expeditionPeriodKey(now);
+  if (definition.resetType === 1 && snapshot.completeAt > nextExpeditionResetAt(now)) {
+    return { ok: false as const, error: "Monthly expedition would overlap the reset boundary" };
+  }
   const tx = db.transaction(() => {
     db.prepare(`
       INSERT INTO expedition_runs (
@@ -1198,13 +1466,6 @@ function startExpedition(db: Database.Database, deckId: number, missionId: numbe
     );
     db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?")
       .run(JSON.stringify({ state: 1, missionId, completeTime: snapshot.completeAt }), deckId);
-    if (definition.resetType === 1) {
-      db.prepare(`
-        UPDATE expedition_progress
-        SET period_key = ?, period_count = CASE WHEN period_key = ? THEN period_count + 1 ELSE 1 END
-        WHERE mission_id = ?
-      `).run(periodKey, periodKey, missionId);
-    }
   });
   tx();
   const run = mapExpeditionRun(
@@ -1239,7 +1500,9 @@ function claimExpedition(db: Database.Database, deckId: number) {
   let result: JsonObject = {};
   const tx = db.transaction(() => {
     applyExpeditionOutcome(db, snapshot, outcome);
-    if (run.status !== "returning") completeExpeditionProgress(db, definition.id);
+    if (run.status !== "returning" && outcome.clearResult > 0) {
+      completeExpeditionProgress(db, definition.id, now);
+    }
     incrementRecordMissionStats(db, outcome.clearResult > 0);
     const save = getSave(db);
     result = {
@@ -1264,13 +1527,14 @@ function claimExpedition(db: Database.Database, deckId: number) {
     `).run(JSON.stringify(outcome), JSON.stringify(result), deckId);
     db.prepare("UPDATE decks SET mission_json = ? WHERE id = ?")
       .run(JSON.stringify(emptyMissionState()), deckId);
+    injectStateFault(db, "expedition.before-quest-event");
+    recordQuestEvent(db, {
+      kind: "expedition",
+      missionId: definition.id,
+      success: outcome.clearResult > 0
+    });
   });
   tx();
-  recordQuestEvent(db, {
-    kind: "expedition",
-    missionId: definition.id,
-    success: outcome.clearResult > 0
-  });
   return { ok: true as const, result };
 }
 
@@ -1378,16 +1642,43 @@ function applyExpeditionOutcome(
     .run(memberExp, playerLevelForExp(memberExp));
 }
 
-function completeExpeditionProgress(db: Database.Database, missionId: number) {
-  db.prepare("UPDATE expedition_progress SET completed_count = completed_count + 1 WHERE mission_id = ?")
-    .run(missionId);
+function completeExpeditionProgress(db: Database.Database, missionId: number, now = expeditionNow(db)) {
+  const definition = expeditionDefinition(missionId);
+  if (definition.resetType === 1) {
+    const periodKey = expeditionPeriodKey(now);
+    db.prepare(`
+      UPDATE expedition_progress
+      SET completed_count = completed_count + 1,
+          period_key = ?,
+          period_count = CASE WHEN period_key = ? THEN period_count + 1 ELSE 1 END
+      WHERE mission_id = ?
+    `).run(periodKey, periodKey, missionId);
+  } else {
+    db.prepare("UPDATE expedition_progress SET completed_count = completed_count + 1 WHERE mission_id = ?")
+      .run(missionId);
+  }
   const completed = new Set(
     (db.prepare("SELECT mission_id FROM expedition_progress WHERE completed_count > 0").all() as Row[])
       .map((row) => Number(row.mission_id))
   );
+  const periodKey = expeditionPeriodKey(now);
+  const completedThisPeriod = new Set(
+    (db.prepare("SELECT mission_id FROM expedition_progress WHERE period_key = ? AND period_count > 0").all(periodKey) as Row[])
+      .map((row) => Number(row.mission_id))
+  );
+  const clearedMaps = new Set(
+    (db.prepare("SELECT id FROM maps WHERE cleared = 1").all() as Row[]).map((row) => Number(row.id))
+  );
   const unlock = db.prepare("UPDATE expedition_progress SET unlocked = 1 WHERE mission_id = ?");
   for (const definition of allExpeditionDefinitions()) {
-    if (definition.prerequisiteIds.every((id) => completed.has(id))) unlock.run(definition.id);
+    const rule = expeditionUnlockRule(definition.id);
+    if (
+      rule.completedIds.every((id) => completed.has(id))
+      && rule.periodCompletedIds.every((id) => completedThisPeriod.has(id))
+      && rule.clearedMapIds.every((id) => clearedMaps.has(id))
+    ) {
+      unlock.run(definition.id);
+    }
   }
 }
 
@@ -1521,7 +1812,7 @@ function ensureQuestStates(db: Database.Database) {
   tx();
 }
 
-function refreshQuestPeriods(db: Database.Database) {
+function refreshQuestPeriods(db: Database.Database, now = Date.now()) {
   if (!columnExists(db, "quests", "period_key") || !columnExists(db, "quests", "progress_json")) return;
   const states = new Map(
     (db.prepare("SELECT * FROM quests").all() as Row[]).map((row) => [Number(row.id), row] as const)
@@ -1535,7 +1826,7 @@ function refreshQuestPeriods(db: Database.Database) {
     for (const definition of QUEST_DEFINITIONS) {
       const row = states.get(definition.id);
       if (!row) continue;
-      const currentKey = currentQuestPeriodKey(definition.period);
+      const currentKey = currentQuestPeriodKey(definition.period, now);
       const storedKey = String(row.period_key ?? "");
       if (definition.period !== "once" && storedKey !== currentKey) {
         update.run(0, 0, 0, currentKey, "{}", definition.id);
@@ -1555,6 +1846,8 @@ function startQuest(db: Database.Database, questId: number) {
   if (!state || !QUEST_BY_ID.has(questId) || state.completed === 1 || !questIsVisible(save, questId)) {
     return null;
   }
+  const activeCount = save.quests.filter((quest) => quest.active === 1 && quest.completed !== 1).length;
+  if (state.active !== 1 && activeCount >= ACTIVE_QUEST_LIMIT) return null;
   db.prepare("UPDATE quests SET active = 1 WHERE id = ?").run(questId);
   return getSave(db).quests.find((quest) => quest.id === questId) ?? null;
 }
@@ -1702,9 +1995,9 @@ function equipmentRequirements(raw: unknown) {
 }
 
 function availableSlotItemsByName(save: SaveState, name: string) {
-  const equipped = new Set(save.ships.flatMap((ship) => [...ship.slotIds, ship.exSlotId]).filter((id) => id > 0));
+  const unavailable = equippedSlotItemIds(save);
   return save.slotItems.filter((item) => {
-    if (equipped.has(item.id)) return false;
+    if (unavailable.has(item.id)) return false;
     return masterData.api_mst_slotitem.find((master) => master.api_id === item.masterId)?.api_name === name;
   });
 }
@@ -1773,10 +2066,12 @@ function applyQuestReward(db: Database.Database, reward: QuestReward, bonuses: Q
 function applySpecialQuestReward(db: Database.Database, name: string, amount: number, bonuses: QuestBonus[]) {
   const warResult = /^戦果(\d+)$/.exec(name);
   if (warResult) {
+    const points = Math.trunc(safeNum(warResult[1]));
+    addRankingPoints(db, points);
     bonuses.push({
       type: QUEST_BONUS_TYPE.warResult,
       name,
-      count: Math.trunc(safeNum(warResult[1])),
+      count: points,
       item: { api_name: name }
     });
     return;
@@ -1910,11 +2205,43 @@ function ensureEventSettings(db: Database.Database) {
 function ensureRecordStats(db: Database.Database) {
   const row = db.prepare("SELECT COALESCE(SUM(completed_count), 0) AS completed FROM expedition_progress").get() as Row;
   const completed = Math.max(0, Math.trunc(safeNum(row.completed)));
+  if (columnExists(db, "record_stats", "ranking_points")) {
+    db.prepare(`
+      INSERT OR IGNORE INTO record_stats
+        (id, battle_win, battle_lose, practice_win, practice_lose, mission_count, mission_success,
+         ranking_points, ranking_period_key)
+      VALUES (1, 0, 0, 0, 0, ?, ?, 0, ?)
+    `).run(completed, completed, currentRankingPeriodKey());
+  } else {
+    db.prepare(`
+      INSERT OR IGNORE INTO record_stats
+        (id, battle_win, battle_lose, practice_win, practice_lose, mission_count, mission_success)
+      VALUES (1, 0, 0, 0, 0, ?, ?)
+    `).run(completed, completed);
+  }
+}
+
+function currentRankingPeriodKey(now = Date.now()) {
+  return currentQuestPeriodKey("monthly", now);
+}
+
+function refreshRankingPeriod(db: Database.Database, now = Date.now()) {
+  if (!columnExists(db, "record_stats", "ranking_period_key")) return;
+  ensureRecordStats(db);
+  const key = currentRankingPeriodKey(now);
   db.prepare(`
-    INSERT OR IGNORE INTO record_stats
-      (id, battle_win, battle_lose, practice_win, practice_lose, mission_count, mission_success)
-    VALUES (1, 0, 0, 0, 0, ?, ?)
-  `).run(completed, completed);
+    UPDATE record_stats
+    SET ranking_points = CASE WHEN ranking_period_key = ? THEN ranking_points ELSE 0 END,
+        ranking_period_key = ?
+    WHERE id = 1
+  `).run(key, key);
+}
+
+function addRankingPoints(db: Database.Database, points: number) {
+  const amount = Math.max(0, Math.trunc(safeNum(points)));
+  if (amount <= 0) return;
+  refreshRankingPeriod(db);
+  db.prepare("UPDATE record_stats SET ranking_points = ranking_points + ? WHERE id = 1").run(amount);
 }
 
 function ensurePendingPayItems(db: Database.Database) {
@@ -1927,14 +2254,12 @@ function ensurePendingPayItems(db: Database.Database) {
 }
 
 function getExpeditionSettings(db: Database.Database) {
-  ensureExpeditionSettings(db);
-  return mapExpeditionSettings(
-    db.prepare("SELECT * FROM expedition_settings WHERE id = 1").get() as Row
-  );
+  const row = db.prepare("SELECT * FROM expedition_settings WHERE id = 1").get() as Row | undefined;
+  return row ? mapExpeditionSettings(row) : { fixedSeed: null, clockOffsetMs: 0, unlockAll: 0 };
 }
 
-function expeditionNow(db: Database.Database) {
-  return Date.now() + getExpeditionSettings(db).clockOffsetMs;
+function expeditionNow(db: Database.Database, now = Date.now()) {
+  return now + getExpeditionSettings(db).clockOffsetMs;
 }
 
 function expeditionPeriodKey(now: number) {
@@ -2079,15 +2404,142 @@ function advanceSortieRoute(db: Database.Database, selectedEdgeNo?: number) {
   const visited = Array.isArray(session.state.visited)
     ? session.state.visited.filter((value): value is string => typeof value === "string")
     : [];
+  const transportLanding = captureTransportLanding(db, save, session, next.to);
   const state = {
     ...session.state,
     point: next.to,
     routeStep: safeNum(session.state.routeStep) + 1,
-    visited: [...visited, next.to]
+    visited: [...visited, next.to],
+    ...(transportLanding ? { transportLanding } : {})
   };
-  db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = ?")
-    .run(next.edgeNo, JSON.stringify(state), session.id);
+  const tx = db.transaction(() => {
+    db.prepare("UPDATE sortie_sessions SET node = ?, state_json = ? WHERE id = ?")
+      .run(next.edgeNo, JSON.stringify(state), session.id);
+    applyMapArrivalProgress(db, session.areaId * 10 + session.mapNo, next.to);
+  });
+  tx();
   return getSave(db).sortieSession;
+}
+
+function captureTransportLanding(
+  db: Database.Database,
+  save: SaveState,
+  session: SortieSession,
+  point: string
+) {
+  const map = db.prepare("SELECT phase FROM maps WHERE id = ?").get(session.areaId * 10 + session.mapNo) as Row | undefined;
+  const phase = Math.max(1, Math.trunc(safeNum(map?.phase, safeNum(session.state.phase, 1))));
+  const stage = mapPhaseDefinitions(session.areaId * 10 + session.mapNo)?.[phase - 1];
+  if (!stage || stage.condition !== "transport" || stage.landingPoint !== point) return null;
+  const mainDeck = save.decks.find((deck) => deck.id === session.deckId);
+  if (!mainDeck) throw new StateDatabaseIntegrityError(`Transport sortie references missing deck ${session.deckId}`);
+  const escortDeck = save.player.combinedFleet > 0 && session.deckId === 1
+    ? save.decks.find((deck) => deck.id === 2)
+    : undefined;
+  const snapshot = buildTransportLandingSnapshot(save, [
+    ...mainDeck.shipIds,
+    ...(escortDeck?.shipIds ?? [])
+  ]);
+  return {
+    mapId: session.areaId * 10 + session.mapNo,
+    phase,
+    point,
+    sRankPoints: snapshot.sRankPoints
+  };
+}
+
+function applyMapArrivalProgress(db: Database.Database, mapId: number, point: string) {
+  const map = db.prepare("SELECT * FROM maps WHERE id = ?").get(mapId) as Row | undefined;
+  if (!map || Number(map.cleared) === 1) return;
+  const selectedRank = Math.trunc(safeNum(map.selected_rank));
+  const stages = eventMapById(mapId)
+    ? eventMapPhaseDefinitions(mapId, selectedRank)
+    : mapPhaseDefinitions(mapId);
+  const phase = Math.max(1, Math.trunc(safeNum(map.phase, 1)));
+  const stage = stages?.[phase - 1];
+  if (!stage || stage.condition !== "arrival" || stage.point !== point) return;
+  applyMapStageProgress(db, map, stages, 1, mapId, selectedRank);
+}
+
+type AirBaseTargetRequest = {
+  baseId: number;
+  nodes: readonly number[];
+};
+
+type AirBaseTargetResult =
+  | { ok: true; targets: JsonObject[] }
+  | { ok: false; error: string };
+
+function setSortieAirBaseTargets(
+  db: Database.Database,
+  requests: readonly AirBaseTargetRequest[]
+): AirBaseTargetResult {
+  const save = getSave(db);
+  const session = save.sortieSession;
+  if (!session) return { ok: false, error: "No active sortie" };
+  const routingMap = sortieRoutingMap(session.areaId, session.mapNo, save.eventSettings.activeAreaId);
+  if (!routingMap) return { ok: false, error: "Sortie map has no routing data" };
+  if (requests.length === 0) {
+    const nextState = { ...session.state, airBaseTargets: [] };
+    db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?")
+      .run(JSON.stringify(nextState), session.id);
+    return { ok: true, targets: [] };
+  }
+  if (requests.length > 3) {
+    return { ok: false, error: "At most three air-base target sets are allowed" };
+  }
+
+  const seenBaseIds = new Set<number>();
+  const targets: JsonObject[] = [];
+  for (const request of requests) {
+    const baseId = Math.trunc(safeNum(request.baseId));
+    const nodes = request.nodes.map((node) => Math.trunc(safeNum(node)));
+    if (baseId < 1 || baseId > 3 || seenBaseIds.has(baseId) || nodes.length !== 2 || nodes.some((node) => node <= 0)) {
+      return { ok: false, error: `Invalid strike points for air base ${baseId}` };
+    }
+    seenBaseIds.add(baseId);
+    const base = save.airBases.find((candidate) =>
+      candidate.areaId === session.areaId && candidate.baseId === baseId
+    );
+    if (!base) return { ok: false, error: `Air base ${baseId} is not open in area ${session.areaId}` };
+    if (base.actionKind !== 1) return { ok: false, error: `Air base ${baseId} is not assigned to sortie` };
+    if (!base.squadrons.some((squadron) => squadron.slotItemId > 0 && squadron.count > 0)) {
+      return { ok: false, error: `Air base ${baseId} has no supplied aircraft` };
+    }
+
+    const effectiveDistance = Math.max(0, base.distanceBase + base.distanceBonus);
+    const ranges: JsonObject[] = [];
+    for (const node of nodes) {
+      const edge = routingMap.edges.find((candidate) => candidate.no === node);
+      if (!edge) return { ok: false, error: `Unknown strike point ${node} on map ${routingMap.mapId}` };
+      const evidence = publishedLandBaseRange(routingMap.mapId, edge.to);
+      if (!evidence) {
+        return { ok: false, error: `Strike point ${edge.to} has no published range evidence` };
+      }
+      if (effectiveDistance < evidence.requiredDistance) {
+        return {
+          ok: false,
+          error: `Air base ${baseId} range ${effectiveDistance} cannot reach ${edge.to} (requires ${evidence.requiredDistance})`
+        };
+      }
+      ranges.push({
+        node,
+        point: edge.to,
+        requiredDistance: evidence.requiredDistance,
+        level: "published",
+        source: evidence.source,
+        checkedAt: evidence.checkedAt
+      });
+    }
+    targets.push({ baseId, nodes, ranges });
+  }
+
+  const nextState = { ...session.state, airBaseTargets: targets };
+  const changed = db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?")
+    .run(JSON.stringify(nextState), session.id);
+  return changed.changes === 1
+    ? { ok: true, targets }
+    : { ok: false, error: "Sortie ended before air-base targets were saved" };
 }
 
 function applyBattleResult(db: Database.Database, mode: BattleMode) {
@@ -2099,13 +2551,16 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
   const record = loaded.record as unknown as BattleRecord;
   const settlement = buildBattleSettlement(save, record);
   const nextBattle = { ...record, resultClaimed: true, settlement };
+  const questEvent = battleQuestEvent(nextBattle as unknown as BattleRecord, mode);
   const tx = db.transaction(() => {
+    const sunkShipIds: number[] = [];
     const pursuedNightBattle = record.phases.night != null;
     consumeBattleSupply(db, record.shipIds, pursuedNightBattle);
     consumeBattleSupply(db, record.escortShipIds, pursuedNightBattle);
+    applyDamageControlActivations(db, record);
     if (mode !== "practice") {
-      applyFleetHp(db, record.shipIds, record.after?.fNowHps);
-      applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps);
+      sunkShipIds.push(...applyFleetHp(db, record.shipIds, record.after?.fNowHps));
+      sunkShipIds.push(...applyFleetHp(db, record.escortShipIds, record.after?.fCombinedNowHps));
     }
     applyFleetOnSlot(db, record.after?.fOnSlotByShipId);
     applyFleetOnSlot(db, record.after?.fCombinedOnSlotByShipId);
@@ -2122,12 +2577,78 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     if (mode === "sortie" || mode === "combined") applyMapProgress(db, record);
     incrementRecordBattleStats(db, mode, record.result?.rank);
     loaded.saveRecord(nextBattle as unknown as JsonObject);
+    if (mode !== "practice") removeSunkShipsAfterBattle(db, sunkShipIds);
+    injectStateFault(db, "battle.before-quest-event");
+    if (questEvent) recordQuestEvent(db, questEvent);
+    recordQuestEvent(db, { kind: "simple", subcategory: "battle" });
   });
   tx();
-  const questEvent = battleQuestEvent(nextBattle as unknown as BattleRecord, mode);
-  if (questEvent) recordQuestEvent(db, questEvent);
-  recordQuestEvent(db, { kind: "simple", subcategory: "battle" });
   return { save: getSave(db), record: nextBattle, applied: true };
+}
+
+function applyDamageControlActivations(db: Database.Database, record: BattleRecord) {
+  const activations = Array.isArray(record.damageControlActivations)
+    ? record.damageControlActivations
+    : [];
+  if (activations.length === 0) return;
+
+  const before = getSave(db);
+  const seen = new Set<number>();
+  for (const activation of activations) {
+    const shipId = Math.trunc(Number(activation.shipId));
+    const slotItemId = Math.trunc(Number(activation.slotItemId));
+    const slotMasterId = Math.trunc(Number(activation.slotMasterId));
+    if (!Number.isInteger(shipId) || shipId <= 0 || !Number.isInteger(slotItemId) || slotItemId <= 0) {
+      throw new StateDatabaseIntegrityError("Battle contains an invalid damage-control activation");
+    }
+    if (seen.has(slotItemId)) {
+      throw new StateDatabaseIntegrityError(`Battle consumes damage-control item ${slotItemId} more than once`);
+    }
+    seen.add(slotItemId);
+    if (![42, 43].includes(slotMasterId)) {
+      throw new StateDatabaseIntegrityError(`Battle activation references unsupported damage-control master ${slotMasterId}`);
+    }
+    const ship = before.ships.find((candidate) => candidate.id === shipId);
+    const item = before.slotItems.find((candidate) => candidate.id === slotItemId);
+    const owners = slotItemOwners(before, slotItemId);
+    const ownedByShip = owners.length === 1 && (
+      (owners[0].kind === "ship-slot" && owners[0].shipId === shipId) ||
+      (owners[0].kind === "ship-extra-slot" && owners[0].shipId === shipId)
+    );
+    if (!ship || !item || item.masterId !== slotMasterId || !ownedByShip) {
+      throw new StateDatabaseIntegrityError(
+        `Battle damage-control item ${slotItemId} is not uniquely equipped by ship ${shipId}`
+      );
+    }
+  }
+
+  for (const activation of activations) {
+    const shipId = Math.trunc(Number(activation.shipId));
+    const slotItemId = Math.trunc(Number(activation.slotItemId));
+    const current = (db.prepare("SELECT * FROM ships WHERE id = ?").get(shipId) as Row | undefined);
+    if (!current) throw new StateDatabaseIntegrityError(`Damage-control ship ${shipId} disappeared`);
+    const ship = mapShip(current);
+    if (ship.exSlotId === slotItemId) {
+      db.prepare("UPDATE ships SET ex_slot_id = 0 WHERE id = ?").run(shipId);
+    } else {
+      const slotIndex = ship.slotIds.indexOf(slotItemId);
+      if (slotIndex < 0) {
+        throw new StateDatabaseIntegrityError(`Damage-control item ${slotItemId} disappeared from ship ${shipId}`);
+      }
+      const slotItems = (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem);
+      const master = masterData.api_mst_ship.find((candidate) => candidate.api_id === ship.masterId);
+      const next = equipOrdinarySlot(master, slotItems, ship.slotIds, ship.onSlot, slotIndex, -1);
+      db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ? WHERE id = ?")
+        .run(JSON.stringify(next.slotIds), JSON.stringify(next.onSlot), shipId);
+    }
+    const removed = db.prepare("DELETE FROM slot_items WHERE id = ?").run(slotItemId);
+    if (removed.changes !== 1) {
+      throw new StateDatabaseIntegrityError(`Damage-control item ${slotItemId} could not be consumed`);
+    }
+    if (activation.restoreFuelAmmo) {
+      db.prepare("UPDATE ships SET fuel = max_fuel, ammo = max_ammo WHERE id = ?").run(shipId);
+    }
+  }
 }
 
 function incrementRecordBattleStats(db: Database.Database, mode: BattleMode, rank: unknown) {
@@ -2209,32 +2730,60 @@ function applyMapProgress(db: Database.Database, record: BattleRecord) {
   if (!stages) {
     if (!sortie.isBoss || !enemyFlagshipSunk(record)) return;
     const nextGauge = Math.max(0, Number(map.gauge) - 1);
-    db.prepare("UPDATE maps SET cleared = ?, gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
-      .run(nextGauge === 0 ? 1 : 0, nextGauge, nextGauge === 0 ? 2 : 1, sortie.mapId);
-    if (nextGauge === 0) awardMapClearReward(db, sortie.mapId, selectedRank);
+    const cleared = nextGauge === 0;
+    db.prepare(`
+      UPDATE maps
+      SET cleared = ?, gauge = ?, phase = ?, phase_progress = 0,
+          clear_count = clear_count + ?
+      WHERE id = ?
+    `).run(cleared ? 1 : 0, nextGauge, cleared ? 2 : 1, cleared ? 1 : 0, sortie.mapId);
+    if (cleared) {
+      awardMapClearReward(db, sortie.mapId, selectedRank);
+      refreshMapUnlocks(db);
+    }
     return;
   }
 
   const phase = Math.max(1, Number(map.phase));
   const stage = stages[phase - 1];
-  if (!stage || sortie.point !== stage.point || !phaseConditionMet(stage.condition, record)) return;
+  if (!stage || stage.condition === "arrival" || sortie.point !== stage.point) return;
+  const amount = mapBattleProgressAmount(stage, record, phase);
+  if (amount <= 0) return;
+  applyMapStageProgress(db, map, stages, amount, sortie.mapId, selectedRank);
+}
 
-  const progress = Math.max(0, Number(map.phase_progress)) + 1;
+function applyMapStageProgress(
+  db: Database.Database,
+  map: Row,
+  stages: readonly MapPhaseDefinition[],
+  amount: number,
+  mapId: number,
+  selectedRank: number
+) {
+  const phase = Math.max(1, Math.trunc(safeNum(map.phase, 1)));
+  const stage = stages[phase - 1];
+  if (!stage) return;
+  const progress = Math.min(stage.required, Math.max(0, Number(map.phase_progress)) + Math.max(0, Math.trunc(amount)));
   if (progress < stage.required) {
     db.prepare("UPDATE maps SET gauge = ?, phase_progress = ? WHERE id = ?")
-      .run(stage.required - progress, progress, sortie.mapId);
+      .run(stage.required - progress, progress, mapId);
     return;
   }
 
   const nextStage = stages[phase];
   if (!nextStage) {
-    db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = ?, phase_progress = 0 WHERE id = ?")
-      .run(stages.length + 1, sortie.mapId);
-    awardMapClearReward(db, sortie.mapId, selectedRank);
+    db.prepare(`
+      UPDATE maps
+      SET cleared = 1, gauge = 0, phase = ?, phase_progress = 0,
+          clear_count = clear_count + 1
+      WHERE id = ?
+    `).run(stages.length + 1, mapId);
+    awardMapClearReward(db, mapId, selectedRank);
+    refreshMapUnlocks(db);
     return;
   }
   db.prepare("UPDATE maps SET gauge = ?, phase = ?, phase_progress = 0 WHERE id = ?")
-    .run(nextStage.required, phase + 1, sortie.mapId);
+    .run(nextStage.required, phase + 1, mapId);
 }
 
 function awardMapClearReward(db: Database.Database, mapId: number, selectedRank = 0) {
@@ -2246,12 +2795,35 @@ function awardMapClearReward(db: Database.Database, mapId: number, selectedRank 
     }
     return;
   }
-  addUseItem(db, MEDAL_USEITEM_ID, mapMedalRewardCount(mapId));
+  for (const reward of mapClearRewards(mapId)) {
+    if (reward.kind === "useitem") addUseItem(db, reward.id, reward.count);
+    if (reward.kind === "material") addMaterials(db, { [reward.material]: reward.count });
+    if (reward.kind === "ranking") addRankingPoints(db, reward.count);
+  }
 }
 
-function phaseConditionMet(condition: MapPhaseCondition, record: BattleRecord) {
-  if (condition === "sink") return enemyFlagshipSunk(record);
-  return record.result?.rank === "S" || record.result?.rank === "A" || record.result?.rank === "B";
+function mapBattleProgressAmount(stage: MapPhaseDefinition, record: BattleRecord, phase: number) {
+  if (!rankMeetsMinimum(record.result?.rank, stage.minimumRank)) return 0;
+  if (stage.condition === "sink") return enemyFlagshipSunk(record) ? 1 : 0;
+  if (stage.condition === "victory") return isBattleVictoryRank(record.result?.rank) ? 1 : 0;
+  if (stage.condition !== "transport") return 0;
+  const landing = record.sortie?.transportLanding;
+  if (
+    !landing ||
+    landing.mapId !== record.sortie?.mapId ||
+    landing.phase !== phase ||
+    landing.point !== stage.landingPoint ||
+    !(record.sortie?.visited ?? []).includes(stage.landingPoint ?? "")
+  ) {
+    return 0;
+  }
+  return transportPointsForRank(landing, record.result?.rank);
+}
+
+function rankMeetsMinimum(actual: unknown, minimum: MapVictoryRank | undefined) {
+  if (!minimum) return true;
+  const strength: Record<MapVictoryRank, number> = { B: 1, A: 2, S: 3 };
+  return typeof actual === "string" && (strength[actual as MapVictoryRank] ?? 0) >= strength[minimum];
 }
 
 function enemyFlagshipSunk(record: BattleRecord) {
@@ -2296,6 +2868,15 @@ function readBattleSession(db: Database.Database, id: string) {
   return row ? parseJson<JsonObject>(row.state_json, {}) : null;
 }
 
+function activeBattleReferences(db: Database.Database): BattleShipReferences[] {
+  const result: BattleShipReferences[] = [];
+  for (const session of ["practice", "combined"] as const) {
+    const record = readBattleSession(db, session);
+    if (record) result.push({ session, record });
+  }
+  return result;
+}
+
 function practiceBatch(db: Database.Database, options: GeneratePracticeBatchOptions = {}) {
   const now = Date.now();
   const periodKey = practicePeriodKey(now);
@@ -2314,6 +2895,19 @@ function practiceBatch(db: Database.Database, options: GeneratePracticeBatchOpti
     ...clonePracticeBatch(batch),
     states: {}
   };
+}
+
+function practiceMatchingKind(db: Database.Database) {
+  const state = readBattleSession(db, PRACTICE_MATCHING_SESSION_ID);
+  return normalizeMatchingKind(state?.selectedKind);
+}
+
+function setPracticeMatchingKind(db: Database.Database, value: number) {
+  const kind = Math.trunc(Number(value));
+  if (![1, 2, 3].includes(kind)) return { ok: false as const, error: "Invalid practice matching kind" };
+  const previous = practiceMatchingKind(db);
+  writeBattleSession(db, PRACTICE_MATCHING_SESSION_ID, { selectedKind: kind });
+  return { ok: true as const, selectedKind: kind, updateFlag: previous === kind ? 0 : 1 };
 }
 
 function practiceStates(db: Database.Database) {
@@ -2393,11 +2987,108 @@ function sortieShipExpRankModifier(rank: BattleRecord["result"]["rank"] | undefi
 
 function applyFleetHp(db: Database.Database, shipIds: number[] | undefined, hps: number[] | undefined) {
   const fixedShipIds = normalizeFixed((shipIds ?? []).map((id) => Number(id)), 6, -1);
-  const fixedHps = normalizeFixed((hps ?? []).map((hp) => Math.max(1, Math.trunc(Number(hp) || 1))), 6, 1);
+  const fixedHps = normalizeFixed((hps ?? []).map((hp) => Math.trunc(Number(hp))), 6, -1);
+  const sunkShipIds: number[] = [];
   for (let index = 0; index < fixedShipIds.length; index += 1) {
     const shipId = fixedShipIds[index];
     if (shipId <= 0) continue;
-    db.prepare("UPDATE ships SET hp = max(1, min(max_hp, ?)) WHERE id = ?").run(fixedHps[index], shipId);
+    const hp = fixedHps[index];
+    if (!Number.isFinite(hp) || hp < 0) continue;
+    if (hp === 0) {
+      sunkShipIds.push(shipId);
+      continue;
+    }
+    const updated = db.prepare("UPDATE ships SET hp = min(max_hp, ?) WHERE id = ?").run(hp, shipId);
+    if (updated.changes !== 1) {
+      throw new StateDatabaseIntegrityError(`Battle result references missing ship ${shipId}`);
+    }
+  }
+  return sunkShipIds;
+}
+
+/**
+ * A ship that legitimately reaches zero HP is lost with all equipment still
+ * aboard.  This is intentionally separate from player-initiated scrapping:
+ * sinking grants no resources and ignores lock flags, but it must remove every
+ * live reference so the save graph remains internally consistent.
+ */
+function removeSunkShipsAfterBattle(db: Database.Database, shipIds: number[]) {
+  const sunkIds = new Set(shipIds.filter((id) => Number.isInteger(id) && id > 0));
+  if (sunkIds.size === 0) return;
+
+  const before = getSave(db);
+  const sunkShips = [...sunkIds].map((id) => before.ships.find((ship) => ship.id === id));
+  if (sunkShips.some((ship) => ship == null)) {
+    throw new StateDatabaseIntegrityError("Battle sinking references an unknown ship");
+  }
+  const away = activeExpeditionShipIds(db);
+  if ([...sunkIds].some((id) => away.has(id))) {
+    throw new StateDatabaseIntegrityError("A ship cannot sink while assigned to an expedition");
+  }
+
+  const equipmentIds = new Set<number>();
+  for (const ship of sunkShips) {
+    for (const itemId of [...ship!.slotIds, ship!.exSlotId]) {
+      if (itemId <= 0) continue;
+      const owners = slotItemOwners(before, itemId);
+      const item = before.slotItems.find((candidate) => candidate.id === itemId);
+      if (!item || owners.length !== 1 || !(owners[0].kind === "ship-slot" || owners[0].kind === "ship-extra-slot") || owners[0].shipId !== ship!.id) {
+        throw new StateDatabaseIntegrityError(
+          `Sunk ship ${ship!.id} has invalid equipment ownership for item ${itemId}`
+        );
+      }
+      if (equipmentIds.has(itemId)) {
+        throw new StateDatabaseIntegrityError(`Sinking consumes equipment ${itemId} more than once`);
+      }
+      equipmentIds.add(itemId);
+    }
+  }
+
+  const removeFromFleet = (values: number[]) =>
+    normalizeDeckShipIds(values.filter((id) => id > 0 && !sunkIds.has(id)));
+  const updateDeck = db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = ?");
+  for (const row of db.prepare("SELECT id, ship_ids_json FROM decks").all() as Row[]) {
+    const ids = normalizeDeckShipIds(parseJson<number[]>(row.ship_ids_json, []));
+    if (!ids.some((id) => sunkIds.has(id))) continue;
+    updateDeck.run(JSON.stringify(removeFromFleet(ids)), Number(row.id));
+  }
+  const updatePreset = db.prepare("UPDATE preset_decks SET ship_ids_json = ? WHERE preset_no = ?");
+  for (const row of db.prepare("SELECT preset_no, ship_ids_json FROM preset_decks").all() as Row[]) {
+    const ids = normalizeDeckShipIds(parseJson<number[]>(row.ship_ids_json, []));
+    if (!ids.some((id) => sunkIds.has(id))) continue;
+    updatePreset.run(JSON.stringify(removeFromFleet(ids)), Number(row.preset_no));
+  }
+  for (const id of sunkIds) {
+    db.prepare("UPDATE repair_docks SET ship_id = 0, complete_time = 0, state = 0 WHERE ship_id = ?").run(id);
+  }
+  for (const itemId of equipmentIds) {
+    const removed = db.prepare("DELETE FROM slot_items WHERE id = ?").run(itemId);
+    if (removed.changes !== 1) {
+      throw new StateDatabaseIntegrityError(`Sunk equipment ${itemId} could not be removed`);
+    }
+  }
+  for (const id of sunkIds) {
+    const removed = db.prepare("DELETE FROM ships WHERE id = ?").run(id);
+    if (removed.changes !== 1) {
+      throw new StateDatabaseIntegrityError(`Sunk ship ${id} could not be removed`);
+    }
+  }
+
+  // Rebuild the routing snapshot from the surviving fleet after the claimed
+  // battle record has been stored. This prevents the session from retaining a
+  // dangling copy of a ship that can no longer continue the sortie.
+  const afterDeletion = getSave(db);
+  const session = afterDeletion.sortieSession;
+  if (session) {
+    const fleet = buildRoutingFleet(afterDeletion, session.deckId);
+    db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?")
+      .run(JSON.stringify({ ...session.state, fleet }), session.id);
+  }
+  revalidateCombinedFleet(db);
+
+  const issues = stateIntegrityIssues(getSave(db), activeBattleReferences(db));
+  if (issues.length > 0) {
+    throw new StateDatabaseIntegrityError(`Battle sinking left invalid references: ${JSON.stringify(issues[0])}`);
   }
 }
 
@@ -2455,6 +3146,160 @@ function openAirBaseArea(db: Database.Database, areaId: number): AirBase[] {
   return getSave(db).airBases.filter((base) => base.areaId === normalizedAreaId);
 }
 
+function renameAirBase(db: Database.Database, areaId: number, baseId: number, rawName: string): AirBaseResult {
+  const normalizedAreaId = Math.trunc(safeNum(areaId));
+  const normalizedBaseId = Math.trunc(safeNum(baseId));
+  const name = String(rawName ?? "").trim();
+  if (normalizedAreaId < 1 || normalizedBaseId < 1) return { ok: false, error: "Invalid air base id" };
+  if (!name || Array.from(name).length > 20) return { ok: false, error: "Air base name must contain 1-20 characters" };
+  const changed = db.prepare("UPDATE air_bases SET name = ? WHERE area_id = ? AND base_id = ?")
+    .run(name, normalizedAreaId, normalizedBaseId);
+  if (changed.changes !== 1) return { ok: false, error: "Air base is not open" };
+  const save = getSave(db);
+  const airBase = save.airBases.find((base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId);
+  return airBase ? { ok: true, airBase, materials: save.materials } : { ok: false, error: "Air base not found" };
+}
+
+function recoverAirBaseCondition(db: Database.Database, areaId: number, baseId: number): AirBaseResult {
+  const normalizedAreaId = Math.trunc(safeNum(areaId));
+  const normalizedBaseId = Math.trunc(safeNum(baseId));
+  const save = getSave(db);
+  const base = save.airBases.find((item) => item.areaId === normalizedAreaId && item.baseId === normalizedBaseId);
+  if (!base) return { ok: false, error: "Air base is not open" };
+  if (!base.squadrons.some((squadron) => squadron.slotItemId > 0 && squadron.condition < AIR_BASE_NATURAL_CONDITION_CAP)) {
+    return { ok: false, error: "Air base morale is already full" };
+  }
+  if ((save.useItems.find((item) => item.id === AIR_BASE_SPECIAL_RATION_ITEM_ID)?.count ?? 0) < 1) {
+    return { ok: false, error: "Insufficient special aviation ration" };
+  }
+  const now = Date.now();
+  const tx = db.transaction(() => {
+    consumeUseItem(db, AIR_BASE_SPECIAL_RATION_ITEM_ID, 1);
+    // The public observation baseline is a +20 recovery, capped at the LBAS
+    // natural maximum of 46.  Keeping this isolated makes a future measured
+    // value a data change rather than a protocol/state rewrite.
+    db.prepare(`
+      UPDATE air_base_squadrons
+      SET condition = min(?, condition + 20), condition_updated_at = ?
+      WHERE area_id = ? AND base_id = ? AND slot_item_id > 0
+    `).run(AIR_BASE_NATURAL_CONDITION_CAP, now, normalizedAreaId, normalizedBaseId);
+  });
+  tx();
+  const after = getSave(db);
+  const airBase = after.airBases.find((item) => item.areaId === normalizedAreaId && item.baseId === normalizedBaseId);
+  return airBase ? { ok: true, airBase, materials: after.materials } : { ok: false, error: "Air base not found" };
+}
+
+function exchangeAirBasePlane(
+  db: Database.Database,
+  areaId: number,
+  targetBaseId: number,
+  sourceBaseId: number,
+  targetSquadronId: number,
+  itemId: number
+): AirBaseListResult {
+  const normalizedAreaId = Math.trunc(safeNum(areaId));
+  const normalizedTargetBaseId = Math.trunc(safeNum(targetBaseId));
+  const normalizedSourceBaseId = Math.trunc(safeNum(sourceBaseId));
+  const normalizedSquadronId = Math.trunc(safeNum(targetSquadronId));
+  const normalizedItemId = Math.trunc(safeNum(itemId));
+  if (
+    normalizedAreaId < 1 || normalizedTargetBaseId < 1 || normalizedSourceBaseId < 1
+    || normalizedTargetBaseId === normalizedSourceBaseId
+    || normalizedSquadronId < 1 || normalizedSquadronId > AIR_BASE_SQUADRON_COUNT
+    || normalizedItemId < 1
+  ) {
+    return { ok: false, error: "Invalid air base exchange request" };
+  }
+  const source = db.prepare(`
+    SELECT * FROM air_base_squadrons
+    WHERE area_id = ? AND base_id = ? AND slot_item_id = ?
+  `).get(normalizedAreaId, normalizedSourceBaseId, normalizedItemId) as Row | undefined;
+  const target = db.prepare(`
+    SELECT * FROM air_base_squadrons
+    WHERE area_id = ? AND base_id = ? AND squadron_id = ?
+  `).get(normalizedAreaId, normalizedTargetBaseId, normalizedSquadronId) as Row | undefined;
+  if (!source || !target) return { ok: false, error: "Unknown source aircraft or target squadron" };
+  if (safeNum(target.slot_item_id) <= 0) {
+    return { ok: false, error: "Cross-base exchange requires two occupied squadrons" };
+  }
+  const update = db.prepare(`
+    UPDATE air_base_squadrons
+    SET slot_item_id = ?, state = ?, count = ?, max_count = ?, condition = ?, condition_updated_at = ?
+    WHERE area_id = ? AND base_id = ? AND squadron_id = ?
+  `);
+  const tx = db.transaction(() => {
+    update.run(
+      target.slot_item_id, target.state, target.count, target.max_count, target.condition,
+      target.condition_updated_at, normalizedAreaId, normalizedSourceBaseId, source.squadron_id
+    );
+    update.run(
+      source.slot_item_id, source.state, source.count, source.max_count, source.condition,
+      source.condition_updated_at, normalizedAreaId, normalizedTargetBaseId, normalizedSquadronId
+    );
+    updateAirBaseDistance(db, normalizedAreaId, normalizedSourceBaseId);
+    updateAirBaseDistance(db, normalizedAreaId, normalizedTargetBaseId);
+  });
+  tx();
+  const after = getSave(db);
+  return {
+    ok: true,
+    airBases: after.airBases.filter((base) =>
+      base.areaId === normalizedAreaId
+      && (base.baseId === normalizedSourceBaseId || base.baseId === normalizedTargetBaseId)
+    ),
+    materials: after.materials
+  };
+}
+
+function expandAirBase(db: Database.Database, areaId: number): AirBaseListResult {
+  const normalizedAreaId = Math.trunc(safeNum(areaId));
+  if (normalizedAreaId < 1) return { ok: false, error: "Invalid air base area" };
+  const save = getSave(db);
+  const bases = save.airBases.filter((base) => base.areaId === normalizedAreaId).sort((a, b) => a.baseId - b.baseId);
+  if (bases.length === 0) return { ok: false, error: "Air base area is not open" };
+  if (bases.length >= AIR_BASE_MAX_COUNT) return { ok: false, error: "Air base area is already fully expanded" };
+  if (bases.some((base, index) => base.baseId !== index + 1)) {
+    return { ok: false, error: "Air base numbering is not contiguous" };
+  }
+  if ((save.useItems.find((item) => item.id === AIR_BASE_CONSTRUCTION_CORPS_ITEM_ID)?.count ?? 0) < 1) {
+    return { ok: false, error: "Insufficient construction corps" };
+  }
+  const tx = db.transaction(() => {
+    consumeUseItem(db, AIR_BASE_CONSTRUCTION_CORPS_ITEM_ID, 1);
+    ensureAirBase(db, normalizedAreaId, bases.length + 1);
+  });
+  tx();
+  const after = getSave(db);
+  return {
+    ok: true,
+    airBases: after.airBases.filter((base) => base.areaId === normalizedAreaId),
+    materials: after.materials
+  };
+}
+
+function expandAirBaseMaintenance(db: Database.Database, areaId: number): AirBaseMaintenanceResult {
+  const normalizedAreaId = Math.trunc(safeNum(areaId));
+  const save = getSave(db);
+  const bases = save.airBases.filter((base) => base.areaId === normalizedAreaId);
+  if (bases.length === 0) return { ok: false, error: "Air base area is not open" };
+  const currentLevel = Math.max(...bases.map((base) => base.maintenanceLevel));
+  if (currentLevel >= AIR_BASE_MAX_MAINTENANCE_LEVEL) {
+    return { ok: false, error: "Air base maintenance is already at maximum" };
+  }
+  if ((save.useItems.find((item) => item.id === AIR_BASE_CONSTRUCTION_CORPS_ITEM_ID)?.count ?? 0) < 1) {
+    return { ok: false, error: "Insufficient construction corps" };
+  }
+  const nextLevel = currentLevel + 1;
+  const tx = db.transaction(() => {
+    consumeUseItem(db, AIR_BASE_CONSTRUCTION_CORPS_ITEM_ID, 1);
+    db.prepare("UPDATE air_bases SET maintenance_level = ? WHERE area_id = ?")
+      .run(nextLevel, normalizedAreaId);
+  });
+  tx();
+  return { ok: true, areaId: normalizedAreaId, maintenanceLevel: nextLevel, materials: getSave(db).materials };
+}
+
 function setAirBasePlane(
   db: Database.Database,
   areaId: number,
@@ -2467,35 +3312,94 @@ function setAirBasePlane(
   const normalizedSquadronId = Math.max(1, Math.min(AIR_BASE_SQUADRON_COUNT, Math.trunc(safeNum(squadronId, 1))));
   const normalizedItemId = Math.trunc(safeNum(itemId, -1));
   const save = getSave(db);
+  const existingBase = save.airBases.find(
+    (base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId
+  );
+  if (!existingBase) return { ok: false, error: "Air base is not open" };
+  const targetSquadron = existingBase.squadrons.find(
+    (squadron) => squadron.squadronId === normalizedSquadronId
+  );
+  if (!targetSquadron) return { ok: false, error: "Unknown air base squadron" };
+  if (targetSquadron.slotItemId === normalizedItemId) {
+    return { ok: true, airBase: existingBase, materials: save.materials };
+  }
+
   const item = normalizedItemId > 0 ? save.slotItems.find((slotItem) => slotItem.id === normalizedItemId) : undefined;
   const master = item ? masterData.api_mst_slotitem.find((slot) => slot.api_id === item.masterId) : undefined;
   if (normalizedItemId > 0 && (!item || !master || !isAircraftSlotItem(master))) {
     return { ok: false, error: "Invalid air base aircraft" };
   }
+  const owners = normalizedItemId > 0 ? slotItemOwners(save, normalizedItemId) : [];
+  if (owners.length > 1 || owners.some((owner) => owner.kind !== "air-base")) {
+    return { ok: false, error: "Aircraft is already assigned outside this air base" };
+  }
+  const sourceOwner = owners[0]?.kind === "air-base" ? owners[0] : undefined;
+  if (sourceOwner && (sourceOwner.areaId !== normalizedAreaId || sourceOwner.baseId !== normalizedBaseId)) {
+    return { ok: false, error: "Aircraft must finish relocation before assignment to another base" };
+  }
+
+  const now = Date.now();
+  const relocation = normalizedItemId > 0
+    ? db.prepare("SELECT ready_at FROM relocating_slot_items WHERE item_id = ?").get(normalizedItemId) as Row | undefined
+    : undefined;
+  if (relocation && safeNum(relocation.ready_at) > now) {
+    return { ok: false, error: "Aircraft is still relocating" };
+  }
+
+  const maxCount = master ? airBaseSquadronMax(master) : 0;
+  const deploymentCost = master && !sourceOwner
+    ? Math.max(0, Math.trunc(safeNum(master.api_cost))) * maxCount
+    : 0;
+  if (master && !sourceOwner && (master.api_cost == null || !Number.isFinite(Number(master.api_cost)))) {
+    return { ok: false, error: "Aircraft has no verified air base deployment cost" };
+  }
+  if (!hasMaterials(save.materials, { bauxite: deploymentCost })) {
+    return { ok: false, error: "Insufficient bauxite for air base deployment" };
+  }
+
+  const sourceSquadron = sourceOwner
+    ? existingBase.squadrons.find((squadron) => squadron.squadronId === sourceOwner.squadronId)
+    : undefined;
+  const displacedItemId = targetSquadron.slotItemId > 0 ? targetSquadron.slotItemId : -1;
+  const relocationReadyAt = now + airBaseRelocationDurationMs(existingBase.maintenanceLevel);
 
   const tx = db.transaction(() => {
-    ensureAirBase(db, normalizedAreaId, normalizedBaseId);
-    if (normalizedItemId > 0) clearAirBaseSlotItem(db, normalizedItemId);
-    const maxCount = normalizedItemId > 0 ? AIR_BASE_DEFAULT_SQUADRON_MAX : 0;
+    if (relocation) db.prepare("DELETE FROM relocating_slot_items WHERE item_id = ?").run(normalizedItemId);
+    if (displacedItemId > 0 && displacedItemId !== normalizedItemId) {
+      db.prepare(`
+        INSERT INTO relocating_slot_items (item_id, ready_at) VALUES (?, ?)
+        ON CONFLICT(item_id) DO UPDATE SET ready_at = excluded.ready_at
+      `).run(displacedItemId, relocationReadyAt);
+    }
+    if (sourceOwner) clearAirBaseSlotItem(db, normalizedItemId);
+    if (deploymentCost > 0) consumeMaterials(db, { bauxite: deploymentCost });
+    const nextCount = normalizedItemId > 0
+      ? sourceSquadron ? Math.min(maxCount, sourceSquadron.count) : maxCount
+      : 0;
+    const nextCondition = normalizedItemId > 0
+      ? sourceSquadron?.condition ?? AIR_BASE_INITIAL_CONDITION
+      : 0;
     db.prepare(`
       INSERT INTO air_base_squadrons (
-        area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition, condition_updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(area_id, base_id, squadron_id) DO UPDATE SET
         slot_item_id = excluded.slot_item_id,
         state = excluded.state,
         count = excluded.count,
         max_count = excluded.max_count,
-        condition = excluded.condition
+        condition = excluded.condition,
+        condition_updated_at = excluded.condition_updated_at
     `).run(
       normalizedAreaId,
       normalizedBaseId,
       normalizedSquadronId,
       normalizedItemId > 0 ? normalizedItemId : -1,
       normalizedItemId > 0 ? 1 : 0,
+      nextCount,
       maxCount,
-      maxCount,
-      49
+      nextCondition,
+      now
     );
     repairAirBaseSquadrons(db);
     updateAirBaseDistance(db, normalizedAreaId, normalizedBaseId);
@@ -2509,12 +3413,9 @@ function setAirBaseAction(db: Database.Database, areaId: number, baseId: number,
   const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
   const normalizedBaseId = Math.max(1, Math.trunc(safeNum(baseId, 1)));
   const nextActionKind = normalizeAirBaseAction(actionKind);
-  const tx = db.transaction(() => {
-    ensureAirBase(db, normalizedAreaId, normalizedBaseId);
-    db.prepare("UPDATE air_bases SET action_kind = ? WHERE area_id = ? AND base_id = ?")
-      .run(nextActionKind, normalizedAreaId, normalizedBaseId);
-  });
-  tx();
+  const changed = db.prepare("UPDATE air_bases SET action_kind = ? WHERE area_id = ? AND base_id = ?")
+    .run(nextActionKind, normalizedAreaId, normalizedBaseId);
+  if (changed.changes !== 1) return { ok: false, error: "Air base is not open" };
   const save = getSave(db);
   const airBase = save.airBases.find((base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId);
   return airBase ? { ok: true, airBase, materials: save.materials } : { ok: false, error: "Air base not found" };
@@ -2523,13 +3424,19 @@ function setAirBaseAction(db: Database.Database, areaId: number, baseId: number,
 function supplyAirBase(db: Database.Database, areaId: number, baseId?: number): AirBaseResult {
   const normalizedAreaId = Math.max(1, Math.trunc(safeNum(areaId, 1)));
   const normalizedBaseId = Math.max(1, Math.trunc(safeNum(baseId, 1)));
+  const before = getSave(db);
+  const existing = before.airBases.find((base) => base.areaId === normalizedAreaId && base.baseId === normalizedBaseId);
+  if (!existing) return { ok: false, error: "Air base is not open" };
+  const missing = existing?.squadrons.reduce(
+    (sum, squadron) => sum + Math.max(0, squadron.maxCount - squadron.count),
+    0
+  ) ?? 0;
+  const materialCost = { fuel: missing * 3, bauxite: missing * 5 };
+  if (!hasMaterials(before.materials, materialCost)) {
+    return { ok: false, error: "Insufficient air base supply materials" };
+  }
   const tx = db.transaction(() => {
-    ensureAirBase(db, normalizedAreaId, normalizedBaseId);
-    const rows = db.prepare("SELECT * FROM air_base_squadrons WHERE area_id = ? AND base_id = ?")
-      .all(normalizedAreaId, normalizedBaseId) as Row[];
-    const missing = rows.reduce((sum, row) =>
-      sum + Math.max(0, Math.trunc(safeNum(row.max_count)) - Math.trunc(safeNum(row.count))), 0);
-    if (missing > 0) consumeMaterials(db, { bauxite: missing * 5 });
+    if (missing > 0) consumeMaterials(db, materialCost);
     db.prepare(`
       UPDATE air_base_squadrons
       SET count = max_count, state = CASE WHEN slot_item_id > 0 THEN 1 ELSE 0 END
@@ -2545,10 +3452,14 @@ function supplyAirBase(db: Database.Database, areaId: number, baseId?: number): 
 function applyAirBaseAircraftBattleResult(db: Database.Database, record: BattleRecord, mode: BattleMode) {
   const entries = Array.isArray(record.airBaseAircraftLosses) ? record.airBaseAircraftLosses : [];
   if (entries.length === 0) return;
+  const now = Date.now();
   const slotItemUpdate = db.prepare("UPDATE slot_items SET proficiency = ?, proficiency_exp = ? WHERE id = ?");
   const squadronUpdate = db.prepare(`
     UPDATE air_base_squadrons
-    SET count = ?, state = CASE WHEN slot_item_id > 0 THEN 1 ELSE 0 END
+    SET count = ?,
+        state = CASE WHEN slot_item_id > 0 THEN 1 ELSE 0 END,
+        condition = max(0, condition - 6),
+        condition_updated_at = ?
     WHERE area_id = ? AND base_id = ? AND squadron_id = ?
   `);
   for (const entry of entries) {
@@ -2558,7 +3469,7 @@ function applyAirBaseAircraftBattleResult(db: Database.Database, record: BattleR
     const slotItemId = Math.trunc(safeNum(entry.slotItemId));
     const previousCount = Math.max(0, Math.trunc(safeNum(entry.previousCount)));
     const currentCount = Math.max(0, Math.trunc(safeNum(entry.currentCount)));
-    squadronUpdate.run(currentCount, areaId, baseId, squadronId);
+    squadronUpdate.run(currentCount, now, areaId, baseId, squadronId);
     const item = (db.prepare("SELECT * FROM slot_items WHERE id = ?").get(slotItemId) as Row | undefined);
     const mapped = item ? mapSlotItem(item) : undefined;
     const master = mapped ? masterData.api_mst_slotitem.find((slot) => slot.api_id === mapped.masterId) : undefined;
@@ -2593,42 +3504,191 @@ function safeNum(value: unknown, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function migrate(db: Database.Database) {
+function strictUniquePositiveIds(values: number[], label: string) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return { ok: false as const, error: `${label} must not be empty` };
+  }
+  const ids = values.map(Number);
+  if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    return { ok: false as const, error: `${label} must contain only positive safe integers` };
+  }
+  if (new Set(ids).size !== ids.length) {
+    return { ok: false as const, error: `${label} must not contain duplicates` };
+  }
+  return { ok: true as const, ids };
+}
+
+function failedSupply(error: string): SupplyResult {
+  return {
+    ok: false,
+    error,
+    ships: [],
+    consumed: { fuel: 0, ammo: 0, bauxite: 0 }
+  };
+}
+
+function destructionReward(values: unknown[]): DestroyReward {
+  const reward = [0, 0, 0, 0];
+  for (const value of values) {
+    const broken = Array.isArray(value) ? value : [];
+    for (let index = 0; index < reward.length; index += 1) {
+      reward[index] += Math.max(0, Math.trunc(safeNum(broken[index])));
+    }
+  }
+  return reward as unknown as DestroyReward;
+}
+
+function rewardDelta(reward: DestroyReward): MaterialDelta {
+  return { fuel: reward[0], ammo: reward[1], steel: reward[2], bauxite: reward[3] };
+}
+
+function failedDestroy(materials: Materials, error: string): DestroyResult {
+  return { ...materials, ok: false, error, reward: [0, 0, 0, 0], destroyedIds: [] };
+}
+
+function successfulDestroy(
+  materials: Materials,
+  reward: DestroyReward,
+  destroyedIds: number[]
+): DestroyResult {
+  return { ...materials, ok: true, reward, destroyedIds: [...destroyedIds] };
+}
+
+function shipReferenceLabel(reference: ShipReference) {
+  switch (reference.kind) {
+    case "deck": return `deck ${reference.deckId}`;
+    case "preset-deck": return `preset deck ${reference.presetNo}`;
+    case "repair-dock": return `repair dock ${reference.dockId}`;
+    case "sortie": return `sortie ${reference.sessionId}`;
+    case "expedition": return `expedition deck ${reference.deckId}`;
+    case "battle": return `${reference.session} battle`;
+  }
+}
+
+type DatabaseInspection =
+  | { kind: "new" }
+  | { kind: "existing"; version: number };
+
+function inspectDatabaseBeforeWrite(databasePath: string): DatabaseInspection {
+  if (!existsSync(databasePath)) return { kind: "new" };
+
+  let probe: Database.Database | undefined;
+  try {
+    probe = new Database(databasePath, { readonly: true, fileMustExist: true });
+    const tables = (probe.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).all() as Row[]).map((row) => String(row.name));
+    if (tables.length === 0) return { kind: "new" };
+    if (!tables.includes("schema_meta")) {
+      throw new StateDatabaseCompatibilityError(
+        "Existing save has no schema metadata; refusing to modify an unrecognized legacy database"
+      );
+    }
+
+    const rows = probe.prepare("SELECT version FROM schema_meta").all() as Row[];
+    if (rows.length !== 1) {
+      throw new StateDatabaseCompatibilityError(
+        `Save schema metadata must contain exactly one row; found ${rows.length}`
+      );
+    }
+    const version = Number(rows[0].version);
+    if (!Number.isInteger(version) || version <= 0) {
+      throw new StateDatabaseCompatibilityError(`Invalid save schema version: ${String(rows[0].version)}`);
+    }
+    if (version > SCHEMA_VERSION) {
+      throw new StateDatabaseCompatibilityError(
+        `Save schema version ${version} is newer than supported version ${SCHEMA_VERSION}; refusing to modify it`
+      );
+    }
+    if (version < MIN_SUPPORTED_SCHEMA_VERSION) {
+      throw new StateDatabaseCompatibilityError(
+        `Save schema version ${version} is older than the safely supported minimum ${MIN_SUPPORTED_SCHEMA_VERSION}; refusing to reset it`
+      );
+    }
+    return { kind: "existing", version };
+  } catch (error) {
+    if (error instanceof StateDatabaseCompatibilityError) throw error;
+    throw new StateDatabaseCompatibilityError(
+      `Unable to inspect save database without writing: ${error instanceof Error ? error.message : String(error)}`
+    );
+  } finally {
+    probe?.close();
+  }
+}
+
+function backupDatabaseFiles(databasePath: string, version: number) {
+  const backupPath = `${databasePath}.backup-v${version}-${Date.now()}`;
+  copyFileSync(databasePath, backupPath);
+  for (const suffix of ["-wal", "-shm"]) {
+    const source = `${databasePath}${suffix}`;
+    if (existsSync(source)) copyFileSync(source, `${backupPath}${suffix}`);
+  }
+}
+
+function assertDatabaseIntegrity(db: Database.Database) {
+  if (!hasAccount(db)) return;
+  const issues = stateIntegrityIssues(getSave(db), activeBattleReferences(db));
+  if (issues.length === 0) return;
+  throw new StateDatabaseIntegrityError(
+    `Save reference integrity check failed: ${JSON.stringify(issues.slice(0, 20))}`
+  );
+}
+
+function migrate(db: Database.Database, freshDatabase = false) {
   const currentVersion = schemaVersion(db);
-  if (currentVersion === 0 || currentVersion < 3 || currentVersion > SCHEMA_VERSION) {
-    resetSchema(db);
+  if (freshDatabase) {
+    if (currentVersion !== 0) {
+      throw new StateDatabaseCompatibilityError(
+        `Expected a new save database but found schema version ${currentVersion}`
+      );
+    }
+    createSchema(db);
+    db.prepare("INSERT INTO schema_meta (version) VALUES (?)").run(SCHEMA_VERSION);
     return;
   }
+  if (!Number.isInteger(currentVersion) || currentVersion < MIN_SUPPORTED_SCHEMA_VERSION || currentVersion > SCHEMA_VERSION) {
+    throw new StateDatabaseCompatibilityError(
+      `Refusing unsafe migration from schema version ${String(currentVersion)}`
+    );
+  }
 
-  createSchema(db);
-  if (currentVersion < 4) migrateToV4(db);
-  if (currentVersion < 5) migrateToV5(db);
-  if (currentVersion < 6) migrateToV6(db);
-  if (currentVersion < 7) migrateToV7(db);
-  if (currentVersion < 8) migrateToV8(db);
-  if (currentVersion < 9) migrateToV9(db);
-  if (currentVersion < 10) migrateToV10(db);
-  if (currentVersion < 11) migrateToV11(db);
-  if (currentVersion < 12) migrateToV12(db);
-  if (currentVersion < 13) migrateToV13(db);
-  if (currentVersion < 14) migrateToV14(db);
-  if (currentVersion < 15) migrateToV15(db);
-  if (currentVersion < 16) migrateToV16(db);
-  if (currentVersion < 17) migrateToV17(db);
-  if (currentVersion < 18) migrateToV18(db);
-  if (currentVersion < 19) migrateToV19(db);
-  db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
-  repairShipMaxValues(db);
-  repairShipOnSlotValues(db);
-  repairFurnitureValues(db);
-  repairMaps(db);
-  repairDeckShipIds(db);
-  ensureQuestStates(db);
-  ensureRecordStats(db);
-  ensurePresetSlotSettings(db);
-  ensurePresetDeckSettings(db);
-  repairSlotItemProficiency(db);
-  repairAirBaseSquadrons(db);
+  const tx = db.transaction(() => {
+    createSchema(db);
+    if (currentVersion < 4) migrateToV4(db);
+    if (currentVersion < 5) migrateToV5(db);
+    if (currentVersion < 6) migrateToV6(db);
+    if (currentVersion < 7) migrateToV7(db);
+    if (currentVersion < 8) migrateToV8(db);
+    if (currentVersion < 9) migrateToV9(db);
+    if (currentVersion < 10) migrateToV10(db);
+    if (currentVersion < 11) migrateToV11(db);
+    if (currentVersion < 12) migrateToV12(db);
+    if (currentVersion < 13) migrateToV13(db);
+    if (currentVersion < 14) migrateToV14(db);
+    if (currentVersion < 15) migrateToV15(db);
+    if (currentVersion < 16) migrateToV16(db);
+    if (currentVersion < 17) migrateToV17(db);
+    if (currentVersion < 18) migrateToV18(db);
+    if (currentVersion < 19) migrateToV19(db);
+    if (currentVersion < 20) migrateToV20(db);
+    if (currentVersion < 21) migrateToV21(db);
+    if (currentVersion < 22) migrateToV22(db);
+    if (currentVersion < 23) migrateToV23(db);
+    repairShipMaxValues(db);
+    repairShipOnSlotValues(db);
+    repairFurnitureValues(db);
+    repairMaps(db);
+    repairDeckShipIds(db);
+    ensureQuestStates(db);
+    ensureRecordStats(db);
+    ensurePresetSlotSettings(db);
+    ensurePresetDeckSettings(db);
+    repairSlotItemProficiency(db);
+    repairAirBaseSquadrons(db);
+    assertDatabaseIntegrity(db);
+    db.prepare("UPDATE schema_meta SET version = ?").run(SCHEMA_VERSION);
+  });
+  tx();
 }
 
 function repairDeckShipIds(db: Database.Database) {
@@ -2727,6 +3787,55 @@ function migrateToV19(db: Database.Database) {
     db.prepare("ALTER TABLE ships ADD COLUMN sally_area INTEGER NOT NULL DEFAULT 0").run();
   }
   ensureEventSettings(db);
+}
+
+function migrateToV20(db: Database.Database) {
+  if (!columnExists(db, "players", "initial_ship_claimed")) {
+    // Every pre-v20 local account was created with the four-ship starter save,
+    // so migration must close the initialization endpoint rather than grant a
+    // second starter ship.
+    db.prepare("ALTER TABLE players ADD COLUMN initial_ship_claimed INTEGER NOT NULL DEFAULT 1").run();
+  }
+}
+
+function migrateToV21(db: Database.Database) {
+  db.prepare(`
+    CREATE TABLE IF NOT EXISTS relocating_slot_items (
+      item_id INTEGER PRIMARY KEY,
+      ready_at INTEGER NOT NULL
+    )
+  `).run();
+}
+
+function migrateToV22(db: Database.Database) {
+  if (!columnExists(db, "air_base_squadrons", "condition_updated_at")) {
+    db.prepare("ALTER TABLE air_base_squadrons ADD COLUMN condition_updated_at INTEGER NOT NULL DEFAULT 0").run();
+  }
+  const now = Date.now();
+  // Prior releases exposed no maintenance-upgrade endpoint and stored 1 as
+  // their synthetic default.  Therefore every existing value is safely
+  // migrated to the official unupgraded level 0.
+  db.prepare("UPDATE air_bases SET maintenance_level = 0").run();
+  db.prepare(`
+    UPDATE air_base_squadrons
+    SET condition = CASE WHEN slot_item_id > 0 THEN ? ELSE 0 END,
+        condition_updated_at = ?
+  `).run(AIR_BASE_INITIAL_CONDITION, now);
+}
+
+function migrateToV23(db: Database.Database) {
+  if (!columnExists(db, "maps", "clear_count")) {
+    db.prepare("ALTER TABLE maps ADD COLUMN clear_count INTEGER NOT NULL DEFAULT 0").run();
+    db.prepare("UPDATE maps SET clear_count = 1 WHERE cleared = 1").run();
+  }
+  if (!columnExists(db, "record_stats", "ranking_points")) {
+    db.prepare("ALTER TABLE record_stats ADD COLUMN ranking_points INTEGER NOT NULL DEFAULT 0").run();
+  }
+  if (!columnExists(db, "record_stats", "ranking_period_key")) {
+    db.prepare("ALTER TABLE record_stats ADD COLUMN ranking_period_key TEXT NOT NULL DEFAULT ''").run();
+  }
+  refreshRankingPeriod(db);
+  refreshMapUnlocks(db);
 }
 
 function migrateToV9(db: Database.Database) {
@@ -2839,23 +3948,45 @@ function repairSlotItemProficiency(db: Database.Database) {
 
 function repairAirBaseSquadrons(db: Database.Database) {
   const bases = db.prepare("SELECT area_id, base_id FROM air_bases").all() as Row[];
+  const now = Date.now();
   for (const base of bases) {
     const areaId = Number(base.area_id);
     const baseId = Number(base.base_id);
     for (let squadronId = 1; squadronId <= AIR_BASE_SQUADRON_COUNT; squadronId += 1) {
       db.prepare(`
         INSERT OR IGNORE INTO air_base_squadrons (
-          area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition
-        ) VALUES (?, ?, ?, -1, 0, 0, 0, 49)
-      `).run(areaId, baseId, squadronId);
+          area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition, condition_updated_at
+        ) VALUES (?, ?, ?, -1, 0, 0, 0, 0, ?)
+      `).run(areaId, baseId, squadronId, now);
+    }
+    const squadrons = db.prepare(`
+      SELECT s.squadron_id, s.slot_item_id, i.master_id
+      FROM air_base_squadrons s
+      LEFT JOIN slot_items i ON i.id = s.slot_item_id
+      WHERE s.area_id = ? AND s.base_id = ?
+    `).all(areaId, baseId) as Row[];
+    for (const squadron of squadrons) {
+      const master = masterData.api_mst_slotitem.find((item) => item.api_id === Number(squadron.master_id));
+      const maxCount = master ? airBaseSquadronMax(master) : 0;
+      db.prepare(`
+        UPDATE air_base_squadrons
+        SET max_count = ?, count = max(0, min(count, ?))
+        WHERE area_id = ? AND base_id = ? AND squadron_id = ?
+      `).run(maxCount, maxCount, areaId, baseId, Number(squadron.squadron_id));
     }
     db.prepare(`
       UPDATE air_base_squadrons
       SET count = max(0, min(count, max_count)),
           state = CASE WHEN slot_item_id > 0 THEN state ELSE 0 END,
-          condition = CASE WHEN condition > 0 THEN condition ELSE 49 END
+          condition = CASE
+            WHEN slot_item_id > 0 THEN max(0, min(condition, ?))
+            ELSE 0
+          END,
+          condition_updated_at = CASE WHEN condition_updated_at > 0 THEN condition_updated_at ELSE ? END
       WHERE area_id = ? AND base_id = ?
-    `).run(areaId, baseId);
+    `).run(AIR_BASE_NATURAL_CONDITION_CAP, now, areaId, baseId);
+    db.prepare("UPDATE air_bases SET maintenance_level = max(0, min(maintenance_level, ?)) WHERE area_id = ? AND base_id = ?")
+      .run(AIR_BASE_MAX_MAINTENANCE_LEVEL, areaId, baseId);
     updateAirBaseDistance(db, areaId, baseId);
   }
 }
@@ -2866,23 +3997,24 @@ function ensureAirBase(db: Database.Database, areaId: number, baseId: number) {
   db.prepare(`
     INSERT OR IGNORE INTO air_bases (
       area_id, base_id, name, action_kind, distance_base, distance_bonus, maintenance_level
-    ) VALUES (?, ?, ?, ?, 0, 0, 1)
+    ) VALUES (?, ?, ?, ?, 0, 0, 0)
   `).run(normalizedAreaId, normalizedBaseId, `Air Base ${normalizedBaseId}`, AIR_BASE_DEFAULT_ACTION);
   for (let squadronId = 1; squadronId <= AIR_BASE_SQUADRON_COUNT; squadronId += 1) {
     db.prepare(`
       INSERT OR IGNORE INTO air_base_squadrons (
-        area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition
-      ) VALUES (?, ?, ?, -1, 0, 0, 0, 49)
-    `).run(normalizedAreaId, normalizedBaseId, squadronId);
+        area_id, base_id, squadron_id, slot_item_id, state, count, max_count, condition, condition_updated_at
+      ) VALUES (?, ?, ?, -1, 0, 0, 0, 0, ?)
+    `).run(normalizedAreaId, normalizedBaseId, squadronId, Date.now());
   }
 }
 
 function clearAirBaseSlotItem(db: Database.Database, slotItemId: number) {
   db.prepare(`
     UPDATE air_base_squadrons
-    SET slot_item_id = -1, state = 0, count = 0, max_count = 0
+    SET slot_item_id = -1, state = 0, count = 0, max_count = 0,
+        condition = 0, condition_updated_at = ?
     WHERE slot_item_id = ?
-  `).run(slotItemId);
+  `).run(Date.now(), slotItemId);
 }
 
 function updateAirBaseDistance(db: Database.Database, areaId: number, baseId: number) {
@@ -2903,6 +4035,18 @@ function updateAirBaseDistance(db: Database.Database, areaId: number, baseId: nu
 
 function normalizeAirBaseAction(value: unknown) {
   return Math.max(0, Math.min(4, Math.trunc(safeNum(value))));
+}
+
+function airBaseSquadronMax(master: (typeof masterData.api_mst_slotitem)[number]) {
+  const equipType = Math.trunc(safeNum(master.api_type?.[2]));
+  if (AIR_BASE_RECON_EQUIP_TYPES.has(equipType)) return 4;
+  if (AIR_BASE_HEAVY_BOMBER_MASTER_IDS.has(master.api_id)) return 9;
+  return AIR_BASE_DEFAULT_SQUADRON_MAX;
+}
+
+function airBaseRelocationDurationMs(maintenanceLevel: number) {
+  const level = Math.max(0, Math.min(AIR_BASE_MAX_MAINTENANCE_LEVEL, Math.trunc(safeNum(maintenanceLevel))));
+  return Math.max(AIR_BASE_RELOCATION_MIN_MS, AIR_BASE_RELOCATION_MAX_MS - level * 2 * 60_000);
 }
 
 function backfillShipOnSlotValues(db: Database.Database, refillEmptyAircraft: boolean) {
@@ -2969,6 +4113,7 @@ function repairMaps(db: Database.Database) {
   }
 
   seedMissingMaps(db);
+  refreshMapUnlocks(db);
 }
 
 function refreshMapPeriods(db: Database.Database, now = Date.now()) {
@@ -2986,21 +4131,43 @@ function refreshMapPeriods(db: Database.Database, now = Date.now()) {
       const mapId = Number(row.id);
       const key = currentMapPeriodKey(mapId, now);
       const stored = String(row.period_key ?? "");
-      if (isMonthlyExtraOperationMap(mapId) && stored !== key) {
+      if (isMonthlyResetMap(mapId) && stored !== key) {
         const master = masterData.api_mst_mapinfo.find((map) => map.api_id === mapId);
         resetPeriod.run(initialMapGauge(mapId, master?.api_required_defeat_count), key, mapId);
+        db.prepare("DELETE FROM sortie_sessions WHERE area_id = ? AND map_no = ?")
+          .run(Math.floor(mapId / 10), mapId % 10);
       } else if (!stored) {
         updatePeriod.run(key, mapId);
       }
     }
+    refreshMapUnlocks(db);
   });
   tx();
 }
 
 function currentMapPeriodKey(mapId: number, now = Date.now()) {
-  return isMonthlyExtraOperationMap(mapId)
+  return isMonthlyResetMap(mapId)
     ? currentQuestPeriodKey("monthly", now)
     : "once";
+}
+
+function refreshMapUnlocks(db: Database.Database) {
+  if (!columnExists(db, "maps", "clear_count")) return;
+  const clearedOnce = new Set(
+    (db.prepare("SELECT id FROM maps WHERE clear_count > 0 OR cleared = 1").all() as Row[])
+      .map((row) => Number(row.id))
+  );
+  const unlock = db.prepare("UPDATE maps SET unlocked = 1 WHERE id = ?");
+  for (const row of db.prepare("SELECT id, unlocked FROM maps").all() as Row[]) {
+    if (Number(row.unlocked) === 1) continue;
+    const mapId = Number(row.id);
+    const prerequisites = eventMapById(mapId)
+      ? eventMapUnlockPrerequisites(mapId)
+      : mapUnlockPrerequisites(mapId);
+    if (prerequisites.length > 0 && prerequisites.every((requiredId) => clearedOnce.has(requiredId))) {
+      unlock.run(mapId);
+    }
+  }
 }
 
 function schemaVersion(db: Database.Database) {
@@ -3030,6 +4197,7 @@ function resetSchema(db: Database.Database) {
     DROP TABLE IF EXISTS battle_sessions;
     DROP TABLE IF EXISTS sortie_sessions;
     DROP TABLE IF EXISTS air_base_squadrons;
+    DROP TABLE IF EXISTS relocating_slot_items;
     DROP TABLE IF EXISTS air_bases;
     DROP TABLE IF EXISTS maps;
     DROP TABLE IF EXISTS furniture;
@@ -3065,7 +4233,8 @@ function createSchema(db: Database.Database) {
       combined_fleet INTEGER NOT NULL,
       port_bgm_id INTEGER NOT NULL,
       max_chara INTEGER NOT NULL,
-      max_slotitem INTEGER NOT NULL
+      max_slotitem INTEGER NOT NULL,
+      initial_ship_claimed INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS materials (
       player_id INTEGER PRIMARY KEY,
@@ -3175,7 +4344,8 @@ function createSchema(db: Database.Database) {
       selected_rank INTEGER NOT NULL DEFAULT 0,
       phase INTEGER NOT NULL DEFAULT 1,
       phase_progress INTEGER NOT NULL DEFAULT 0,
-      period_key TEXT NOT NULL DEFAULT ''
+      period_key TEXT NOT NULL DEFAULT '',
+      clear_count INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS air_bases (
       area_id INTEGER NOT NULL,
@@ -3196,7 +4366,12 @@ function createSchema(db: Database.Database) {
       count INTEGER NOT NULL,
       max_count INTEGER NOT NULL,
       condition INTEGER NOT NULL,
+      condition_updated_at INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (area_id, base_id, squadron_id)
+    );
+    CREATE TABLE IF NOT EXISTS relocating_slot_items (
+      item_id INTEGER PRIMARY KEY,
+      ready_at INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sortie_sessions (
       id INTEGER PRIMARY KEY,
@@ -3256,7 +4431,9 @@ function createSchema(db: Database.Database) {
       practice_win INTEGER NOT NULL,
       practice_lose INTEGER NOT NULL,
       mission_count INTEGER NOT NULL,
-      mission_success INTEGER NOT NULL
+      mission_success INTEGER NOT NULL,
+      ranking_points INTEGER NOT NULL DEFAULT 0,
+      ranking_period_key TEXT NOT NULL DEFAULT ''
     );
   `);
 }
@@ -3272,10 +4449,10 @@ function getWorldId(db: Database.Database) {
 }
 
 function getEventSettings(db: Database.Database): EventSettings {
-  ensureEventSettings(db);
   const row = db.prepare("SELECT active_area_id FROM event_settings WHERE id = 1").get() as Row | undefined;
   const activeAreaId = row?.active_area_id == null ? null : Math.trunc(safeNum(row.active_area_id));
-  return { activeAreaId: activeAreaId && eventDefinition(activeAreaId) ? activeAreaId : null };
+  const packageAllowed = EVENT_PACKAGE_PRODUCTION_ELIGIBLE || ALLOW_SYNTHETIC_EVENTS_BY_DB.get(db) === true;
+  return { activeAreaId: activeAreaId && packageAllowed && eventDefinition(activeAreaId) ? activeAreaId : null };
 }
 
 function setActiveEventArea(db: Database.Database, areaId: number | null) {
@@ -3288,7 +4465,9 @@ function setActiveEventArea(db: Database.Database, areaId: number | null) {
   }
 
   const normalizedAreaId = Math.trunc(safeNum(areaId));
-  const validation = validateEventPackage(normalizedAreaId);
+  const validation = validateEventPackage(normalizedAreaId, undefined, {
+    allowSynthetic: ALLOW_SYNTHETIC_EVENTS_BY_DB.get(db) === true
+  });
   if (!validation.ok) return validation;
 
   if (previousActiveAreaId != null && previousActiveAreaId !== validation.event.areaId) {
@@ -3302,8 +4481,11 @@ function setActiveEventArea(db: Database.Database, areaId: number | null) {
 }
 
 function resetEventProgress(db: Database.Database, areaId: number) {
-  const event = eventDefinition(areaId);
-  if (!event) return { ok: false as const, error: `Event area ${areaId} has no local event package` };
+  const validation = validateEventPackage(areaId, undefined, {
+    allowSynthetic: ALLOW_SYNTHETIC_EVENTS_BY_DB.get(db) === true
+  });
+  if (!validation.ok) return validation;
+  const event = validation.event;
   finishEventSupportExpeditions(db, event.areaId);
   const tx = db.transaction(() => {
     seedEventMaps(db, event.areaId);
@@ -3311,11 +4493,12 @@ function resetEventProgress(db: Database.Database, areaId: number) {
     for (const map of event.maps) {
       const row = db.prepare("SELECT selected_rank FROM maps WHERE id = ?").get(map.id) as Row | undefined;
       const selectedRank = Math.max(1, Math.trunc(safeNum(row?.selected_rank, 3)));
+      const unlocked = eventMapUnlockPrerequisites(map.id).length === 0 ? 1 : 0;
       db.prepare(`
         UPDATE maps
-        SET unlocked = 1, cleared = 0, gauge = ?, selected_rank = ?, phase = 1, phase_progress = 0, period_key = 'once'
+        SET unlocked = ?, cleared = 0, gauge = ?, selected_rank = ?, phase = 1, phase_progress = 0, period_key = 'once'
         WHERE id = ?
-      `).run(eventInitialMapGauge(map.id, selectedRank), selectedRank, map.id);
+      `).run(unlocked, eventInitialMapGauge(map.id, selectedRank), selectedRank, map.id);
     }
     db.prepare("UPDATE ships SET sally_area = 0 WHERE sally_area IN (?, ?, ?)")
       .run(...event.maps.map((map) => map.sallyArea).slice(0, 3));
@@ -3333,6 +4516,10 @@ function selectEventMapRank(db: Database.Database, areaId: number, mapNo: number
   const selectedRank = Math.max(1, Math.min(4, Math.trunc(safeNum(rank, 3))));
   const gauge = eventInitialMapGauge(eventMap.id, selectedRank);
   seedEventMaps(db, eventMap.areaId);
+  const current = db.prepare("SELECT unlocked FROM maps WHERE id = ?").get(eventMap.id) as Row | undefined;
+  if (!current || Number(current.unlocked) !== 1) {
+    return { ok: false as const, error: `Event map ${areaId}-${mapNo} is locked` };
+  }
   ensureEventAirBases(db, eventMap.areaId);
   db.prepare(`
     UPDATE maps
@@ -3344,6 +4531,60 @@ function selectEventMapRank(db: Database.Database, areaId: number, mapNo: number
   return map
     ? { ok: true as const, eventMap, map, rank: selectedRank }
     : { ok: false as const, error: `Event map ${eventMap.id} is missing from save` };
+}
+
+function openRepairDock(db: Database.Database): RepairDockOpenResult {
+  const tx = db.transaction((): RepairDockOpenResult => {
+    const nextId = nextDockId(db, "repair_docks");
+    if (!nextId.ok) return nextId;
+    if (!consumeDockOpeningKey(db)) return { ok: false, error: "Insufficient dock opening keys" };
+
+    db.prepare(
+      "INSERT INTO repair_docks (id, ship_id, complete_time, state) VALUES (?, 0, 0, 0)"
+    ).run(nextId.id);
+    return {
+      ok: true,
+      dock: { id: nextId.id, shipId: 0, completeTime: 0, state: 0 }
+    };
+  });
+  return tx();
+}
+
+function openBuildDock(db: Database.Database): BuildDockOpenResult {
+  const tx = db.transaction((): BuildDockOpenResult => {
+    const nextId = nextDockId(db, "build_docks");
+    if (!nextId.ok) return nextId;
+    if (!consumeDockOpeningKey(db)) return { ok: false, error: "Insufficient dock opening keys" };
+
+    db.prepare(
+      "INSERT INTO build_docks (id, recipe_json, result_master_id, complete_time, state) VALUES (?, '{}', 0, 0, 0)"
+    ).run(nextId.id);
+    return {
+      ok: true,
+      dock: { id: nextId.id, recipe: {}, resultMasterId: 0, completeTime: 0, state: 0 }
+    };
+  });
+  return tx();
+}
+
+function nextDockId(
+  db: Database.Database,
+  table: "repair_docks" | "build_docks"
+): { ok: true; id: number } | { ok: false; error: string } {
+  const ids = (db.prepare(`SELECT id FROM ${table} ORDER BY id`).all() as Row[])
+    .map((row) => Number(row.id));
+  if (ids.length < INITIAL_DOCK_COUNT || ids.some((id, index) => id !== index + 1)) {
+    return { ok: false, error: "Dock state is invalid" };
+  }
+  if (ids.length >= MAX_DOCK_COUNT) return { ok: false, error: "All docks are already open" };
+  return { ok: true, id: ids.length + 1 };
+}
+
+function consumeDockOpeningKey(db: Database.Database) {
+  const consumed = db.prepare(
+    "UPDATE use_items SET count = count - 1 WHERE id = ? AND count >= 1"
+  ).run(DOCK_OPEN_USEITEM_ID);
+  return consumed.changes === 1;
 }
 
 function registerAccount(db: Database.Database, worldId: number): SaveState {
@@ -3398,7 +4639,7 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
       );
     }
 
-    for (let id = 1; id <= 4; id += 1) {
+    for (let id = 1; id <= INITIAL_DOCK_COUNT; id += 1) {
       db.prepare("INSERT INTO repair_docks (id, ship_id, complete_time, state) VALUES (?, 0, 0, 0)").run(id);
       db.prepare("INSERT INTO build_docks (id, recipe_json, result_master_id, complete_time, state) VALUES (?, '{}', 0, 0, 0)").run(id);
     }
@@ -3420,28 +4661,51 @@ function registerAccount(db: Database.Database, worldId: number): SaveState {
   return getSave(db);
 }
 
+function settleState(db: Database.Database, now = Date.now()): SaveState | null {
+  if (!hasAccount(db)) return null;
+  const settledAt = Math.trunc(now);
+  const tx = db.transaction(() => {
+    settleCompletedRepairs(db, settledAt);
+    injectStateFault(db, "settle.after-repairs");
+    settleCompletedBuilds(db, settledAt);
+    injectStateFault(db, "settle.after-builds");
+    syncExpeditionDeckStates(db, settledAt);
+    injectStateFault(db, "settle.after-expeditions");
+    settleMaterialRecovery(db, settledAt);
+    injectStateFault(db, "settle.after-materials");
+    settleAirBaseCondition(db, settledAt);
+    injectStateFault(db, "settle.after-air-bases");
+    refreshQuestPeriods(db, settledAt);
+    injectStateFault(db, "settle.after-quests");
+    refreshRankingPeriod(db, settledAt);
+    injectStateFault(db, "settle.after-ranking");
+    refreshMapPeriods(db, settledAt);
+    injectStateFault(db, "settle.after-maps");
+    db.prepare("DELETE FROM relocating_slot_items WHERE ready_at <= ?").run(settledAt);
+    injectStateFault(db, "settle.after-relocations");
+  });
+  tx();
+  return getSave(db);
+}
+
+function injectStateFault(db: Database.Database, point: StateFaultPoint) {
+  FAULT_INJECTOR_BY_DB.get(db)?.(point);
+}
+
+/** Returns a database snapshot without performing timer, period, or repair writes. */
 function getSave(db: Database.Database): SaveState {
   const player = db.prepare("SELECT * FROM players WHERE id = 1").get() as Row | undefined;
   if (!player) {
     throw new Error("Local Kancolle account has not been registered. Select a world first.");
   }
-  settleCompletedRepairs(db);
-  settleCompletedBuilds(db);
-  syncExpeditionDeckStates(db);
-  settleMaterialRecovery(db);
-  ensureQuestStates(db);
-  refreshQuestPeriods(db);
-  refreshMapPeriods(db);
-  ensureRecordStats(db);
-  ensurePresetSlotSettings(db);
-  ensurePresetDeckSettings(db);
-  ensureEventSettings(db);
 
   return {
     player: mapPlayer(player),
     materials: mapMaterials(db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row),
     ships: (db.prepare("SELECT * FROM ships ORDER BY id").all() as Row[]).map(mapShip),
     slotItems: (db.prepare("SELECT * FROM slot_items ORDER BY id").all() as Row[]).map(mapSlotItem),
+    relocatingSlotItemIds: (db.prepare("SELECT item_id FROM relocating_slot_items ORDER BY item_id").all() as Row[])
+      .map((row) => Number(row.item_id)),
     airBases: mapAirBases(db),
     presetSlots: (db.prepare("SELECT * FROM preset_slots ORDER BY preset_no").all() as Row[]).map(mapPresetSlot),
     presetSlotSettings: mapPresetSlotSettings(
@@ -3478,7 +4742,10 @@ function mapPlayer(row: Row): Player {
     exp: Number(row.exp ?? 0),
     comment: String(row.comment),
     tutorialProgress: Number(row.tutorial_progress),
-    options: parseJson<PlayerOptions>(row.options_json, defaultOptions),
+    options: {
+      ...defaultOptions,
+      ...parseJson<Partial<PlayerOptions>>(row.options_json, {})
+    },
     flagshipPosition: Number(row.flagship_position),
     combinedFleet: Number(row.combined_fleet),
     portBgmId: Number(row.port_bgm_id),
@@ -3554,7 +4821,10 @@ function mapAirBases(db: Database.Database): AirBase[] {
       actionKind: normalizeAirBaseAction(base.action_kind),
       distanceBase: Math.max(0, Math.trunc(safeNum(base.distance_base))),
       distanceBonus: Math.max(0, Math.trunc(safeNum(base.distance_bonus))),
-      maintenanceLevel: Math.max(1, Math.trunc(safeNum(base.maintenance_level, 1))),
+      maintenanceLevel: Math.max(
+        0,
+        Math.min(AIR_BASE_MAX_MAINTENANCE_LEVEL, Math.trunc(safeNum(base.maintenance_level)))
+      ),
       squadrons: squadrons
         .filter((squadron) => Number(squadron.area_id) === areaId && Number(squadron.base_id) === baseId)
         .map(mapAirBaseSquadron)
@@ -3569,7 +4839,7 @@ function mapAirBaseSquadron(row: Row): AirBaseSquadron {
     state: Math.max(0, Math.trunc(safeNum(row.state))),
     count: Math.max(0, Math.trunc(safeNum(row.count))),
     maxCount: Math.max(0, Math.trunc(safeNum(row.max_count))),
-    condition: Math.max(0, Math.trunc(safeNum(row.condition)))
+    condition: Math.max(0, Math.min(AIR_BASE_NATURAL_CONDITION_CAP, Math.trunc(safeNum(row.condition))))
   };
 }
 
@@ -3675,7 +4945,9 @@ function mapRecordStats(row: Row): RecordStats {
     practiceWin: Math.max(0, Math.trunc(safeNum(row.practice_win))),
     practiceLose: Math.max(0, Math.trunc(safeNum(row.practice_lose))),
     missionCount: Math.max(0, Math.trunc(safeNum(row.mission_count))),
-    missionSuccess: Math.max(0, Math.trunc(safeNum(row.mission_success)))
+    missionSuccess: Math.max(0, Math.trunc(safeNum(row.mission_success))),
+    rankingPoints: Math.max(0, Math.trunc(safeNum(row.ranking_points))),
+    rankingPeriodKey: String(row.ranking_period_key ?? currentRankingPeriodKey())
   };
 }
 
@@ -3718,7 +4990,8 @@ function mapMap(row: Row): MapState {
     selectedRank: Math.max(0, Math.trunc(safeNum(row.selected_rank))),
     phase: Number(row.phase ?? 1),
     phaseProgress: Number(row.phase_progress ?? 0),
-    periodKey: String(row.period_key ?? currentMapPeriodKey(Number(row.id)))
+    periodKey: String(row.period_key ?? currentMapPeriodKey(Number(row.id))),
+    clearCount: Math.max(0, Math.trunc(safeNum(row.clear_count, Number(row.cleared))))
   };
 }
 
@@ -4083,6 +5356,10 @@ function selectPresetSlot(
   const mode = normalizePresetDeployMode(equipMode);
   const selectedIds = new Set<number>();
   const otherEquipped = equippedSlotItemIdsByOtherShips(save, shipId);
+  const airBaseEquipped = new Set<number>();
+  for (const [slotItemId, owners] of buildStateReferenceIndex(save).slotItemOwners) {
+    if (owners.some((owner) => owner.kind === "air-base")) airBaseEquipped.add(slotItemId);
+  }
   const awaySlotItemIds = activeExpeditionSlotItemIds(db);
   const protectedTargetSlotItemIds = new Set<number>();
   if (preset.exSlotFlag === 1 && ship.exSlotId > 0) protectedTargetSlotItemIds.add(ship.exSlotId);
@@ -4092,7 +5369,13 @@ function selectPresetSlot(
       slotIndex,
       targetSlot,
       selectedIds,
-      unavailableIds: new Set([...otherEquipped, ...awaySlotItemIds, ...protectedTargetSlotItemIds]),
+      unavailableIds: new Set([
+        ...otherEquipped,
+        ...airBaseEquipped,
+        ...(save.relocatingSlotItemIds ?? []),
+        ...awaySlotItemIds,
+        ...protectedTargetSlotItemIds
+      ]),
       canEquip
     });
 
@@ -4124,6 +5407,9 @@ function selectPresetSlot(
   const currentOnSlot = normalizeFixed(ship.onSlot, 5, 0);
   const nextOnSlot = onSlotForShip(shipMaster, save.slotItems, nextSlotIds, currentOnSlot, true);
   const bauxiteCost = aircraftRefillCount(currentOnSlot, nextOnSlot) * 5;
+  if (!hasMaterials(save.materials, { bauxite: bauxiteCost })) {
+    return { ok: false, error: "Insufficient aircraft replacement materials" };
+  }
 
   const tx = db.transaction(() => {
     db.prepare("UPDATE ships SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = ? WHERE id = ?").run(
@@ -4491,6 +5777,7 @@ function materialColumn(material: keyof Materials) {
 
 function createSlotItem(db: Database.Database, masterId: number): SlotItem {
   const master = masterData.api_mst_slotitem.find((item) => item.api_id === masterId);
+  if (!master) throw new Error(`Unknown slot item master ${String(masterId)}`);
   const proficiencyExp = initialAircraftProficiencyExp(master);
   const proficiency = visibleProficiency(proficiencyExp);
   const info = db.prepare("INSERT INTO slot_items (master_id, level, proficiency, proficiency_exp, locked) VALUES (?, 0, ?, ?, 0)")
@@ -4539,9 +5826,10 @@ function applySlotImprovement(db: Database.Database, application: SlotImprovemen
         .run(nextMasterId, nextLevel, targetItemId);
       consumeUseItemCosts(db, useItemCost);
     }
+    injectStateFault(db, "improvement.before-quest-event");
+    recordQuestEvent(db, { kind: "simple", subcategory: "improvement" });
   });
   tx();
-  recordQuestEvent(db, { kind: "simple", subcategory: "improvement" });
 
   const nextSave = getSave(db);
   const updated = nextSave.slotItems.find((item) => item.id === targetItemId);
@@ -4550,8 +5838,84 @@ function applySlotImprovement(db: Database.Database, application: SlotImprovemen
     : { ok: false, error: "Unknown equipment" };
 }
 
+function claimInitialShip(db: Database.Database, masterId: number): InitialShipClaimResult {
+  const normalizedMasterId = Math.trunc(Number(masterId));
+  if (!INITIAL_SHIP_MASTER_IDS.has(normalizedMasterId)) {
+    return { ok: false, error: "Requested ship is not an allowed initial ship" };
+  }
+  if (!masterData.api_mst_ship.some((ship) => ship.api_id === normalizedMasterId)) {
+    return { ok: false, error: "Unknown initial ship master" };
+  }
+
+  const player = db.prepare(
+    "SELECT initial_ship_claimed, max_chara FROM players WHERE id = 1"
+  ).get() as Row | undefined;
+  if (!player) return { ok: false, error: "Local account has not been registered" };
+  if (safeNum(player.initial_ship_claimed, 1) !== 0) {
+    return { ok: false, error: "Initial ship has already been claimed" };
+  }
+  const save = getSave(db);
+  if (save.ships.length !== 0) {
+    return { ok: false, error: "Initial ship can only be claimed for an empty port" };
+  }
+  if (save.ships.length >= Math.max(0, Math.trunc(safeNum(player.max_chara)))) {
+    return { ok: false, error: "Ship capacity is full" };
+  }
+
+  let claimed!: Ship;
+  const tx = db.transaction(() => {
+    claimed = createShip(db, normalizedMasterId);
+    const deck = db.prepare("SELECT ship_ids_json FROM decks WHERE id = 1").get() as Row | undefined;
+    if (!deck) throw new Error("Initial fleet is missing");
+    const shipIds = normalizeDeckShipIds(parseJson<number[]>(deck.ship_ids_json, []));
+    shipIds[0] = claimed.id;
+    db.prepare("UPDATE decks SET ship_ids_json = ? WHERE id = 1").run(JSON.stringify(shipIds));
+    const update = db.prepare(
+      "UPDATE players SET initial_ship_claimed = 1, flagship_position = 1 WHERE id = 1 AND initial_ship_claimed = 0"
+    ).run();
+    if (update.changes !== 1) throw new Error("Initial ship has already been claimed");
+  });
+  try {
+    tx();
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Initial ship claim failed" };
+  }
+  return { ok: true, ship: claimed, save: getSave(db) };
+}
+
+function openShipExSlot(db: Database.Database, shipId: number): ExSlotOpenResult {
+  const id = Math.trunc(Number(shipId));
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: "Unknown ship" };
+  const save = getSave(db);
+  const ship = save.ships.find((candidate) => candidate.id === id);
+  if (!ship) return { ok: false, error: "Unknown ship" };
+  if (ship.level < 30) return { ok: false, error: "Ship level must be at least 30" };
+  if (ship.exSlotId >= 0) return { ok: false, error: "Reinforcement expansion is already open" };
+  if (activeExpeditionShipIds(db).has(id)) return { ok: false, error: "Ship is away on expedition" };
+  const references = shipReferences(save, id, activeBattleReferences(db));
+  if (references.some((reference) => ["repair-dock", "sortie", "expedition", "battle"].includes(reference.kind))) {
+    return { ok: false, error: "Ship is not available for reinforcement expansion" };
+  }
+  if ((save.useItems.find((item) => item.id === 64)?.count ?? 0) < 1) {
+    return { ok: false, error: "Reinforcement expansion item is required" };
+  }
+
+  const tx = db.transaction(() => {
+    consumeUseItem(db, 64, 1);
+    const update = db.prepare("UPDATE ships SET ex_slot_id = 0 WHERE id = ? AND ex_slot_id = -1").run(id);
+    if (update.changes !== 1) throw new Error("Reinforcement expansion is already open");
+  });
+  try {
+    tx();
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Reinforcement expansion failed" };
+  }
+  return { ok: true, ship: getSave(db).ships.find((candidate) => candidate.id === id)! };
+}
+
 function createShip(db: Database.Database, masterId: number): Ship {
   const master = masterData.api_mst_ship.find((s) => s.api_id === masterId);
+  if (!master) throw new Error(`Unknown ship master ${String(masterId)}`);
   const maxHp = shipInitialMaxHp(master);
   const maxFuel = master?.api_fuel_max ?? 20;
   const maxAmmo = master?.api_bull_max ?? 20;
@@ -4586,7 +5950,8 @@ function normalizeKyouka(stats: JsonObject): number[] {
 function modernizationGains(
   ship: Ship,
   master: (typeof masterData.api_mst_ship)[number] | undefined,
-  consumedShips: Ship[]
+  consumedShips: Ship[],
+  random: () => number
 ) {
   const totals = [0, 0, 0, 0, 0, 0, 0];
   for (const consumed of consumedShips) {
@@ -4598,11 +5963,172 @@ function modernizationGains(
   }
 
   const currentKyouka = normalizeKyouka(ship.stats);
-  return totals.map((total, index) => {
+  const gains = totals.map((total, index) => {
     if (index >= 4 || total <= 0) return 0;
-    const displayGain = Math.floor(total * 1.2 + 0.3);
+    // Each of the four ordinary modernization parameters rolls independently.
+    // Community formula vectors (2026-07-10 audit): success is
+    // floor(total + (total + 1) / 5), failure is floor(13*total/22 - 0.1).
+    const successful = unitRandom(random) < 0.5;
+    const displayGain = successful
+      ? Math.floor(total + (total + 1) / 5)
+      : Math.max(0, Math.floor(13 * total / 22 - 0.1));
     return Math.min(displayGain, modernizationCapacity(master, index, currentKyouka[index]));
   });
+
+  const maruyuExpectedLuck = consumedShips.reduce((sum, consumed) => {
+    if (consumed.masterId === 163) return sum + 1.2;
+    if (consumed.masterId === 402) return sum + 1.6;
+    return sum;
+  }, 0);
+  if (maruyuExpectedLuck > 0) {
+    const rolledLuck = Math.floor(maruyuExpectedLuck + unitRandom(random));
+    gains[4] = Math.min(rolledLuck, specialModernizationCapacity(ship, master, "luck", currentKyouka[4]));
+  }
+
+  applyCoastalDefenseModernization(gains, ship, master, consumedShips, currentKyouka, random);
+  return gains;
+}
+
+type ShipMaster = (typeof masterData.api_mst_ship)[number];
+type CoastalDefenseFodder = { ship: Ship; master: ShipMaster; rootMasterId: number };
+
+/**
+ * Coastal-defense modernization is based on published community measurements,
+ * not a server-disclosed probability table.  The measured one/two-ship cases
+ * are implemented here; 3-5 fodders are deterministically decomposed into
+ * disjoint pairs plus one single, matching the documented observed model.
+ */
+function applyCoastalDefenseModernization(
+  gains: number[],
+  target: Ship,
+  targetMaster: ShipMaster | undefined,
+  consumedShips: Ship[],
+  currentKyouka: number[],
+  random: () => number
+) {
+  const fodders = consumedShips.flatMap((consumed): CoastalDefenseFodder[] => {
+    const master = masterData.api_mst_ship.find((item) => item.api_id === consumed.masterId);
+    return master?.api_stype === 1
+      ? [{ ship: consumed, master, rootMasterId: rootShipMasterId(master.api_id) }]
+      : [];
+  });
+  if (fodders.length === 0) return;
+
+  const units = coastalDefenseModernizationUnits(fodders);
+  let luckGain = gains[4];
+  let hpGain = gains[5];
+  let aswGain = gains[6];
+
+  const addLuck = () => {
+    if (luckGain < specialModernizationCapacity(target, targetMaster, "luck", currentKyouka[4])) luckGain += 1;
+  };
+  const addHp = () => {
+    if (hpGain < specialModernizationCapacity(target, targetMaster, "hp", currentKyouka[5])) hpGain += 1;
+    else addLuck();
+  };
+  const addAsw = () => {
+    if (aswGain < specialModernizationCapacity(target, targetMaster, "asw", currentKyouka[6])) aswGain += 1;
+  };
+
+  for (const unit of units) {
+    const levelSum = unit.reduce((sum, fodder) => sum + Math.max(1, Math.trunc(fodder.ship.level)), 0);
+    if (unit.length === 1) {
+      const luckProbability = clampProbability((32 + 0.7 * levelSum) / 100);
+      if (unitRandom(random) < luckProbability) addLuck();
+      else addAsw();
+      continue;
+    }
+
+    const hpEligible = unit[0].master.api_ctype === unit[1].master.api_ctype
+      && unit[0].rootMasterId !== unit[1].rootMasterId;
+    const aswProbability = clampProbability((10 + 0.4 * levelSum) / 100);
+    if (hpEligible) {
+      const hpProbability = clampProbability((26 + 0.35 * levelSum) / 100);
+      if (unitRandom(random) < hpProbability) addHp();
+      else addLuck();
+      // Measurements indicate the pair ASW roll is independent of HP/Luck.
+      if (unitRandom(random) < aswProbability) addAsw();
+    } else if (unitRandom(random) < aswProbability) {
+      addAsw();
+    } else {
+      addLuck();
+    }
+  }
+
+  gains[4] = luckGain;
+  gains[5] = hpGain;
+  gains[6] = aswGain;
+}
+
+function coastalDefenseModernizationUnits(fodders: CoastalDefenseFodder[]) {
+  const remaining = [...fodders];
+  const units: CoastalDefenseFodder[][] = [];
+  while (remaining.length >= 2) {
+    let pair: [number, number] | null = null;
+    for (let left = 0; left < remaining.length - 1 && !pair; left += 1) {
+      const right = remaining.findIndex((candidate, index) =>
+        index > left
+        && candidate.master.api_ctype === remaining[left].master.api_ctype
+        && candidate.rootMasterId !== remaining[left].rootMasterId
+      );
+      if (right > left) pair = [left, right];
+    }
+    const [left, right] = pair ?? [0, 1];
+    const second = remaining.splice(right, 1)[0];
+    const first = remaining.splice(left, 1)[0];
+    units.push([first, second]);
+  }
+  if (remaining.length === 1) units.push([remaining[0]]);
+  return units;
+}
+
+function rootShipMasterId(masterId: number) {
+  let current = Math.trunc(masterId);
+  const seen = new Set<number>();
+  while (!seen.has(current)) {
+    seen.add(current);
+    const predecessor = masterData.api_mst_ship
+      .filter((candidate) => Math.trunc(safeNum(candidate.api_aftershipid)) === current)
+      .sort((a, b) => a.api_id - b.api_id)[0];
+    if (!predecessor) return current;
+    current = predecessor.api_id;
+  }
+  return current;
+}
+
+function unitRandom(random: () => number) {
+  const value = Number(random());
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(0.999999999999, value));
+}
+
+function specialModernizationCapacity(
+  ship: Ship,
+  master: (typeof masterData.api_mst_ship)[number] | undefined,
+  kind: "luck" | "hp" | "asw",
+  currentBonus: number
+) {
+  if (kind === "luck") {
+    const raw = master?.api_luck;
+    const minimum = Array.isArray(raw) ? Math.trunc(safeNum(raw[0])) : 0;
+    const maximum = Array.isArray(raw) ? Math.trunc(safeNum(raw[1])) : minimum;
+    return Math.max(0, maximum - minimum - currentBonus);
+  }
+  if (kind === "hp") {
+    // Publicly observed base cap is +2. Marriage can reduce this for specific
+    // remodels; never exceed the persisted target cap even when several pairs
+    // are consumed at once.
+    return Math.max(0, 2 - currentBonus);
+  }
+  if (kind === "asw") {
+    const bounds = playerShipStatBounds(master?.api_id ?? ship.masterId);
+    return bounds && bounds.asw[0] > 0 ? Math.max(0, 9 - currentBonus) : 0;
+  }
+  return 0;
+}
+
+function clampProbability(value: number) {
+  return Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 }
 
 function modernizationCapacity(
@@ -4763,13 +6289,10 @@ function consumeUseItemCosts(db: Database.Database, cost: Map<number, number>) {
 }
 
 function equippedSlotItemIds(save: SaveState) {
-  const ids = new Set<number>();
-  for (const ship of save.ships) {
-    for (const slotItemId of [...ship.slotIds, ship.exSlotId]) {
-      if (slotItemId > 0) ids.add(slotItemId);
-    }
-  }
-  return ids;
+  return new Set([
+    ...buildStateReferenceIndex(save).slotItemOwners.keys(),
+    ...(save.relocatingSlotItemIds ?? [])
+  ]);
 }
 
 function onSlotForShip(
@@ -4827,29 +6350,69 @@ function marriageHpBonus(maxHp: number) {
 }
 
 function consumeMaterials(db: Database.Database, delta: MaterialDelta) {
-  updateMaterials(db, delta, -1);
+  const cost = normalizedMaterialDelta(delta);
+  const result = db.prepare(`
+    UPDATE materials
+    SET fuel = fuel - @fuel,
+        ammo = ammo - @ammo,
+        steel = steel - @steel,
+        bauxite = bauxite - @bauxite,
+        build_kit = build_kit - @buildKit,
+        repair_kit = repair_kit - @repairKit,
+        devmat = devmat - @devmat,
+        screw = screw - @screw
+    WHERE player_id = 1
+      AND fuel >= @fuel
+      AND ammo >= @ammo
+      AND steel >= @steel
+      AND bauxite >= @bauxite
+      AND build_kit >= @buildKit
+      AND repair_kit >= @repairKit
+      AND devmat >= @devmat
+      AND screw >= @screw
+  `).run(cost);
+  if (result.changes !== 1) throw new Error("Insufficient materials");
 }
 
 function addMaterials(db: Database.Database, delta: MaterialDelta) {
   updateMaterials(db, delta, 1);
 }
 
-function updateMaterials(db: Database.Database, delta: MaterialDelta, sign: 1 | -1) {
-  settleMaterialRecovery(db);
+function updateMaterials(db: Database.Database, delta: MaterialDelta, sign: 1) {
   const current = mapMaterials(db.prepare("SELECT * FROM materials WHERE player_id = 1").get() as Row);
   const next: Materials = {
-    fuel: clampBasicMaterial(current.fuel + sign * (delta.fuel || 0)),
-    ammo: clampBasicMaterial(current.ammo + sign * (delta.ammo || 0)),
-    steel: clampBasicMaterial(current.steel + sign * (delta.steel || 0)),
-    bauxite: clampBasicMaterial(current.bauxite + sign * (delta.bauxite || 0)),
-    buildKit: clampMaterialCount(current.buildKit + sign * (delta.buildKit || 0)),
-    repairKit: clampMaterialCount(current.repairKit + sign * (delta.repairKit || 0)),
-    devmat: clampMaterialCount(current.devmat + sign * (delta.devmat || 0)),
-    screw: clampMaterialCount(current.screw + sign * (delta.screw || 0))
+    fuel: cappedIncrease(current.fuel, sign * (delta.fuel || 0), BASIC_MATERIAL_HARD_CAP),
+    ammo: cappedIncrease(current.ammo, sign * (delta.ammo || 0), BASIC_MATERIAL_HARD_CAP),
+    steel: cappedIncrease(current.steel, sign * (delta.steel || 0), BASIC_MATERIAL_HARD_CAP),
+    bauxite: cappedIncrease(current.bauxite, sign * (delta.bauxite || 0), BASIC_MATERIAL_HARD_CAP),
+    buildKit: cappedIncrease(current.buildKit, sign * (delta.buildKit || 0), SECONDARY_MATERIAL_HARD_CAP),
+    repairKit: cappedIncrease(current.repairKit, sign * (delta.repairKit || 0), SECONDARY_MATERIAL_HARD_CAP),
+    devmat: cappedIncrease(current.devmat, sign * (delta.devmat || 0), SECONDARY_MATERIAL_HARD_CAP),
+    screw: cappedIncrease(current.screw, sign * (delta.screw || 0), SECONDARY_MATERIAL_HARD_CAP)
   };
   db.prepare(
     "UPDATE materials SET fuel = ?, ammo = ?, steel = ?, bauxite = ?, build_kit = ?, repair_kit = ?, devmat = ?, screw = ? WHERE player_id = 1"
   ).run(next.fuel, next.ammo, next.steel, next.bauxite, next.buildKit, next.repairKit, next.devmat, next.screw);
+}
+
+function normalizedMaterialDelta(delta: MaterialDelta): Materials {
+  const normalize = (value: number | undefined) => {
+    const amount = Number(value ?? 0);
+    if (!Number.isFinite(amount) || !Number.isInteger(amount) || amount < 0) {
+      throw new Error("Material deltas must be non-negative integers");
+    }
+    return amount;
+  };
+  return {
+    fuel: normalize(delta.fuel),
+    ammo: normalize(delta.ammo),
+    steel: normalize(delta.steel),
+    bauxite: normalize(delta.bauxite),
+    buildKit: normalize(delta.buildKit),
+    repairKit: normalize(delta.repairKit),
+    devmat: normalize(delta.devmat),
+    screw: normalize(delta.screw)
+  };
 }
 
 function settleMaterialRecovery(db: Database.Database, now = Date.now()) {
@@ -4865,11 +6428,13 @@ function settleMaterialRecovery(db: Database.Database, now = Date.now()) {
   const nextRecoveryAt = ticks > 0
     ? lastRecoveryAt + ticks * MATERIAL_RECOVERY_INTERVAL_MS
     : lastRecoveryAt;
+  const player = db.prepare("SELECT level FROM players WHERE id = 1").get() as Row | undefined;
+  const naturalRecoveryCap = (Math.max(1, Math.trunc(safeNum(player?.level, 1))) + 3) * 250;
   const next = {
-    fuel: clampBasicMaterial(safeNum(row.fuel) + ticks * 3),
-    ammo: clampBasicMaterial(safeNum(row.ammo) + ticks * 3),
-    steel: clampBasicMaterial(safeNum(row.steel) + ticks * 3),
-    bauxite: clampBasicMaterial(safeNum(row.bauxite) + ticks)
+    fuel: naturallyRecover(safeNum(row.fuel), ticks * 3, naturalRecoveryCap),
+    ammo: naturallyRecover(safeNum(row.ammo), ticks * 3, naturalRecoveryCap),
+    steel: naturallyRecover(safeNum(row.steel), ticks * 3, naturalRecoveryCap),
+    bauxite: naturallyRecover(safeNum(row.bauxite), ticks, naturalRecoveryCap)
   };
   const changed =
     !hasValidLastRecovery ||
@@ -4887,8 +6452,65 @@ function settleMaterialRecovery(db: Database.Database, now = Date.now()) {
   `).run(next.fuel, next.ammo, next.steel, next.bauxite, nextRecoveryAt);
 }
 
+function settleAirBaseCondition(db: Database.Database, now = Date.now()) {
+  if (!columnExists(db, "air_base_squadrons", "condition_updated_at")) return;
+  const nowMs = Math.trunc(now);
+  const rows = db.prepare(`
+    SELECT s.area_id, s.base_id, s.squadron_id, s.slot_item_id, s.condition,
+           s.condition_updated_at, b.action_kind, b.maintenance_level
+    FROM air_base_squadrons s
+    JOIN air_bases b ON b.area_id = s.area_id AND b.base_id = s.base_id
+  `).all() as Row[];
+  const update = db.prepare(`
+    UPDATE air_base_squadrons
+    SET condition = ?, condition_updated_at = ?
+    WHERE area_id = ? AND base_id = ? AND squadron_id = ?
+  `);
+  for (const row of rows) {
+    const lastUpdated = Math.trunc(safeNum(row.condition_updated_at, nowMs));
+    const elapsed = Math.max(0, nowMs - lastUpdated);
+    const ticks = Math.floor(elapsed / AIR_BASE_CONDITION_INTERVAL_MS);
+    if (ticks <= 0) continue;
+    const updatedAt = lastUpdated + ticks * AIR_BASE_CONDITION_INTERVAL_MS;
+    let condition = safeNum(row.slot_item_id) > 0
+      ? Math.max(0, Math.min(AIR_BASE_NATURAL_CONDITION_CAP, Math.trunc(safeNum(row.condition))))
+      : 0;
+    const recovery = airBaseConditionRecoveryPerTick(row.action_kind, row.maintenance_level);
+    // At most 46 iterations can change state; cap work for saves that were not
+    // opened for a long time while still advancing their settlement timestamp.
+    for (let tick = 0; tick < Math.min(ticks, AIR_BASE_NATURAL_CONDITION_CAP + 1); tick += 1) {
+      if (condition >= AIR_BASE_NATURAL_CONDITION_CAP) break;
+      condition = condition < 40 ? Math.min(40, condition + recovery) : Math.min(46, condition + 1);
+    }
+    update.run(condition, updatedAt, row.area_id, row.base_id, row.squadron_id);
+  }
+}
+
+function airBaseConditionRecoveryPerTick(actionKind: unknown, maintenanceLevel: unknown) {
+  const action = normalizeAirBaseAction(actionKind);
+  const level = Math.max(0, Math.min(3, Math.trunc(safeNum(maintenanceLevel))));
+  if (action === 1) return level >= 3 ? 2 : 1; // sortie
+  if (action === 2) return level >= 2 ? 3 : 2; // air defense
+  if (action === 3) return level >= 2 ? 4 : 3; // evacuation
+  if (action === 4) return level === 0 ? 8 : level === 1 ? 10 : 12; // rest
+  return level >= 2 ? 5 : 4; // standby
+}
+
 function clampBasicMaterial(value: number) {
-  return Math.min(BASIC_MATERIAL_CAP, clampMaterialCount(value));
+  return Math.min(BASIC_MATERIAL_HARD_CAP, clampMaterialCount(value));
+}
+
+function cappedIncrease(current: number, amount: number, cap: number) {
+  const normalizedCurrent = clampMaterialCount(current);
+  const normalizedAmount = clampMaterialCount(amount);
+  if (normalizedCurrent >= cap) return normalizedCurrent;
+  return Math.min(cap, normalizedCurrent + normalizedAmount);
+}
+
+function naturallyRecover(current: number, amount: number, softCap: number) {
+  const normalizedCurrent = clampMaterialCount(current);
+  if (normalizedCurrent >= softCap) return normalizedCurrent;
+  return Math.min(softCap, normalizedCurrent + clampMaterialCount(amount));
 }
 
 function clampMaterialCount(value: number) {
@@ -4897,8 +6519,12 @@ function clampMaterialCount(value: number) {
 }
 
 function hasMaterials(materials: Materials, delta: MaterialDelta) {
-  return (Object.entries(delta) as [keyof Materials, number | undefined][])
-    .every(([key, value]) => materials[key] >= Math.max(0, value || 0));
+  try {
+    const cost = normalizedMaterialDelta(delta);
+    return (Object.keys(cost) as (keyof Materials)[]).every((key) => materials[key] >= cost[key]);
+  } catch {
+    return false;
+  }
 }
 
 function validConstructionRecipe(recipe: ConstructionRecipe) {
@@ -4960,8 +6586,8 @@ function settleCompletedBuilds(db: Database.Database, now = Date.now()) {
   ).run(now);
 }
 
-function syncExpeditionDeckStates(db: Database.Database) {
-  const now = expeditionNow(db);
+function syncExpeditionDeckStates(db: Database.Database, now = Date.now()) {
+  const expeditionTime = expeditionNow(db, now);
   const rows = db.prepare(`
     SELECT deck_id, mission_id, status, complete_at
     FROM expedition_runs
@@ -4973,7 +6599,7 @@ function syncExpeditionDeckStates(db: Database.Database) {
   const tx = db.transaction(() => {
     for (const row of rows) {
       const completeAt = Number(row.complete_at);
-      const state = String(row.status) === "returning" || completeAt <= now ? 2 : 1;
+      const state = String(row.status) === "returning" || completeAt <= expeditionTime ? 2 : 1;
       update.run(
         JSON.stringify({
           state,
@@ -5008,6 +6634,129 @@ type OrdinarySlotSource = {
   previousCount: number;
   previousMax: number;
 };
+
+function moveSlotItem(db: Database.Database, request: SlotMoveRequest): SlotMoveResult {
+  const sourceIndex = Math.trunc(Number(request.sourceIndex));
+  const targetIndex = Math.trunc(Number(request.targetIndex));
+  if (
+    !Number.isInteger(request.sourceShipId) || request.sourceShipId <= 0 ||
+    !Number.isInteger(request.targetShipId) || request.targetShipId <= 0 ||
+    !Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex > 4 ||
+    !Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex > 4 ||
+    !["normal", "extra"].includes(request.sourceKind) ||
+    !["normal", "extra"].includes(request.targetKind)
+  ) {
+    return { ok: false, error: "Invalid slot move location" };
+  }
+
+  const save = getSave(db);
+  const sourceShip = save.ships.find((ship) => ship.id === request.sourceShipId);
+  const targetShip = save.ships.find((ship) => ship.id === request.targetShipId);
+  if (!sourceShip || !targetShip) return { ok: false, error: "Unknown ship" };
+  const awayShips = activeExpeditionShipIds(db);
+  if (awayShips.has(sourceShip.id) || awayShips.has(targetShip.id)) {
+    return { ok: false, error: "Ship is away on expedition" };
+  }
+
+  const movedItemId = request.sourceKind === "extra"
+    ? sourceShip.exSlotId
+    : normalizeFixed(sourceShip.slotIds, 5, -1)[sourceIndex];
+  if (movedItemId <= 0 || !save.slotItems.some((item) => item.id === movedItemId)) {
+    return { ok: false, error: "Unknown source slot item" };
+  }
+  if (request.expectedItemId != null && request.expectedItemId !== movedItemId) {
+    return { ok: false, error: "Source slot item does not match the request" };
+  }
+
+  const owners = slotItemOwners(save, movedItemId);
+  const sourceOwnsItem = owners.length === 1 && (request.sourceKind === "extra"
+    ? owners[0].kind === "ship-extra-slot" && owners[0].shipId === sourceShip.id
+    : owners[0].kind === "ship-slot" && owners[0].shipId === sourceShip.id && owners[0].slotIndex === sourceIndex);
+  if (!sourceOwnsItem) return { ok: false, error: "Source does not uniquely own the slot item" };
+
+  if (
+    sourceShip.id === targetShip.id &&
+    request.sourceKind === request.targetKind &&
+    (request.sourceKind === "extra" || sourceIndex === targetIndex)
+  ) {
+    return {
+      ok: true,
+      sourceShip,
+      targetShip,
+      movedItemId,
+      displacedItemId: -1
+    };
+  }
+
+  const sourceMaster = masterData.api_mst_ship.find((master) => master.api_id === sourceShip.masterId);
+  const sourceAfterRemoval = request.sourceKind === "extra"
+    ? { ...sourceShip, exSlotId: 0 }
+    : {
+        ...sourceShip,
+        ...equipOrdinarySlot(
+          sourceMaster,
+          save.slotItems,
+          sourceShip.slotIds,
+          sourceShip.onSlot,
+          sourceIndex,
+          -1
+        )
+      };
+  const targetBase = sourceShip.id === targetShip.id ? sourceAfterRemoval : targetShip;
+  const targetMaster = masterData.api_mst_ship.find((master) => master.api_id === targetBase.masterId);
+
+  let displacedItemId: number;
+  let targetAfterMove: Ship;
+  if (request.targetKind === "extra") {
+    if (targetBase.exSlotId < 0) return { ok: false, error: "Target reinforcement expansion is not open" };
+    displacedItemId = targetBase.exSlotId;
+    targetAfterMove = { ...targetBase, exSlotId: movedItemId };
+  } else {
+    const sources = ordinarySlotSources(targetMaster, targetBase.slotIds, targetBase.onSlot);
+    const actualTargetIndex = firstAvailableOrdinarySlotIndex(sources, targetIndex);
+    displacedItemId = sources[actualTargetIndex]?.slotId ?? -1;
+    targetAfterMove = {
+      ...targetBase,
+      ...equipOrdinarySlot(
+        targetMaster,
+        save.slotItems,
+        targetBase.slotIds,
+        targetBase.onSlot,
+        targetIndex,
+        movedItemId
+      )
+    };
+  }
+
+  const update = db.prepare(
+    "UPDATE ships SET slot_ids_json = ?, onslot_json = ?, ex_slot_id = ? WHERE id = ?"
+  );
+  const writeShip = (ship: Ship) => {
+    const result = update.run(JSON.stringify(ship.slotIds), JSON.stringify(ship.onSlot), ship.exSlotId, ship.id);
+    if (result.changes !== 1) throw new Error(`Ship ${ship.id} disappeared during slot move`);
+  };
+  const tx = db.transaction(() => {
+    if (sourceShip.id !== targetShip.id) writeShip(sourceAfterRemoval);
+    writeShip(targetAfterMove);
+  });
+  try {
+    tx();
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Slot move failed" };
+  }
+
+  const nextSave = getSave(db);
+  const nextSource = nextSave.ships.find((ship) => ship.id === sourceShip.id);
+  const nextTarget = nextSave.ships.find((ship) => ship.id === targetShip.id);
+  if (!nextSource || !nextTarget) return { ok: false, error: "Ship disappeared during slot move" };
+  return {
+    ok: true,
+    sourceShip: nextSource,
+    targetShip: nextTarget,
+    movedItemId,
+    displacedItemId: displacedItemId === movedItemId ? -1 : displacedItemId
+  };
+}
 
 function equipOrdinarySlot(
   master: (typeof masterData.api_mst_ship)[number] | undefined,
@@ -5157,16 +6906,24 @@ function seedMissingMaps(db: Database.Database) {
   const hasSelectedRank = columnExists(db, "maps", "selected_rank");
   const insert = hasSelectedRank
     ? db.prepare(
-        "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, selected_rank, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, ?, 0, 1, 0, ?)"
+        "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, selected_rank, phase, phase_progress, period_key, clear_count) VALUES (?, ?, ?, ?, 0, ?, 0, 1, 0, ?, 0)"
       )
     : db.prepare(
-        "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, ?, 1, 0, ?)"
+        "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress, period_key) VALUES (?, ?, ?, ?, 0, ?, 1, 0, ?)"
       );
+  const clearedOnce = new Set(
+    columnExists(db, "maps", "clear_count")
+      ? (db.prepare("SELECT id FROM maps WHERE clear_count > 0 OR cleared = 1").all() as Row[]).map((row) => Number(row.id))
+      : (db.prepare("SELECT id FROM maps WHERE cleared = 1").all() as Row[]).map((row) => Number(row.id))
+  );
   for (const map of masterData.api_mst_mapinfo) {
+    const prerequisites = mapUnlockPrerequisites(map.api_id);
+    const unlocked = prerequisites.length === 0 || prerequisites.every((mapId) => clearedOnce.has(mapId)) ? 1 : 0;
     insert.run(
       map.api_id,
       map.api_maparea_id,
       map.api_no,
+      unlocked,
       initialMapGauge(map.api_id, map.api_required_defeat_count),
       currentMapPeriodKey(map.api_id)
     );
@@ -5177,9 +6934,17 @@ function seedEventMaps(db: Database.Database, areaId: number) {
   const event = eventDefinition(areaId);
   if (!event) return;
   const insert = db.prepare(
-    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, selected_rank, phase, phase_progress, period_key) VALUES (?, ?, ?, 1, 0, 0, 0, 1, 0, 'once')"
+    "INSERT OR IGNORE INTO maps (id, area_id, map_no, unlocked, cleared, gauge, selected_rank, phase, phase_progress, period_key) VALUES (?, ?, ?, ?, 0, 0, 0, 1, 0, 'once')"
   );
-  for (const map of event.maps) insert.run(map.id, map.areaId, map.mapNo);
+  const clearedOnce = new Set(
+    (db.prepare("SELECT id FROM maps WHERE clear_count > 0 OR cleared = 1").all() as Row[])
+      .map((row) => Number(row.id))
+  );
+  for (const map of event.maps) {
+    const prerequisites = eventMapUnlockPrerequisites(map.id);
+    const unlocked = prerequisites.every((mapId) => clearedOnce.has(mapId)) ? 1 : 0;
+    insert.run(map.id, map.areaId, map.mapNo, unlocked);
+  }
 }
 
 function ensureEventAirBases(db: Database.Database, areaId: number) {

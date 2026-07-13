@@ -6,8 +6,11 @@ import { MARRIED_SHIP_LEVEL_CAP, shipTotalExpForLevel } from "../src/kcsapi/expe
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createResourceManifest } from "../src/resources/manifest.js";
 import { buildApp } from "../src/server/app.js";
+import { SYNTHETIC_EVENT_GAMEPLAY_PROFILE } from "../src/master/gameplay-profile.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 import type { ResourceManifest } from "../src/resources/types.js";
+
+const API_TOKEN = "test-api-token-0000000000000001";
 
 describe("local kcsapi endpoints", () => {
   let tempDir: string;
@@ -18,13 +21,18 @@ describe("local kcsapi endpoints", () => {
   beforeEach(async () => {
     arsenalRolls = [];
     tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-api-"));
-    store = createStateStore({ databasePath: path.join(tempDir, "save.sqlite") });
+    store = createStateStore({
+      databasePath: path.join(tempDir, "save.sqlite"),
+      allowSyntheticEvents: true
+    });
     store.registerAccount(15);
     app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
       unknownLogPath: path.join(tempDir, "unknown.jsonl"),
-      arsenalRandom: () => arsenalRolls.shift() ?? 0
+      arsenalRandom: () => arsenalRolls.shift() ?? 0,
+      apiToken: API_TOKEN,
+      gameplayProfile: SYNTHETIC_EVENT_GAMEPLAY_PROFILE
     });
   });
 
@@ -41,7 +49,10 @@ describe("local kcsapi endpoints", () => {
       method: "POST",
       url: `/kcsapi/${pathname}`,
       payload: new URLSearchParams(
-        Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        {
+          api_token: API_TOKEN,
+          ...Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        }
       ).toString(),
       headers: { "content-type": "application/x-www-form-urlencoded" }
     });
@@ -72,6 +83,11 @@ describe("local kcsapi endpoints", () => {
       INSERT INTO use_items (id, count) VALUES (?, ?)
       ON CONFLICT(id) DO UPDATE SET count = excluded.count
     `).run(itemId, count);
+  }
+
+  function markExSlotOpen(...shipIds: number[]) {
+    const update = store.db.prepare("UPDATE ships SET ex_slot_id = 0 WHERE id = ?");
+    for (const shipId of shipIds) update.run(shipId);
   }
 
   function useItemCount(itemId: number) {
@@ -469,15 +485,15 @@ describe("local kcsapi endpoints", () => {
       api_mission: { api_count: 0, api_success: 0, api_rate: expect.any(String) },
       api_practice: { api_win: 0, api_lose: 0, api_rate: expect.any(String) },
       api_deck: 4,
-      api_kdoc: 4,
-      api_ndoc: 4,
+      api_kdoc: 2,
+      api_ndoc: 2,
       api_ship: [4, 300],
       api_slotitem: [4, 497],
-      api_material_max: 1000000,
+      api_material_max: 350_000,
       api_air_base_expanded_info: [
-        { api_area_id: 5, api_maintenance_level: 1 },
-        { api_area_id: 6, api_maintenance_level: 1 },
-        { api_area_id: 7, api_maintenance_level: 1 }
+        { api_area_id: 5, api_maintenance_level: 0 },
+        { api_area_id: 6, api_maintenance_level: 0 },
+        { api_area_id: 7, api_maintenance_level: 0 }
       ]
     });
     expect(Number.isNaN(Number.parseFloat(recordData.api_war.api_rate))).toBe(false);
@@ -599,7 +615,7 @@ describe("local kcsapi endpoints", () => {
     expect(payitemById.get(10)).toMatchObject({ api_id: 10, api_name: "ドック増設セット", api_price: 1000 });
     expect(payitemById.get(26)).toMatchObject({ api_id: 26, api_name: "補強増設", api_price: 500 });
     expect(start2.api_mst_item_shop).toEqual({
-      api_cabinet_1: [1, 2, 3, 4, 15, 5, 31, 7, 6, 32, 11, 14, 10, -1],
+      api_cabinet_1: [1, 2, 3, 4, 15, 5, 31, 7, 6, 32, 11, 14, 10, 13],
       api_cabinet_2: [16, 17, 20, 19, 8, 9, 18, 22, 23, 26, 24, 25, 27, 28, 29, 30, -1, -1]
     });
 
@@ -1055,15 +1071,38 @@ describe("local kcsapi endpoints", () => {
   });
 
   it("returns numeric material arrays for action responses read by index in the client", async () => {
+    const scrapShip = store.createShip(9);
     const charge = (await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3 })).json().api_data;
     const craft = (await post("api_req_kousyou/createitem", { api_item1: 10, api_item2: 10, api_item3: 10, api_item4: 10 })).json().api_data;
     const destroyItem = (await post("api_req_kousyou/destroyitem2", { api_slotitem_ids: "2" })).json().api_data;
-    const destroyShip = (await post("api_req_kousyou/destroyship", { api_ship_id: "2" })).json().api_data;
+    const destroyShip = (await post("api_req_kousyou/destroyship", { api_ship_id: String(scrapShip.id) })).json().api_data;
 
     expect(charge.api_material).toEqual([1000, 1000, 1000, 1000, 10, 10, 50, 5]);
     expect(craft.api_material).toEqual([990, 990, 990, 990, 10, 10, 49, 5]);
-    expect(destroyItem.api_get_material).toEqual([1, 1, 2, 0]);
-    expect(destroyShip.api_material).toEqual([992, 992, 994, 990, 10, 10, 49, 5]);
+    expect(destroyItem.api_get_material).toEqual([0, 1, 1, 0]);
+    expect(destroyShip.api_get_material).toEqual([1, 1, 5, 0]);
+    expect(destroyShip.api_material).toEqual([991, 992, 996, 990, 10, 10, 49, 5]);
+  });
+
+  it("honors the ship-scrap equipment disposal flag", async () => {
+    const keptShip = store.createShip(9);
+    const keptGun = store.createSlotItem(2);
+    store.equipSlotItem(keptShip.id, 0, keptGun.id);
+    expect((await post("api_req_kousyou/destroyship", {
+      api_ship_id: keptShip.id,
+      api_slot_dest_flag: 0
+    })).json()).toMatchObject({ api_result: 1 });
+    expect(store.getSave().slotItems.some((item) => item.id === keptGun.id)).toBe(true);
+
+    const disposedShip = store.createShip(9);
+    const disposedGun = store.createSlotItem(2);
+    store.equipSlotItem(disposedShip.id, 0, disposedGun.id);
+    expect((await post("api_req_kousyou/destroyship", {
+      api_ship_id: disposedShip.id,
+      api_slot_dest_flag: 1
+    })).json()).toMatchObject({ api_result: 1 });
+    expect(store.getSave().slotItems.some((item) => item.id === disposedGun.id)).toBe(false);
+    expect(store.integrityIssues()).toEqual([]);
   });
 
   it("returns createitem slot payloads expected by the arsenal client", async () => {
@@ -1374,19 +1413,20 @@ describe("local kcsapi endpoints", () => {
     expect(material.slice(0, 4)).toEqual(port.api_material.slice(0, 4));
   });
 
-  it("keeps material action responses within the one million resource cap", async () => {
-    const baseline = Date.now();
-    store.db.prepare("UPDATE materials SET fuel = 999999, ammo = 999999, steel = 999999, bauxite = 999999 WHERE player_id = 1").run();
-    vi.spyOn(Date, "now").mockReturnValue(baseline + 180_000);
+  it("keeps material rewards within the 350,000 hard cap", async () => {
+    const scrap = store.createSlotItem(80);
+    store.db.prepare("UPDATE materials SET fuel = 349999, ammo = 349999, steel = 349999, bauxite = 349999 WHERE player_id = 1").run();
 
-    const charge = (await post("api_req_hokyu/charge", { api_id_items: "1", api_kind: 3 })).json().api_data;
+    const destroyed = (await post("api_req_kousyou/destroyitem2", { api_slotitem_ids: String(scrap.id) })).json().api_data;
+    const record = (await post("api_get_member/record")).json().api_data;
 
-    expect(charge.api_material.slice(0, 4)).toEqual([1_000_000, 1_000_000, 1_000_000, 1_000_000]);
+    expect(destroyed.api_material.slice(0, 4)).toEqual([350_000, 350_000, 349_999, 350_000]);
+    expect(record.api_material_max).toBe(350_000);
     expect(store.getSave().materials).toMatchObject({
-      fuel: 1_000_000,
-      ammo: 1_000_000,
-      steel: 1_000_000,
-      bauxite: 1_000_000
+      fuel: 350_000,
+      ammo: 350_000,
+      steel: 349_999,
+      bauxite: 350_000
     });
   });
 
@@ -1513,6 +1553,46 @@ describe("local kcsapi endpoints", () => {
 
     expect(fubuki.api_ndock_item).toEqual([2, 4]);
     expect(fubuki.api_ndock_time).toBe(80_000);
+  });
+
+  it("opens repair and construction docks with one shared dock key each", async () => {
+    expect(store.getSave().repairDocks.map((dock) => dock.id)).toEqual([1, 2]);
+    expect(store.getSave().buildDocks.map((dock) => dock.id)).toEqual([1, 2]);
+    seedUseItem(49, 2);
+
+    const repair = await post("api_req_nyukyo/open_new_dock", { api_verno: 1 });
+    const build = await post("api_req_kousyou/open_new_dock", { api_verno: 1 });
+
+    expect(repair.statusCode).toBe(200);
+    expect(repair.json()).toEqual({
+      api_result: 1,
+      api_result_msg: "成功",
+      api_data: { api_opened: 1 }
+    });
+    expect(build.statusCode).toBe(200);
+    expect(build.json()).toEqual({
+      api_result: 1,
+      api_result_msg: "成功",
+      api_data: { api_opened: 1 }
+    });
+    expect(store.getSave().repairDocks.map((dock) => dock.id)).toEqual([1, 2, 3]);
+    expect(store.getSave().buildDocks.map((dock) => dock.id)).toEqual([1, 2, 3]);
+    expect(useItemCount(49)).toBe(0);
+
+    const beforeInsufficient = store.getSave();
+    const insufficient = await post("api_req_nyukyo/open_new_dock", { api_verno: 1 });
+    expect(insufficient.statusCode).toBe(400);
+    expect(insufficient.json()).toMatchObject({ api_result: 400 });
+    expect(store.getSave()).toEqual(beforeInsufficient);
+
+    seedUseItem(49, 3);
+    expect((await post("api_req_nyukyo/open_new_dock", { api_verno: 1 })).json().api_result).toBe(1);
+    expect((await post("api_req_kousyou/open_new_dock", { api_verno: 1 })).json().api_result).toBe(1);
+    const beforeReplay = store.getSave();
+    expect((await post("api_req_nyukyo/open_new_dock", { api_verno: 1 })).statusCode).toBe(400);
+    expect((await post("api_req_kousyou/open_new_dock", { api_verno: 1 })).statusCode).toBe(400);
+    expect(store.getSave()).toEqual(beforeReplay);
+    expect(useItemCount(49)).toBe(1);
   });
 
   it("charges fuel and steel when starting repairs and only buckets on speedchange", async () => {
@@ -1797,6 +1877,7 @@ describe("local kcsapi endpoints", () => {
 
     expect(await speedFromShip2()).toBe(5);
 
+    markExSlotOpen(yamato.id);
     store.equipExSlotItem(yamato.id, turbine.id);
     store.equipSlotItem(yamato.id, 0, enhancedBoiler1.id);
     expect(await speedFromShip2()).toBe(10);
@@ -1872,6 +1953,40 @@ describe("local kcsapi endpoints", () => {
     expect(store.getSave().ships.map((ship) => ship.id)).not.toEqual(
       expect.arrayContaining([consumedFubuki.id, consumedAyanami.id])
     );
+  });
+
+  it("rolls ordinary modernization stats independently with official rounding vectors", async () => {
+    const target = store.createShip(9);
+    const fodder = Array.from({ length: 4 }, () => store.createShip(9));
+    arsenalRolls.push(0.1, 0.9); // firepower success, torpedo failure
+
+    const response = await post("api_req_kaisou/powerup", {
+      api_id: target.id,
+      api_id_items: fodder.map((ship) => ship.id).join(","),
+      api_slot_dest_flag: 0
+    });
+
+    expect(response.json()).toMatchObject({
+      api_result: 1,
+      api_data: {
+        api_powerup_flag: 1,
+        api_ship: { api_kyouka: [5, 2, 0, 0, 0, 0, 0] }
+      }
+    });
+  });
+
+  it("uses the Maruyu expected-luck roll independently from ordinary stats", async () => {
+    const target = store.createShip(9);
+    const maruyu = store.createShip(163);
+    arsenalRolls.push(0.1, 0.9); // armor succeeds, floor(1.2 + 0.9) luck = 2
+
+    const response = await post("api_req_kaisou/powerup", {
+      api_id: target.id,
+      api_id_items: maruyu.id,
+      api_slot_dest_flag: 0
+    });
+
+    expect(response.json().api_data.api_ship.api_kyouka).toEqual([0, 0, 0, 1, 2, 0, 0]);
   });
 
   it("destroys consumed ships' equipment only when modernization requests slot disposal", async () => {
@@ -2160,6 +2275,7 @@ describe("local kcsapi endpoints", () => {
   });
 
   it("equips the turbine in an extra slot for ships that can equip it normally", async () => {
+    markExSlotOpen(1);
     const turbine = store.createSlotItem(33);
     const response = await post("api_req_kaisou/slotset_ex", { api_id: 1, api_item_id: turbine.id });
     const ship2 = (await post("api_get_member/ship2")).json().api_data;
@@ -2174,15 +2290,17 @@ describe("local kcsapi endpoints", () => {
 
   it("does not let the turbine wildcard bypass normal equip eligibility", async () => {
     const coastalDefenseShip = store.createShip(376);
+    markExSlotOpen(coastalDefenseShip.id);
     const turbine = store.createSlotItem(33);
     const response = await post("api_req_kaisou/slotset_ex", { api_id: coastalDefenseShip.id, api_item_id: turbine.id });
 
     expect(response.json()).toMatchObject({ api_result: 400 });
-    expect(store.getSave().ships.find((ship) => ship.id === coastalDefenseShip.id)?.exSlotId).toBe(-1);
+    expect(store.getSave().ships.find((ship) => ship.id === coastalDefenseShip.id)?.exSlotId).toBe(0);
   });
 
   it("keeps extra-slot boilers restricted to the listed ship remodels", async () => {
     const shimakazeKai = store.createShip(229);
+    markExSlotOpen(shimakazeKai.id, 1);
 
     for (const boilerMasterId of [34, 87]) {
       const allowedBoiler = store.createSlotItem(boilerMasterId);
@@ -2200,6 +2318,7 @@ describe("local kcsapi endpoints", () => {
 
   it("uses equipment improvement level for extra-slot requirements", async () => {
     const bismarck = store.createShip(171);
+    markExSlotOpen(bismarck.id);
     const radar = store.createSlotItem(124);
 
     store.db.prepare("UPDATE ships SET level = 99 WHERE id = ?").run(bismarck.id);
@@ -2215,6 +2334,21 @@ describe("local kcsapi endpoints", () => {
       api_result: 1,
       api_data: { api_id: bismarck.id, api_slot_ex: radar.id }
     });
+  });
+
+  it("opens reinforcement expansion once, consumes item 64, and matches the no-data protocol envelope", async () => {
+    const ship = store.createShip(9);
+    store.db.prepare("UPDATE ships SET level = 30 WHERE id = ?").run(ship.id);
+    seedUseItem(64, 1);
+
+    const opened = await post("api_req_kaisou/open_exslot", { api_id: ship.id, api_verno: 1 });
+
+    expect(opened.json()).toEqual({ api_result: 1, api_result_msg: "成功" });
+    expect(store.getSave().ships.find((candidate) => candidate.id === ship.id)?.exSlotId).toBe(0);
+    expect(useItemCount(64)).toBe(0);
+    expect((await post("api_req_kaisou/open_exslot", { api_id: ship.id, api_verno: 1 })).json())
+      .toMatchObject({ api_result: 400 });
+    expect(store.getSave().ships.filter((candidate) => candidate.id === ship.id)).toHaveLength(1);
   });
 
   it("returns aircraft onslot counts from each equipped carrier slot capacity", async () => {
@@ -2899,7 +3033,7 @@ describe("local kcsapi endpoints", () => {
     store.db.prepare("UPDATE maps SET cleared = 1, gauge = 0, phase = 2, phase_progress = 0 WHERE id = 35").run();
 
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-08-01T00:00:00.000+09:00"));
+    vi.setSystemTime(new Date("2026-08-01T05:00:00.000+09:00"));
 
     const maps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
     expect(maps.find((map: any) => map.api_id === 35)).toMatchObject({
@@ -2912,13 +3046,24 @@ describe("local kcsapi endpoints", () => {
   });
 
   it("does not serialize unsupported stale normal map rows", async () => {
-    store.db.prepare(`
-      INSERT INTO maps (id, area_id, map_no, unlocked, cleared, gauge, phase, phase_progress)
-      VALUES (56, 5, 6, 1, 0, 1, 1, 0)
-    `).run();
+    store.db.prepare("UPDATE maps SET unlocked = 1 WHERE id = 56").run();
 
     const maps = (await post("api_get_member/mapinfo")).json().api_data.api_map_info;
     expect(maps.map((map: any) => map.api_id)).not.toContain(56);
+    const start2 = (await post("api_start2/getData")).json().api_data;
+    expect(start2.api_mst_mapinfo.map((map: any) => map.api_id)).not.toContain(56);
+
+    const start = await post("api_req_map/start", {
+      api_maparea_id: 5,
+      api_mapinfo_no: 6,
+      api_deck_id: 1
+    });
+    expect(start.statusCode).toBe(400);
+    expect(start.json()).toMatchObject({
+      api_result: 400,
+      api_result_msg: expect.stringMatching(/gameplay profile/i)
+    });
+    expect(store.getSave().sortieSession).toBeNull();
   });
 
   it("exposes and plays the active 061 event maps through the normal game APIs", async () => {
@@ -3237,7 +3382,10 @@ describe("local kcsapi endpoints", () => {
   });
 
   it("returns topology metadata for a non-combat resource node", async () => {
-    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    const nagato = store.createShip(80);
+    store.changeDeckShip(1, 0, nagato.id);
+    store.clearDeckFollowerShips(1);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1);
     const response = await post("api_req_map/start", {
       api_maparea_id: 1,
       api_mapinfo_no: 2,
@@ -3367,7 +3515,7 @@ describe("local kcsapi endpoints", () => {
 
     const landAirBattle = (await post("api_req_sortie/ld_airbattle", { api_formation: 1 })).json().api_data;
     expectBattlePhasePlaceholders(landAirBattle);
-    expect(landAirBattle.api_air_base_attack).toMatchObject({ api_stage_flag: [0, 0, 0] });
+    expect(landAirBattle.api_air_base_attack).toEqual([]);
     expect(landAirBattle.api_hougeki1.api_at_list).toEqual([]);
     expect(landAirBattle.api_raigeki).toBeNull();
 
@@ -3386,18 +3534,19 @@ describe("local kcsapi endpoints", () => {
   it("opens and settles land-based air squadron aircraft proficiency", async () => {
     const fighter = store.createSlotItem(20);
     store.db.prepare("UPDATE slot_items SET proficiency = 7, proficiency_exp = 100 WHERE id = ?").run(fighter.id);
+    store.db.prepare("UPDATE maps SET unlocked = 1 WHERE id = 65").run();
 
-    const opened = (await post("api_req_map/start_air_base", { api_area_id: 1 })).json().api_data;
-    expect(opened).toMatchObject({ api_result: 1, api_area_id: 1 });
+    const opened = (await post("api_req_map/start_air_base", { api_area_id: 6 })).json().api_data;
+    expect(opened).toMatchObject({ api_result: 1, api_area_id: 6 });
 
     const assigned = (await post("api_req_air_corps/set_plane", {
-      api_area_id: 1,
+      api_area_id: 6,
       api_base_id: 1,
       api_squadron_id: 1,
       api_item_id: fighter.id
     })).json().api_data;
     expect(assigned).toMatchObject({
-      api_after_bauxite: expect.any(Number),
+      api_after_bauxite: 928,
       api_plane_info: expect.arrayContaining([
         expect.objectContaining({
           api_squadron_id: 1,
@@ -3411,16 +3560,16 @@ describe("local kcsapi endpoints", () => {
     });
 
     const action = (await post("api_req_air_corps/set_action", {
-      api_area_id: 1,
+      api_area_id: 6,
       api_base_id: 1,
       api_action_kind: 1
     })).json().api_data;
-    expect(action).toMatchObject({ api_area_id: 1, api_base_id: 1, api_action_kind: 1 });
+    expect(action).toMatchObject({ api_area_id: 6, api_base_id: 1, api_action_kind: 1 });
 
     const mapInfo = (await post("api_get_member/mapinfo")).json().api_data;
     expect(mapInfo.api_air_base).toEqual([
       expect.objectContaining({
-        api_area_id: 1,
+        api_area_id: 6,
         api_rid: 1,
         api_action_kind: 1,
         api_plane_info: expect.arrayContaining([
@@ -3434,15 +3583,92 @@ describe("local kcsapi endpoints", () => {
       })
     ]);
 
-    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
-    await post("api_req_map/next");
+    await post("api_req_map/start", { api_maparea_id: 6, api_mapinfo_no: 5, api_deck_id: 1 });
+    const sortie = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = 13, state_json = ? WHERE id = 1").run(JSON.stringify({
+      ...sortie.state,
+      point: "M",
+      routeStep: 1,
+      visited: ["Start", "M"]
+    }));
+    const targeted = await post("api_req_map/start_air_base", { api_strike_point_1: "13,13" });
+    expect(targeted.statusCode).toBe(200);
+    expect(targeted.json().api_data.api_strike_points).toEqual([
+      expect.objectContaining({ baseId: 1, nodes: [13, 13] })
+    ]);
     const battle = (await post("api_req_sortie/ld_airbattle", { api_formation: 1 })).json().api_data;
-    expect(battle.api_air_base_attack.api_stage_flag).not.toEqual([0, 0, 0]);
-    expect(battle.api_air_base_attack.api_plane_from[0]).toContain(1);
+    expect(battle.api_air_base_attack).toHaveLength(2);
+    expect(battle.api_air_base_attack[0]).toMatchObject({
+      api_base_id: 1,
+      api_plane_from: [null, expect.anything()],
+      api_squadron_plane: [expect.objectContaining({ api_mst_id: 20 })]
+    });
 
     await post("api_req_sortie/battleresult");
     const after = store.getSave().slotItems.find((item) => item.id === fighter.id);
     expect(after?.proficiencyExp).not.toBe(100);
+  });
+
+  it("persists every land-base management write endpoint", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-07-08T05:00:00.000Z"));
+    await post("api_req_map/start_air_base", { api_area_id: 6 });
+    seedUseItem(73, 2);
+    seedUseItem(102, 1);
+
+    const renamed = await post("api_req_air_corps/change_name", {
+      api_area_id: 6,
+      api_base_id: 1,
+      api_name: "Central Patrol",
+      api_verno: 1
+    });
+    expect(renamed.json()).toEqual({ api_result: 1, api_result_msg: "成功" });
+    expect(store.getSave().airBases[0].name).toBe("Central Patrol");
+
+    const expanded = (await post("api_req_air_corps/expand_base", {
+      api_area_id: 6,
+      api_verno: 1
+    })).json().api_data;
+    expect(expanded.api_base_items).toHaveLength(2);
+    expect(useItemCount(73)).toBe(1);
+
+    const source = store.createSlotItem(20);
+    const target = store.createSlotItem(21);
+    await post("api_req_air_corps/set_plane", {
+      api_area_id: 6, api_base_id: 1, api_squadron_id: 1, api_item_id: source.id
+    });
+    await post("api_req_air_corps/set_plane", {
+      api_area_id: 6, api_base_id: 2, api_squadron_id: 1, api_item_id: target.id
+    });
+    const exchanged = (await post("api_req_air_corps/change_deployment_base", {
+      api_area_id: 6,
+      api_base_id: 2,
+      api_base_id_src: 1,
+      api_squadron_id: 1,
+      api_item_id: source.id,
+      api_verno: 1
+    })).json().api_data;
+    expect(exchanged.api_base_items).toHaveLength(2);
+    expect(exchanged.api_base_items.every((base: any) => Object.keys(base).sort().join(",") === "api_distance,api_plane_info,api_rid")).toBe(true);
+
+    store.db.prepare(`
+      UPDATE air_base_squadrons SET condition = 10
+      WHERE area_id = 6 AND base_id = 1 AND slot_item_id > 0
+    `).run();
+    const recovered = (await post("api_req_air_corps/cond_recovery", {
+      api_area_id: 6,
+      api_base_id: 1,
+      api_verno: 1
+    })).json().api_data;
+    expect(recovered.api_plane_info).toEqual(expect.arrayContaining([expect.objectContaining({ api_cond: 30 })]));
+    expect(useItemCount(102)).toBe(0);
+
+    const maintained = (await post("api_req_air_corps/expand_maintenance_level", {
+      api_area_id: 6,
+      api_verno: 1
+    })).json().api_data;
+    expect(maintained).toMatchObject({ api_area_id: 6, api_maintenance_level: 1, api_useitem_count: 0 });
+    expect(store.getSave().airBases.filter((base) => base.areaId === 6).every((base) => base.maintenanceLevel === 1)).toBe(true);
   });
 
   it("records distinct endpoint modes for combined battle variants", async () => {
@@ -3528,10 +3754,15 @@ describe("local kcsapi endpoints", () => {
       for (const encounter of patchedNode.encounters) {
         (encounter as any).enemyCombinedShipIds = [1502];
       }
-      Object.assign(ENEMY_UNIT_TEMPLATES[1502], { hp: 999, armor: 0 });
+      Object.assign(ENEMY_UNIT_TEMPLATES[1502], { hp: 999, armor: 0, evasion: -1_000 });
 
-      await post("api_req_combined_battle/ec_battle", { api_formation: 1 });
-      const record = store.lastCombinedBattle() as any;
+      let record: any;
+      for (let seed = 0; seed < 64; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+        await post("api_req_combined_battle/ec_battle", { api_formation: 1 });
+        record = store.lastCombinedBattle() as any;
+        if (record.after.eCombinedNowHps[0] < 999) break;
+      }
 
       expect(record.endpoint).toBe("combinedEcBattle");
       expect(record.before.eCombinedNowHps[0]).toBe(999);
@@ -3685,6 +3916,25 @@ describe("local kcsapi endpoints", () => {
     expect(after.api_list).toHaveLength(5);
     expect(signature(after)).not.toBe(beforeSignature);
     expect(after.api_list.every((item: any) => item.api_state === 0)).toBe(true);
+  });
+
+  it("persists practice matchmaking selection and exposes the selected offline simulation tier", async () => {
+    const changed = (await post("api_req_practice/change_matching_kind", {
+      api_selected_kind: 1,
+      api_verno: 1
+    })).json().api_data;
+    expect(changed).toEqual({ api_update_flag: 1 });
+
+    const practice = (await post("api_get_member/practice")).json().api_data;
+    expect(practice.api_selected_kind).toBe(1);
+    expect(practice.api_list.every((rival: any) => rival.api_enemy_level >= 100)).toBe(true);
+    expect(practice.api_list.every((rival: any) => rival.api_enemy_name.startsWith("Offline Simulated Fleet"))).toBe(true);
+
+    const replay = (await post("api_req_practice/change_matching_kind", {
+      api_selected_kind: 1,
+      api_verno: 1
+    })).json().api_data;
+    expect(replay).toEqual({ api_update_flag: 0 });
   });
 
   it("regenerates stale practice batches that contain uncached ships or legacy loadout data", async () => {

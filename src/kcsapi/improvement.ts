@@ -12,6 +12,16 @@ import type { MaterialDelta, SaveState, SlotItem } from "../state/types.js";
 const AKASHI_MASTER_IDS = new Set([182, 187]);
 const AKASHI_KAI_MASTER_ID = 187;
 const MAX_IMPROVEMENT_LEVEL = 10;
+// Community-observed rates published by the Kancolle wiki.  These are not
+// official server constants, so keep the table and its evidence label in one
+// place instead of smearing approximate fallbacks through execution code.
+export const IMPROVEMENT_SUCCESS_RATE_EVIDENCE = Object.freeze({
+  level: "community-statistical" as const,
+  source: "https://wikiwiki.jp/kancolle/%E6%94%B9%E4%BF%AE%E5%B7%A5%E5%BB%A0",
+  observedThrough: "2026-07-10",
+  ordinaryAkashi: [1, 1, 1, 1, 0.95, 0.9, 0.8, 0.77, 0.72, 0.6, 0.5] as const,
+  akashiKai: [1, 1, 1, 1, 1, 0.95, 0.9, 0.82, 0.77, 0.67, 0.62] as const
+});
 const JST_WEEKDAY_NAMES = new Map([
   ["Sun", 0],
   ["Mon", 1],
@@ -127,12 +137,9 @@ export function prepareRemodelSlotExecution(
 
 export function improvementSuccessRate(level: number, akashiKai = true) {
   const currentLevel = Math.max(0, Math.min(MAX_IMPROVEMENT_LEVEL, Math.trunc(level)));
-  if (akashiKai) {
-    if (currentLevel < 5) return 1;
-    return [0.95, 0.9, 0.82, 0.77, 0.67, 0.61][currentLevel - 5] ?? 0.61;
-  }
-  if (currentLevel < 5) return 0.95;
-  return [0.9, 0.85, 0.78, 0.73, 0.63, 0.57][currentLevel - 5] ?? 0.57;
+  return akashiKai
+    ? IMPROVEMENT_SUCCESS_RATE_EVIDENCE.akashiKai[currentLevel]
+    : IMPROVEMENT_SUCCESS_RATE_EVIDENCE.ordinaryAkashi[currentLevel];
 }
 
 function resolveRecipeAndTarget(save: SaveState, recipeId: number, slotId: number, now: Date) {

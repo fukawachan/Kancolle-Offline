@@ -18,6 +18,11 @@ import {
   SHOP_ITEM_SHOP,
   SHOP_PAYITEM_MASTERS,
 } from "./shop-data.js";
+import {
+  assertPlayerShipStatGrowthCoverage,
+  hasPlayerShipStatGrowthBounds
+} from "./ship-stat-growth.js";
+import { normalMapBgmOverride, normalMapMasterOverride } from "./map-progress.js";
 
 export function mapMasterId(areaId: number, mapNo: number) {
   return areaId * 10 + mapNo;
@@ -60,6 +65,7 @@ const NORMAL_MAP_INFOS = [
   mapMaster(5, 3, "サブ島沖海域", 9, "第一次サーモン沖海戦", undefined, 5),
   mapMaster(5, 4, "サーモン海域", 10, "東京急行", undefined, 5),
   mapMaster(5, 5, "サーモン海域北方", 12, "第二次サーモン海戦", undefined, 5),
+  requireNormalMapMasterOverride(56),
   mapMaster(6, 1, "中部海域哨戒線", 8, "潜水艦作戦"),
   mapMaster(6, 2, "MS諸島沖", 9, "MS諸島防衛戦", undefined, 3),
   mapMaster(6, 3, "グアノ環礁沖海域", 7, "K作戦", undefined, 4),
@@ -73,12 +79,14 @@ const NORMAL_MAP_INFOS = [
 ];
 
 const NORMAL_MAP_BGM = NORMAL_MAP_INFOS.map((map) => ({
-  api_id: map.api_id,
-  api_maparea_id: map.api_maparea_id,
-  api_no: map.api_no,
-  api_moving_bgm: 0,
-  api_map_bgm: [0, 0],
-  api_boss_bgm: [0, 0]
+  ...(normalMapBgmOverride(map.api_id) ?? {
+    api_id: map.api_id,
+    api_maparea_id: map.api_maparea_id,
+    api_no: map.api_no,
+    api_moving_bgm: 0,
+    api_map_bgm: [0, 0],
+    api_boss_bgm: [0, 0]
+  })
 }));
 
 const FALLBACK_MAP_CELLS = NORMAL_MAP_INFOS.flatMap((map) => [
@@ -86,8 +94,10 @@ const FALLBACK_MAP_CELLS = NORMAL_MAP_INFOS.flatMap((map) => [
   mapCell(map.api_maparea_id, map.api_no, 1, 5)
 ]);
 
+const PLAYABLE_SHIPS = SHIPS.filter((ship) => hasPlayerShipStatGrowthBounds(ship.api_id));
+
 export const masterData = {
-  api_mst_ship: SHIPS,
+  api_mst_ship: PLAYABLE_SHIPS,
   api_mst_slotitem: SLOT_ITEMS,
   api_mst_slotitem_equiptype: EQUIP_TYPES,
   api_mst_stype: SHIP_TYPES,
@@ -104,7 +114,7 @@ export const masterData = {
   ],
   api_mst_mapbgm: NORMAL_MAP_BGM,
   api_mst_const: {
-    api_parallel_quest_max: { api_string_value: "9999", api_int_value: 9999 },
+    api_parallel_quest_max: { api_string_value: "5", api_int_value: 5 },
     api_dpflag_quest: { api_string_value: "1", api_int_value: 1 },
     api_boko_max_ships: { api_string_value: "", api_int_value: 740 }
   },
@@ -117,6 +127,11 @@ export const masterData = {
   api_mst_item_shop: SHOP_ITEM_SHOP,
   api_mst_mapcell: FALLBACK_MAP_CELLS
 };
+
+// Player masters are playable only when the level-growth source contains all
+// three hidden growth bounds. Refuse startup rather than falling back to ship
+// type or level-shaped guesses.
+assertPlayerShipStatGrowthCoverage(PLAYABLE_SHIPS.map((ship) => ship.api_id));
 
 export type MasterData = typeof masterData;
 
@@ -152,4 +167,10 @@ function mapCell(areaId: number, mapNo: number, cellNo: number, colorNo: number)
     api_no: cellNo,
     api_color_no: colorNo
   };
+}
+
+function requireNormalMapMasterOverride(mapId: number) {
+  const master = normalMapMasterOverride(mapId);
+  if (!master) throw new Error(`Missing versioned normal-map master ${mapId}`);
+  return { ...master };
 }

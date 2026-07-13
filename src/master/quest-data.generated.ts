@@ -1,5 +1,6 @@
 // Auto-generated from https://kcwikizh.github.io/kcwiki-quest-data/data.json
-// Generated: 2026-06-19T16:26:11.703Z
+// Generated: 2026-07-12T13:23:48.836Z
+// Source revision: f3a555a1326bf026fd5704d076ce145a7cdf8414
 // Quest entries: 446
 
 import type { QuestDefinition } from "./quest-data.js";
@@ -36,6 +37,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 101
     }
   },
   {
@@ -71,6 +77,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 102
     }
   },
   {
@@ -110,6 +121,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 103
     }
   },
   {
@@ -144,6 +160,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 6
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 104
     }
   },
   {
@@ -179,6 +200,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 105
     }
   },
   {
@@ -214,6 +240,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 106
     }
   },
   {
@@ -253,6 +284,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 107
     }
   },
   {
@@ -290,6 +326,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "龍田"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 108
     }
   },
   {
@@ -329,6 +370,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "那珂"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 109
     }
   },
   {
@@ -378,6 +424,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "羽黒"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 110
     }
   },
   {
@@ -421,6 +472,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "山城"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 111
     }
   },
   {
@@ -464,6 +520,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "日向"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 112
     }
   },
   {
@@ -504,6 +565,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "航戦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 113
     }
   },
   {
@@ -554,6 +620,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 114
     }
   },
   {
@@ -590,6 +661,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 115
     }
   },
   {
@@ -625,6 +701,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 116
     }
   },
   {
@@ -665,6 +746,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 117
     }
   },
   {
@@ -707,6 +793,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "霧島"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 118
     }
   },
   {
@@ -757,6 +848,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 119
     }
   },
   {
@@ -801,6 +897,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 120
     }
   },
   {
@@ -850,6 +951,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "摩耶"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 121
     }
   },
   {
@@ -893,6 +999,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "時雨"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 122
     }
   },
   {
@@ -934,6 +1045,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 123
     }
   },
   {
@@ -983,6 +1099,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "天龍"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 124
     }
   },
   {
@@ -1021,6 +1142,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 125
     }
   },
   {
@@ -1060,6 +1186,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 126
     }
   },
   {
@@ -1098,6 +1229,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 127
     }
   },
   {
@@ -1141,6 +1277,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "衣笠"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 128
     }
   },
   {
@@ -1184,6 +1325,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "木曾"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 129
     }
   },
   {
@@ -1230,6 +1376,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "不知火"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 130
     }
   },
   {
@@ -1274,6 +1425,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 131
     }
   },
   {
@@ -1324,6 +1480,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 132
     }
   },
   {
@@ -1374,6 +1535,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 133
     }
   },
   {
@@ -1413,6 +1579,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 134
     }
   },
   {
@@ -1456,6 +1627,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 135
     }
   },
   {
@@ -1500,6 +1676,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 136
     }
   },
   {
@@ -1540,6 +1721,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "羽黒"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 137
     }
   },
   {
@@ -1588,6 +1774,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 138
     }
   },
   {
@@ -1630,6 +1821,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 139
     }
   },
   {
@@ -1666,6 +1862,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 140
     }
   },
   {
@@ -1714,6 +1915,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 141
     }
   },
   {
@@ -1757,6 +1963,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "霧島改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 142
     }
   },
   {
@@ -1793,6 +2004,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 143
     }
   },
   {
@@ -1836,6 +2052,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "山城"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 144
     }
   },
   {
@@ -1880,6 +2101,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 145
     }
   },
   {
@@ -1921,6 +2147,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 146
     }
   },
   {
@@ -1974,6 +2205,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "満潮"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 147
     }
   },
   {
@@ -2026,6 +2262,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 148
     }
   },
   {
@@ -2070,6 +2311,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 149
     }
   },
   {
@@ -2114,6 +2360,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 150
     }
   },
   {
@@ -2165,6 +2416,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 151
     }
   },
   {
@@ -2213,6 +2469,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 152
     }
   },
   {
@@ -2257,6 +2518,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 153
     }
   },
   {
@@ -2312,6 +2578,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "電"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 154
     }
   },
   {
@@ -2356,6 +2627,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "電"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 155
     }
   },
   {
@@ -2413,6 +2689,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "島風"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 156
     }
   },
   {
@@ -2469,6 +2750,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "島風"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 157
     }
   },
   {
@@ -2531,6 +2817,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "place": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 158
     }
   },
   {
@@ -2575,6 +2866,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "秋雲"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 161
     }
   },
   {
@@ -2625,6 +2921,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "木曾"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 162
     }
   },
   {
@@ -2672,6 +2973,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "長良"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 163
     }
   },
   {
@@ -2725,6 +3031,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "note": "軽母"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 164
     }
   },
   {
@@ -2768,6 +3079,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "日向改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 165
     }
   },
   {
@@ -2827,6 +3143,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "日向改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 166
     }
   },
   {
@@ -2874,6 +3195,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 167
     }
   },
   {
@@ -2921,6 +3247,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "鬼怒"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 168
     }
   },
   {
@@ -2974,6 +3305,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 169
     }
   },
   {
@@ -3022,6 +3358,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "清霜"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 170
     }
   },
   {
@@ -3070,6 +3411,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "卯月改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 171
     }
   },
   {
@@ -3122,6 +3468,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 172
     }
   },
   {
@@ -3168,6 +3519,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 173
     }
   },
   {
@@ -3207,6 +3563,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 174
     }
   },
   {
@@ -3251,6 +3612,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "荒潮"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 175
     }
   },
   {
@@ -3294,6 +3660,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "大潮改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 176
     }
   },
   {
@@ -3344,6 +3715,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "敷波"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 177
     }
   },
   {
@@ -3393,6 +3769,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "大井"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 178
     }
   },
   {
@@ -3445,6 +3826,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "select": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 179
     }
   },
   {
@@ -3489,6 +3875,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 180
     }
   },
   {
@@ -3542,6 +3933,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 181
     }
   },
   {
@@ -3615,6 +4011,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 182
     }
   },
   {
@@ -3674,6 +4075,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 183
     }
   },
   {
@@ -3723,6 +4129,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "長月改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 184
     }
   },
   {
@@ -3799,6 +4210,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 185
     }
   },
   {
@@ -3849,6 +4265,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "満潮改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 186
     }
   },
   {
@@ -3920,6 +4341,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 3
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 187
     }
   },
   {
@@ -3981,6 +4407,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "select": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 188
     }
   },
   {
@@ -4037,6 +4468,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 189
     }
   },
   {
@@ -4090,6 +4526,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 190
     }
   },
   {
@@ -4144,6 +4585,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 191
     }
   },
   {
@@ -4205,6 +4651,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 192
     }
   },
   {
@@ -4268,6 +4719,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 193
     }
   },
   {
@@ -4316,6 +4772,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "龍田改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 194
     }
   },
   {
@@ -4377,6 +4838,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "谷風丁改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 195
     }
   },
   {
@@ -4432,6 +4898,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 196
     }
   },
   {
@@ -4463,6 +4934,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sortie",
       "result": "B",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 201
     }
   },
   {
@@ -4491,6 +4967,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
     "requirements": {
       "category": "sortie",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 202
     }
   },
   {
@@ -4524,6 +5005,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 203
     }
   },
   {
@@ -4555,6 +5041,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sortie",
       "map": "1-2",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 204
     }
   },
   {
@@ -4594,6 +5085,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 205
     }
   },
   {
@@ -4634,6 +5130,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 206
     }
   },
   {
@@ -4670,6 +5171,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 207
     }
   },
   {
@@ -4707,6 +5213,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "航戦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 208
     }
   },
   {
@@ -4753,6 +5264,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 209
     }
   },
   {
@@ -4784,6 +5300,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "battle",
       "times": 10
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 210
     }
   },
   {
@@ -4815,6 +5336,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 3,
       "ship": "敵空母"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 211
     }
   },
   {
@@ -4846,6 +5372,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 5,
       "ship": "敵補給艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 212
     }
   },
   {
@@ -4877,6 +5408,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 20,
       "ship": "敵補給艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 213
     }
   },
   {
@@ -4912,6 +5448,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
     ],
     "requirements": {
       "category": "a-gou"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 214
     }
   },
   {
@@ -4943,6 +5484,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sortie",
       "times": 1,
       "fleetid": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 215
     }
   },
   {
@@ -4979,6 +5525,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
     "requirements": {
       "category": "sortie",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 216
     }
   },
   {
@@ -5010,6 +5561,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 1,
       "ship": "敵空母"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 217
     }
   },
   {
@@ -5047,6 +5603,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 3,
       "ship": "敵補給艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 218
     }
   },
   {
@@ -5098,6 +5659,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 219
     }
   },
   {
@@ -5129,6 +5695,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 20,
       "ship": "敵空母"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 220
     }
   },
   {
@@ -5160,6 +5731,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 50,
       "ship": "敵補給艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 221
     }
   },
   {
@@ -5206,6 +5782,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 222
     }
   },
   {
@@ -5253,6 +5834,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "摩耶"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 223
     }
   },
   {
@@ -5306,6 +5892,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "時雨"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 224
     }
   },
   {
@@ -5353,6 +5944,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "瑞鶴"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 225
     }
   },
   {
@@ -5392,6 +5988,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 5
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 226
     }
   },
   {
@@ -5445,6 +6046,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "天龍"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 227
     }
   },
   {
@@ -5482,6 +6088,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 15,
       "ship": "敵潜水艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 228
     }
   },
   {
@@ -5515,6 +6126,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 12
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 229
     }
   },
   {
@@ -5546,6 +6162,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "sink",
       "amount": 6,
       "ship": "敵潜水艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 230
     }
   },
   {
@@ -5588,6 +6209,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 231
     }
   },
   {
@@ -5631,6 +6257,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 232
     }
   },
   {
@@ -5684,6 +6315,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "衣笠"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 233
     }
   },
   {
@@ -5757,6 +6393,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 235
     }
   },
   {
@@ -5833,6 +6474,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 236
     }
   },
   {
@@ -5938,6 +6584,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 237
     }
   },
   {
@@ -5991,6 +6642,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "荒潮"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 239
     }
   },
   {
@@ -6044,6 +6700,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "不知火"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 240
     }
   },
   {
@@ -6083,6 +6744,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 5
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 241
     }
   },
   {
@@ -6122,6 +6788,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 242
     }
   },
   {
@@ -6161,6 +6832,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "S",
       "times": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 243
     }
   },
   {
@@ -6208,6 +6884,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "望月"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 244
     }
   },
   {
@@ -6251,6 +6932,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 245
     }
   },
   {
@@ -6295,6 +6981,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fleetid": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 246
     }
   },
   {
@@ -6340,6 +7031,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 247
     }
   },
   {
@@ -6388,6 +7084,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 248
     }
   },
   {
@@ -6438,6 +7139,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "羽黒"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 249
     }
   },
   {
@@ -6484,6 +7190,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 250
     }
   },
   {
@@ -6530,6 +7241,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 251
     }
   },
   {
@@ -6568,6 +7284,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "榛名改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 252
     }
   },
   {
@@ -6612,6 +7333,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "雲龍改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 253
     }
   },
   {
@@ -6672,6 +7398,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 254
     }
   },
   {
@@ -6729,6 +7460,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 255
     }
   },
   {
@@ -6768,6 +7504,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "S",
       "times": 3
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 256
     }
   },
   {
@@ -6825,6 +7566,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 257
     }
   },
   {
@@ -6872,6 +7618,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "山城"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 258
     }
   },
   {
@@ -6926,6 +7677,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 259
     }
   },
   {
@@ -6982,6 +7738,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "空母"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 260
     }
   },
   {
@@ -7016,6 +7777,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "A",
       "times": 3
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 261
     }
   },
   {
@@ -7072,6 +7838,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "満潮"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 262
     }
   },
   {
@@ -7125,6 +7896,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "衣笠"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 263
     }
   },
   {
@@ -7175,6 +7951,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 264
     }
   },
   {
@@ -7215,6 +7996,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "A",
       "times": 10
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 265
     }
   },
   {
@@ -7270,6 +8056,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 266
     }
   },
   {
@@ -7317,6 +8108,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "叢雲"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 267
     }
   },
   {
@@ -7371,6 +8167,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 268
     }
   },
   {
@@ -7418,6 +8219,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "初霜"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 269
     }
   },
   {
@@ -7472,6 +8278,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 270
     }
   },
   {
@@ -7534,6 +8345,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 271
     }
   },
   {
@@ -7590,6 +8406,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 272
     }
   },
   {
@@ -7646,6 +8467,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "select": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 273
     }
   },
   {
@@ -7700,6 +8526,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 274
     }
   },
   {
@@ -7747,6 +8578,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "龍田"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 275
     }
   },
   {
@@ -7807,6 +8643,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "電"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 276
     }
   },
   {
@@ -7862,6 +8703,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 277
     }
   },
   {
@@ -7922,6 +8768,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "島風"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 278
     }
   },
   {
@@ -7983,6 +8834,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "島風"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 279
     }
   },
   {
@@ -8081,6 +8937,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 280
     }
   },
   {
@@ -8179,6 +9040,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 281
     }
   },
   {
@@ -8259,6 +9125,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 282
     }
   },
   {
@@ -8363,6 +9234,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 283
     }
   },
   {
@@ -8449,6 +9325,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 284
     }
   },
   {
@@ -8495,6 +9376,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 285
     }
   },
   {
@@ -8530,6 +9416,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "A",
       "times": 4
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 286
     }
   },
   {
@@ -8583,6 +9474,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "秋雲"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 287
     }
   },
   {
@@ -8636,6 +9532,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "木曾"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 288
     }
   },
   {
@@ -8687,6 +9588,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "長良"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 289
     }
   },
   {
@@ -8759,6 +9665,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 290
     }
   },
   {
@@ -8834,6 +9745,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 291
     }
   },
   {
@@ -8913,6 +9829,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 292
     }
   },
   {
@@ -8973,6 +9894,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 293
     }
   },
   {
@@ -9035,6 +9961,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "日向改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 294
     }
   },
   {
@@ -9090,6 +10021,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 295
     }
   },
   {
@@ -9146,6 +10082,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 296
     }
   },
   {
@@ -9208,6 +10149,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 297
     }
   },
   {
@@ -9298,6 +10244,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "select": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 298
     }
   },
   {
@@ -9384,6 +10335,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 299
     }
   },
   {
@@ -9412,6 +10368,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
     "requirements": {
       "category": "excercise",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 301
     }
   },
   {
@@ -9449,6 +10410,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "excercise",
       "times": 20,
       "victory": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 302
     }
   },
   {
@@ -9479,6 +10445,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
     "requirements": {
       "category": "excercise",
       "times": 3
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 303
     }
   },
   {
@@ -9510,6 +10481,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "excercise",
       "times": 5,
       "victory": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 304
     }
   },
   {
@@ -9542,6 +10518,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 2,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 306
     }
   },
   {
@@ -9574,6 +10555,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 3,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 307
     }
   },
   {
@@ -9612,6 +10598,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 4,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 308
     }
   },
   {
@@ -9650,6 +10641,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 4,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 309
     }
   },
   {
@@ -9688,6 +10684,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 7,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 311
     }
   },
   {
@@ -9728,6 +10729,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 4,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 312
     }
   },
   {
@@ -9764,6 +10770,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 8,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 315
     }
   },
   {
@@ -9814,6 +10825,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 4,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 316
     }
   },
   {
@@ -9909,6 +10925,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 317
     }
   },
   {
@@ -9977,6 +10998,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 318
     }
   },
   {
@@ -10037,6 +11063,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "初霜改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 319
     }
   },
   {
@@ -10094,6 +11125,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 320
     }
   },
   {
@@ -10153,6 +11189,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 322
     }
   },
   {
@@ -10226,6 +11267,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 323
     }
   },
   {
@@ -10312,6 +11358,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 324
     }
   },
   {
@@ -10385,6 +11436,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 325
     }
   },
   {
@@ -10423,6 +11479,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "times": 8,
       "victory": true,
       "daily": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 326
     }
   },
   {
@@ -10486,6 +11547,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 327
     }
   },
   {
@@ -10543,6 +11609,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "谷風丁改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 328
     }
   },
   {
@@ -10624,6 +11695,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 330
     }
   },
   {
@@ -10690,6 +11766,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 331
     }
   },
   {
@@ -10775,6 +11856,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 332
     }
   },
   {
@@ -10849,6 +11935,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 333
     }
   },
   {
@@ -10923,6 +12014,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 334
     }
   },
   {
@@ -10984,6 +12080,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "羽黒"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 335
     }
   },
   {
@@ -11047,6 +12148,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 336
     }
   },
   {
@@ -11114,6 +12220,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "不知火"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 337
     }
   },
   {
@@ -11173,6 +12284,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 338
     }
   },
   {
@@ -11254,6 +12370,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "浦波"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 339
     }
   },
   {
@@ -11288,6 +12409,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "times": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 401
     }
   },
   {
@@ -11322,6 +12448,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "times": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 402
     }
   },
   {
@@ -11362,6 +12493,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "times": 10
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 403
     }
   },
   {
@@ -11402,6 +12538,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "times": 30
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 404
     }
   },
   {
@@ -11437,6 +12578,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 30
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 405
     }
   },
   {
@@ -11472,6 +12618,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 30
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 406
     }
   },
   {
@@ -11513,6 +12664,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 30
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 408
     }
   },
   {
@@ -11548,6 +12704,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 31
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 409
     }
   },
   {
@@ -11586,6 +12747,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 410
     }
   },
   {
@@ -11630,6 +12796,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 411
     }
   },
   {
@@ -11665,6 +12836,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 23
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 412
     }
   },
   {
@@ -11700,6 +12876,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 23
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 413
     }
   },
   {
@@ -11735,6 +12916,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 39
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 414
     }
   },
   {
@@ -11770,6 +12956,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 39
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 415
     }
   },
   {
@@ -11811,6 +13002,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 6
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 416
     }
   },
   {
@@ -11852,6 +13048,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 15
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 417
     }
   },
   {
@@ -11887,6 +13088,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 7
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 418
     }
   },
   {
@@ -11927,6 +13133,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 8
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 419
     }
   },
   {
@@ -11973,6 +13184,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 35
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 420
     }
   },
   {
@@ -12012,6 +13228,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 31
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 422
     }
   },
   {
@@ -12063,6 +13284,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         5000,
         1500
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 423
     }
   },
   {
@@ -12099,6 +13325,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 424
     }
   },
   {
@@ -12159,6 +13390,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 425
     }
   },
   {
@@ -12212,6 +13448,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 10
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 426
     }
   },
   {
@@ -12258,6 +13499,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         800,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 427
     }
   },
   {
@@ -12308,6 +13554,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": "A3"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 428
     }
   },
   {
@@ -12358,6 +13609,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": "B1"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 429
     }
   },
   {
@@ -12436,6 +13692,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "駆逐艦"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 430
     }
   },
   {
@@ -12507,6 +13768,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 17
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 431
     }
   },
   {
@@ -12584,6 +13850,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 10
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 432
     }
   },
   {
@@ -12659,6 +13930,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "id": 40
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 433
     }
   },
   {
@@ -12731,6 +14007,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "times": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 434
     }
   },
   {
@@ -12762,6 +14043,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "resupply",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 501
     }
   },
   {
@@ -12793,6 +14079,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "repair",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 502
     }
   },
   {
@@ -12824,6 +14115,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "repair",
       "times": 5
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 503
     }
   },
   {
@@ -12861,6 +14157,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "resupply",
       "times": 15
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 504
     }
   },
   {
@@ -12890,6 +14191,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "ship",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 601
     }
   },
   {
@@ -12921,6 +14227,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "equipment",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 602
     }
   },
   {
@@ -12958,6 +14269,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "scrapship",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 603
     }
   },
   {
@@ -12996,6 +14312,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 1,
       "batch": false
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 604
     }
   },
   {
@@ -13033,6 +14354,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "equipment",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 605
     }
   },
   {
@@ -13070,6 +14396,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "ship",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 606
     }
   },
   {
@@ -13101,6 +14432,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "equipment",
       "times": 3
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 607
     }
   },
   {
@@ -13138,6 +14474,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "ship",
       "times": 3
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 608
     }
   },
   {
@@ -13169,6 +14510,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "scrapship",
       "times": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 609
     }
   },
   {
@@ -13200,6 +14546,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 4,
       "batch": false
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 610
     }
   },
   {
@@ -13232,6 +14583,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 2,
       "batch": false
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 611
     }
   },
   {
@@ -13264,6 +14620,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 3,
       "batch": false
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 612
     }
   },
   {
@@ -13296,6 +14657,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 24,
       "batch": false
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 613
     }
   },
   {
@@ -13332,6 +14698,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 614
     }
   },
   {
@@ -13368,6 +14739,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 615
     }
   },
   {
@@ -13404,6 +14780,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 616
     }
   },
   {
@@ -13436,6 +14817,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 10,
       "batch": false
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 617
     }
   },
   {
@@ -13467,6 +14853,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "improvement",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 618
     }
   },
   {
@@ -13499,6 +14890,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "improvement",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 619
     }
   },
   {
@@ -13561,6 +14957,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         9000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 620
     }
   },
   {
@@ -13627,6 +15028,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 621
     }
   },
   {
@@ -13664,6 +15070,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 622
     }
   },
   {
@@ -13703,6 +15114,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 623
     }
   },
   {
@@ -13734,6 +15150,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 7,
       "batch": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 624
     }
   },
   {
@@ -13765,6 +15186,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 9,
       "batch": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 625
     }
   },
   {
@@ -13809,6 +15235,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       ],
       "fullyskilled": true,
       "use_skilled_crew": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 626
     }
   },
   {
@@ -13845,6 +15276,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 627
     }
   },
   {
@@ -13883,6 +15319,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fullyskilled": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 628
     }
   },
   {
@@ -13923,6 +15364,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fullyskilled": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 629
     }
   },
   {
@@ -13962,6 +15408,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fullyskilled": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 630
     }
   },
   {
@@ -14001,6 +15452,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fullyskilled": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 631
     }
   },
   {
@@ -14040,6 +15496,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fullyskilled": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 632
     }
   },
   {
@@ -14078,6 +15539,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "fullyskilled": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 633
     }
   },
   {
@@ -14110,6 +15576,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 9,
       "batch": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 634
     }
   },
   {
@@ -14143,6 +15614,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "subcategory": "scrapequipment",
       "times": 5,
       "batch": true
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 635
     }
   },
   {
@@ -14183,6 +15659,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 636
     }
   },
   {
@@ -14228,6 +15709,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 637
     }
   },
   {
@@ -14269,6 +15755,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 6
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 638
     }
   },
   {
@@ -14317,6 +15808,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 639
     }
   },
   {
@@ -14368,6 +15864,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 641
     }
   },
   {
@@ -14408,6 +15909,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 642
     }
   },
   {
@@ -14460,6 +15966,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 643
     }
   },
   {
@@ -14499,6 +16010,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 644
     }
   },
   {
@@ -14551,6 +16067,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 645
     }
   },
   {
@@ -14604,6 +16125,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5000
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 646
     }
   },
   {
@@ -14651,6 +16177,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 647
     }
   },
   {
@@ -14703,6 +16234,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5000
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 648
     }
   },
   {
@@ -14755,6 +16291,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 649
     }
   },
   {
@@ -14807,6 +16348,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 650
     }
   },
   {
@@ -14858,6 +16404,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         8000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 651
     }
   },
   {
@@ -14910,6 +16461,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5000
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 652
     }
   },
   {
@@ -14999,6 +16555,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 6000
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 653
     }
   },
   {
@@ -15044,6 +16605,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         "伊14",
         "伊13"
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 656
     }
   },
   {
@@ -15096,6 +16662,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 120
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 658
     }
   },
   {
@@ -15146,6 +16717,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 659
     }
   },
   {
@@ -15196,6 +16772,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 660
     }
   },
   {
@@ -15244,6 +16825,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         6000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 661
     }
   },
   {
@@ -15303,6 +16889,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         12000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 662
     }
   },
   {
@@ -15361,6 +16952,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         18000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 663
     }
   },
   {
@@ -15419,6 +17015,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         8000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 664
     }
   },
   {
@@ -15477,6 +17078,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 665
     }
   },
   {
@@ -15532,6 +17138,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 666
     }
   },
   {
@@ -15590,6 +17201,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         15000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 667
     }
   },
   {
@@ -15630,6 +17246,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         150
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 668
     }
   },
   {
@@ -15699,6 +17320,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         5000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 669
     }
   },
   {
@@ -15768,6 +17394,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         6000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 670
     }
   },
   {
@@ -15836,6 +17467,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         8000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 671
     }
   },
   {
@@ -15892,6 +17528,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         2000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 672
     }
   },
   {
@@ -15927,6 +17568,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 673
     }
   },
   {
@@ -15974,6 +17620,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         300,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 674
     }
   },
   {
@@ -16042,6 +17693,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         800
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 675
     }
   },
   {
@@ -16097,6 +17753,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         2400,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 676
     }
   },
   {
@@ -16146,6 +17807,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         3600,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 677
     }
   },
   {
@@ -16229,6 +17895,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 678
     }
   },
   {
@@ -16291,6 +17962,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         900
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 679
     }
   },
   {
@@ -16365,6 +18041,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         1500
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 680
     }
   },
   {
@@ -16442,6 +18123,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 682
     }
   },
   {
@@ -16510,6 +18196,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         4500,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 683
     }
   },
   {
@@ -16573,6 +18264,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         3000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 684
     }
   },
   {
@@ -16644,6 +18340,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         900,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 685
     }
   },
   {
@@ -16716,6 +18417,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         900,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 686
     }
   },
   {
@@ -16782,6 +18488,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         1200,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 687
     }
   },
   {
@@ -16858,6 +18569,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         1800
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 688
     }
   },
   {
@@ -16939,6 +18655,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         3000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 689
     }
   },
   {
@@ -17016,6 +18737,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         4800
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 690
     }
   },
   {
@@ -17091,6 +18817,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         1600
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 691
     }
   },
   {
@@ -17172,6 +18903,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         3000,
         0
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 692
     }
   },
   {
@@ -17237,6 +18973,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         3000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 693
     }
   },
   {
@@ -17301,6 +19042,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         8500,
         4000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 694
     }
   },
   {
@@ -17365,6 +19111,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         5000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 695
     }
   },
   {
@@ -17433,6 +19184,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         0,
         8000
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 696
     }
   },
   {
@@ -17462,6 +19218,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "modernization",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 701
     }
   },
   {
@@ -17493,6 +19254,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "modernization",
       "times": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 702
     }
   },
   {
@@ -17530,6 +19296,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "modernization",
       "times": 15
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 703
     }
   },
   {
@@ -17561,6 +19332,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "category": "simple",
       "subcategory": "modernization",
       "times": 4
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 704
     }
   },
   {
@@ -17608,6 +19384,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         5500,
         2500
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 705
     }
   },
   {
@@ -17662,6 +19443,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 805
     }
   },
   {
@@ -17716,6 +19502,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 806
     }
   },
   {
@@ -17771,6 +19562,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "result": "クリア"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 807
     }
   },
   {
@@ -17823,6 +19619,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 808
     }
   },
   {
@@ -17863,6 +19664,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "B",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 809
     }
   },
   {
@@ -17912,6 +19718,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "disallowed": "他の艦"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 810
     }
   },
   {
@@ -17952,6 +19763,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "S",
       "times": 5
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 811
     }
   },
   {
@@ -18002,6 +19818,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 812
     }
   },
   {
@@ -18052,6 +19873,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 813
     }
   },
   {
@@ -18111,6 +19937,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 814
     }
   },
   {
@@ -18164,6 +19995,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 815
     }
   },
   {
@@ -18210,6 +20046,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "result": "S"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 816
     }
   },
   {
@@ -18263,6 +20104,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 817
     }
   },
   {
@@ -18315,6 +20161,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "result": "クリア"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 818
     }
   },
   {
@@ -18370,6 +20221,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "result": "クリア"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 819
     }
   },
   {
@@ -18427,6 +20283,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "result": "クリア"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 820
     }
   },
   {
@@ -18474,6 +20335,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "大潮改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 821
     }
   },
   {
@@ -18514,6 +20380,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "S",
       "times": 2
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 822
     }
   },
   {
@@ -18567,6 +20438,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 823
     }
   },
   {
@@ -18620,6 +20496,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 824
     }
   },
   {
@@ -18699,6 +20580,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 825
     }
   },
   {
@@ -18752,6 +20638,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "敷波"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 826
     }
   },
   {
@@ -18809,6 +20700,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 827
     }
   },
   {
@@ -18842,6 +20738,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "S",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 828
     }
   },
   {
@@ -18874,6 +20775,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "A",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 829
     }
   },
   {
@@ -18913,6 +20819,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       "boss": true,
       "result": "S",
       "times": 1
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 830
     }
   },
   {
@@ -18973,6 +20884,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 833
     }
   },
   {
@@ -19019,6 +20935,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 834
     }
   },
   {
@@ -19076,6 +20997,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 835
     }
   },
   {
@@ -19126,6 +21052,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "select": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 836
     }
   },
   {
@@ -19183,6 +21114,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 837
     }
   },
   {
@@ -19242,6 +21178,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 838
     }
   },
   {
@@ -19312,6 +21253,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 839
     }
   },
   {
@@ -19375,6 +21321,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 842
     }
   },
   {
@@ -19429,6 +21380,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "select": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 844
     }
   },
   {
@@ -19491,6 +21447,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       ],
       "boss": true,
       "result": "S"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 845
     }
   },
   {
@@ -19547,6 +21508,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 3
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 846
     }
   },
   {
@@ -19586,6 +21552,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 848
     }
   },
   {
@@ -19660,6 +21631,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 849
     }
   },
   {
@@ -19746,6 +21722,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 850
     }
   },
   {
@@ -19821,6 +21802,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 851
     }
   },
   {
@@ -19884,6 +21870,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 852
     }
   },
   {
@@ -19947,6 +21938,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "艦"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 853
     }
   },
   {
@@ -20018,6 +22014,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "result": "S"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 854
     }
   },
   {
@@ -20119,6 +22120,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "result": "クリア"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 855
     }
   },
   {
@@ -20172,6 +22178,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "place": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 856
     }
   },
   {
@@ -20329,6 +22340,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 857
     }
   },
   {
@@ -20414,6 +22430,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 858
     }
   },
   {
@@ -20499,6 +22520,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 859
     }
   },
   {
@@ -20593,6 +22619,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 860
     }
   },
   {
@@ -20640,6 +22671,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
         }
       ],
       "result": "クリア"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 861
     }
   },
   {
@@ -20695,6 +22731,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 862
     }
   },
   {
@@ -20771,6 +22812,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 863
     }
   },
   {
@@ -20859,6 +22905,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 864
     }
   },
   {
@@ -20939,6 +22990,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 865
     }
   },
   {
@@ -20993,6 +23049,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 869
     }
   },
   {
@@ -21072,6 +23133,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 870
     }
   },
   {
@@ -21175,6 +23241,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 871
     }
   },
   {
@@ -21235,6 +23306,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       ],
       "boss": true,
       "result": "S"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 872
     }
   },
   {
@@ -21302,6 +23378,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 873
     }
   },
   {
@@ -21377,6 +23458,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 874
     }
   },
   {
@@ -21463,6 +23549,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 875
     }
   },
   {
@@ -21582,6 +23673,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "result": "クリア"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 876
     }
   },
   {
@@ -21684,6 +23780,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 877
     }
   },
   {
@@ -21800,6 +23901,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "result": "クリア"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 878
     }
   },
   {
@@ -21902,6 +24008,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 879
     }
   },
   {
@@ -21999,6 +24110,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 880
     }
   },
   {
@@ -22073,6 +24189,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 1
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 881
     }
   },
   {
@@ -22171,6 +24292,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 884
     }
   },
   {
@@ -22254,6 +24380,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "flagship": true
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 885
     }
   },
   {
@@ -22337,6 +24468,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 886
     }
   },
   {
@@ -22437,6 +24573,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 887
     }
   },
   {
@@ -22505,6 +24646,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 888
     }
   },
   {
@@ -22574,6 +24720,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "時雨改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 889
     }
   },
   {
@@ -22648,6 +24799,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 890
     }
   },
   {
@@ -22740,6 +24896,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "谷風丁改"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 891
     }
   },
   {
@@ -22824,6 +24985,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 4
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 892
     }
   },
   {
@@ -22885,6 +25051,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
       ],
       "boss": true,
       "result": "S"
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 893
     }
   },
   {
@@ -22969,6 +25140,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 894
     }
   },
   {
@@ -23061,6 +25237,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 895
     }
   },
   {
@@ -23123,6 +25304,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 896
     }
   },
   {
@@ -23205,6 +25391,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 897
     }
   },
   {
@@ -23281,6 +25472,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 5
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 901
     }
   },
   {
@@ -23404,6 +25600,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "result": "クリア"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 902
     }
   },
   {
@@ -23523,6 +25724,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 903
     }
   },
   {
@@ -23607,6 +25813,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "ship": "敷波改二"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 904
     }
   },
   {
@@ -23710,6 +25921,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "disallowed": "他の艦"
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 905
     }
   },
   {
@@ -23804,6 +26020,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 911
     }
   },
   {
@@ -23888,6 +26109,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           "amount": 2
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 914
     }
   },
   {
@@ -23983,6 +26209,11 @@ export const GENERATED_QUEST_DEFINITIONS = [
           ]
         }
       ]
+    },
+    "evidence": {
+      "level": "exact",
+      "sourceRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sourceQuestId": 916
     }
   }
 ] as const satisfies readonly QuestDefinition[];

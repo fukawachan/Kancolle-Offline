@@ -1,5 +1,10 @@
 import type { masterData } from "../master/data.js";
 import { aircraftAirPowerBonus } from "./aircraft-proficiency.js";
+import {
+  resolveDamageOutcome,
+  type DamageOutcome,
+  type DamageProtectionContext
+} from "./battle/damage.js";
 
 export type AirStateCode = 1 | 2 | 3 | 4 | 5;
 
@@ -18,7 +23,7 @@ export type FighterPowerSlot = {
   slotMaster?: (typeof masterData.api_mst_slotitem)[number];
 };
 
-export type BattleFormulaPhase = "shelling" | "torpedo" | "antiAir" | "night";
+export type BattleFormulaPhase = "shelling" | "torpedo" | "antiAir" | "asw" | "night";
 export type CombinedFormulaPhase = "shelling" | "torpedo" | "antiAir" | "asw" | "air";
 export type CombinedPowerPhase = "shelling" | "torpedo" | "air";
 export type CombinedFormulaFleetKind = "main" | "escort" | "enemyMain" | "enemyEscort";
@@ -43,18 +48,32 @@ export type CombinedAccuracyModifierInput = {
 
 export type AntiAirStage2Input = {
   slotCount: number;
-  defenderAntiAir: number;
-  fleetAntiAir: number;
-  formationModifier: number;
+  shipAdjustedAntiAir: number;
+  fleetAdjustedAntiAir: number;
+  shipResistance?: number;
+  fleetResistance?: number;
+  combinedFleetModifier?: number;
   cutInFixedBonus?: number;
   cutInModifier?: number;
-  randomFactor?: number;
+  proportionalTriggered: boolean;
+  fixedTriggered: boolean;
+  alliedMinimumGuarantee?: number;
+};
+
+export type AdjustedAntiAirEquipment = {
+  masterId: number;
+  antiAir: number;
+  type2: number;
+  type3: number;
+  improvement?: number;
 };
 
 export type NightBattlePowerInput = {
   firepower: number;
   torpedo: number;
   damageModifier?: number;
+  targetKind?: "surface" | "submarine" | "installation" | "pt";
+  installationModifier?: number;
 };
 
 export type NightAttackKind = {
@@ -91,12 +110,18 @@ export type CarrierNightCutInInput = {
 };
 
 export type NightCutInActivationInput = {
+  level: number;
   luck: number;
   flagship: boolean;
   damageState: number;
   cutInKind: number;
   searchlight?: boolean;
   starShell?: boolean;
+  skilledLookout?: boolean;
+  torpedoSquadronLookout?: boolean;
+  enemySearchlight?: boolean;
+  enemyStarShell?: boolean;
+  typeCoefficient?: number;
 };
 
 export type OpeningAswEligibilityInput = {
@@ -126,6 +151,10 @@ export type BattleDamageInput = {
   postCapModifier: number;
   targetHp: number;
   targetSide: 0 | 1;
+  scratchRoll?: number;
+  protectionRoll?: number;
+  protection?: DamageProtectionContext;
+  ptEquipmentModifier?: number;
 };
 
 export type AccuracyChanceInput = {
@@ -144,6 +173,51 @@ export type CriticalChanceInput = {
   targetEvasion: number;
   proficiencyCriticalBonus?: number;
   cutInModifier?: number;
+};
+
+export type PtAccuracyChanceInput = {
+  attackerLevel: number;
+  attackerLuck: number;
+  attackerAccuracy: number;
+  targetEvasion: number;
+  equipmentModifier: number;
+  shipTypeModifier: number;
+  night: boolean;
+};
+
+export type Stage1AircraftLossInput = {
+  slotCount: number;
+  airState: AirStateCode;
+  side: "allied" | "enemy";
+  firstRoll: number;
+  secondRoll?: number;
+};
+
+export type ContactAircraftCandidate = {
+  id: number;
+  lineOfSight: number;
+  accuracy: number;
+  shipPosition: number;
+  slotIndex: number;
+  planeCount: number;
+};
+
+export type CarrierDayShellingPowerInput = {
+  firepower: number;
+  torpedo: number;
+  bombing: number;
+  combinedPowerBonus?: number;
+  otherPowerBonus?: number;
+};
+
+export type VanguardFormationContext = {
+  fleetSize: number;
+  position: number;
+};
+
+export type DayShellingOrderUnit = {
+  range: number;
+  position: number;
 };
 
 export class BattleRng {
@@ -180,6 +254,33 @@ export class BattleRng {
   }
 }
 
+/**
+ * Day shelling round one is ordered by range, with a fresh random order for
+ * ships sharing the same range. Round two is always fleet position order.
+ * Keeping this in a pure helper prevents the two rounds from silently sharing
+ * one sorter again.
+ */
+export function daytimeShellingOrder<T extends DayShellingOrderUnit>(
+  units: readonly T[],
+  rng: Pick<BattleRng, "next">,
+  round: 1 | 2
+) {
+  if (round === 2) {
+    return [...units].sort((a, b) => a.position - b.position);
+  }
+  const ranges = [...new Set(units.map((unit) => unit.range))].sort((a, b) => b - a);
+  return ranges.flatMap((range) => {
+    const group = units
+      .filter((unit) => unit.range === range)
+      .sort((a, b) => a.position - b.position);
+    for (let index = group.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(rng.next() * (index + 1));
+      [group[index], group[swapIndex]] = [group[swapIndex], group[index]];
+    }
+    return group;
+  });
+}
+
 export function fighterPower(slots: FighterPowerSlot[]) {
   return slots.reduce((sum, slot) => {
     const count = Math.max(0, Math.trunc(slot.planeCount));
@@ -197,24 +298,111 @@ export function airState(friendlyPower: number, enemyPower: number): AirState {
   const friendly = Math.max(0, Math.trunc(friendlyPower));
   const enemy = Math.max(0, Math.trunc(enemyPower));
   if (enemy === 0) return friendly > 0 ? { code: 1, label: "supremacy" } : { code: 3, label: "parity" };
+  // Use integer cross-products so exact 3:1, 3:2, 2:3, and 1:3
+  // boundaries cannot drift through floating-point rounding.
   if (friendly >= enemy * 3) return { code: 1, label: "supremacy" };
-  if (friendly >= enemy * 1.5) return { code: 2, label: "superiority" };
-  if (friendly > enemy * (2 / 3)) return { code: 3, label: "parity" };
-  if (friendly > enemy / 3) return { code: 4, label: "denial" };
+  if (friendly * 2 >= enemy * 3) return { code: 2, label: "superiority" };
+  if (friendly * 3 > enemy * 2) return { code: 3, label: "parity" };
+  if (friendly * 3 > enemy) return { code: 4, label: "denial" };
   return { code: 5, label: "incapability" };
+}
+
+export function stage1AircraftLoss(input: Stage1AircraftLossInput) {
+  const slotCount = Math.max(0, Math.trunc(Number(input.slotCount) || 0));
+  if (slotCount <= 0) return 0;
+  const alliedModifier: Record<AirStateCode, number> = { 1: 1, 2: 3, 3: 5, 4: 7, 5: 10 };
+  const enemyModifier: Record<AirStateCode, number> = { 1: 10, 2: 7, 3: 5, 4: 3, 5: 1 };
+  let rate: number;
+  if (input.side === "allied") {
+    const modifier = alliedModifier[input.airState];
+    rate = (unitRoll(input.firstRoll) * modifier / 3 + modifier / 4) * 0.1;
+  } else {
+    const modifier = enemyModifier[input.airState];
+    const first = inclusiveIntegerRoll(input.firstRoll, modifier);
+    const second = inclusiveIntegerRoll(input.secondRoll ?? input.firstRoll, modifier);
+    rate = 0.035 * first + 0.065 * second;
+  }
+  return Math.min(slotCount, Math.floor(slotCount * rate));
+}
+
+export function selectContactAircraft(
+  candidates: readonly ContactAircraftCandidate[],
+  ownAirState: AirStateCode,
+  nextRoll: () => number
+) {
+  const selectionDivisor: Partial<Record<AirStateCode, number>> = { 1: 14, 2: 16, 4: 18 };
+  const divisor = selectionDivisor[ownAirState];
+  if (!divisor) return -1;
+  const eligible = candidates
+    .filter((candidate) => candidate.planeCount > 0 && candidate.lineOfSight > 0)
+    .sort((a, b) =>
+      b.accuracy - a.accuracy ||
+      a.shipPosition - b.shipPosition ||
+      a.slotIndex - b.slotIndex
+    );
+  if (eligible.length === 0) return -1;
+  const initiationChance = Math.min(
+    0.95,
+    eligible.reduce(
+      (sum, candidate) => sum + Math.sqrt(candidate.planeCount) * candidate.lineOfSight,
+      0
+    ) / (divisor * 2)
+  );
+  if (unitRoll(nextRoll()) >= initiationChance) return -1;
+  for (const candidate of eligible) {
+    const selectionChance = Math.min(1, candidate.lineOfSight / divisor);
+    if (unitRoll(nextRoll()) < selectionChance) return candidate.id;
+  }
+  return -1;
 }
 
 export function softCap(value: number, cap: number) {
   return value > cap ? cap + Math.sqrt(value - cap) : value;
 }
 
-export function formationModifierFor(formation: number, phase: BattleFormulaPhase) {
+export function vanguardFormationRole(
+  context: VanguardFormationContext
+): "main" | "guard" {
+  const fleetSize = Math.max(1, Math.min(7, Math.trunc(Number(context.fleetSize) || 1)));
+  const position = Math.max(1, Math.min(fleetSize, Math.trunc(Number(context.position) || 1)));
+  const mainFleetLastPosition = fleetSize <= 5 ? 2 : 3;
+  return position <= mainFleetLastPosition ? "main" : "guard";
+}
+
+export function formationModifierFor(
+  formation: number,
+  phase: BattleFormulaPhase,
+  vanguardContext?: VanguardFormationContext
+) {
+  if (Math.trunc(formation) === 6) {
+    if (phase === "antiAir") return 1.1;
+    if (phase === "torpedo") return 1;
+    const role = vanguardContext ? vanguardFormationRole(vanguardContext) : "main";
+    if (phase === "asw") return role === "main" ? 1 : 0.6;
+    return role === "main" ? 0.5 : 1;
+  }
   if (phase === "night") return 1;
   const shelling: Record<number, number> = { 1: 1, 2: 0.8, 3: 0.7, 4: 0.6, 5: 0.6 };
   const torpedo: Record<number, number> = { 1: 1, 2: 0.8, 3: 0.7, 4: 0.6, 5: 0.6 };
+  const asw: Record<number, number> = { 1: 0.6, 2: 0.8, 3: 1.2, 4: 1.1, 5: 1.3 };
   const antiAir: Record<number, number> = { 1: 1, 2: 1.2, 3: 1.6, 4: 1, 5: 1 };
-  const table = phase === "shelling" ? shelling : phase === "torpedo" ? torpedo : antiAir;
+  const table =
+    phase === "shelling" ? shelling :
+      phase === "torpedo" ? torpedo :
+        phase === "asw" ? asw : antiAir;
   return table[Math.trunc(formation)] ?? 1;
+}
+
+/** Public carrier daytime shelling pre-cap base formula. */
+export function carrierDayShellingPower(input: CarrierDayShellingPowerInput) {
+  const firepower = Math.max(0, Number(input.firepower) || 0);
+  const torpedo = Math.max(0, Number(input.torpedo) || 0);
+  const bombing = Math.max(0, Number(input.bombing) || 0);
+  const combinedPowerBonus = Number(input.combinedPowerBonus) || 0;
+  const otherPowerBonus = Number(input.otherPowerBonus) || 0;
+  return Math.floor(
+    (firepower + torpedo + Math.floor(bombing * 1.3) + combinedPowerBonus + otherPowerBonus) * 1.5
+  ) + 55;
 }
 
 export function combinedFormationModifierFor(formation: number, phase: CombinedFormulaPhase) {
@@ -267,8 +455,16 @@ export function damageStateModifierFor(currentHp: number, maxHp: number) {
 }
 
 export function nightBattlePower(input: NightBattlePowerInput) {
-  const base = Math.max(0, Number(input.firepower) || 0) + Math.max(0, Number(input.torpedo) || 0);
-  return base * Math.max(0, Number(input.damageModifier ?? 1) || 0);
+  const targetKind = input.targetKind ?? "surface";
+  if (targetKind === "submarine") return 0;
+  const firepower = Math.max(0, Number(input.firepower) || 0);
+  const torpedo = targetKind === "installation" ? 0 : Math.max(0, Number(input.torpedo) || 0);
+  const installationModifier = targetKind === "installation"
+    ? Math.max(0, Number(input.installationModifier ?? 1) || 0)
+    : 1;
+  return (firepower + torpedo) *
+    installationModifier *
+    Math.max(0, Number(input.damageModifier ?? 1) || 0);
 }
 
 export function classifyNightAttack(input: {
@@ -314,44 +510,163 @@ export function carrierNightAirAttackPower(input: CarrierNightAirAttackPowerInpu
 }
 
 export function classifyCarrierNightCutIn(input: CarrierNightCutInInput): NightAttackKind | null {
+  return carrierNightCutInCandidates(input)[0] ?? null;
+}
+
+export function carrierNightCutInCandidates(input: CarrierNightCutInInput): NightAttackKind[] {
   const nightFighters = Math.max(0, Math.trunc(Number(input.nightFighters) || 0));
   const nightTorpedoBombers = Math.max(0, Math.trunc(Number(input.nightTorpedoBombers) || 0));
   const nightDiveBombers = Math.max(0, Math.trunc(Number(input.nightDiveBombers) || 0));
   const otherNightAircraft = Math.max(0, Math.trunc(Number(input.otherNightAircraft) || 0));
   const total = nightFighters + nightTorpedoBombers + nightDiveBombers + otherNightAircraft;
-  if (nightFighters >= 2 && nightTorpedoBombers >= 1) return { spType: 6, hits: 1, modifier: 1.25 };
-  if (nightFighters >= 1 && nightTorpedoBombers >= 1) return { spType: 6, hits: 1, modifier: 1.2 };
-  if (nightDiveBombers >= 1 && total >= 3) return { spType: 6, hits: 1, modifier: 1.2 };
-  if (nightFighters >= 1 && total >= 4) return { spType: 6, hits: 1, modifier: 1.18 };
-  return null;
+  const candidates: NightAttackKind[] = [];
+  if (nightFighters >= 2 && nightTorpedoBombers >= 1) {
+    candidates.push({ spType: 6, hits: 1, modifier: 1.25 });
+  }
+  if (nightFighters >= 1 && nightTorpedoBombers >= 1) {
+    candidates.push({ spType: 6, hits: 1, modifier: 1.2 });
+  }
+  if (nightDiveBombers >= 1 && total >= 3) {
+    candidates.push({ spType: 6, hits: 1, modifier: 1.2 });
+  }
+  if (nightFighters >= 1 && total >= 4) {
+    candidates.push({ spType: 6, hits: 1, modifier: 1.18 });
+  }
+  return candidates;
 }
 
 export function nightCutInActivationChance(input: NightCutInActivationInput) {
   if (input.cutInKind <= 0) return 1;
+  const level = Math.max(1, Math.trunc(Number(input.level) || 1));
   const luck = Math.max(0, Number(input.luck) || 0);
-  if (luck <= 0) return 0;
   const damageState = Math.trunc(Number(input.damageState) || 0);
-  const base = Math.sqrt(luck) * 0.06;
-  const flagship = input.flagship ? 0.12 : 0;
-  const damage = damageState >= 3 ? 0.2 : damageState >= 2 ? 0.14 : 0;
-  const searchlight = input.searchlight ? 0.07 : 0;
-  const starShell = input.starShell ? 0.07 : 0;
-  return clampProbability(base + flagship + damage + searchlight + starShell, 0, 0.95);
+  const luckAndLevel = luck < 50
+    ? 15 + luck + Math.floor(0.75 * Math.sqrt(level))
+    : 65 + Math.floor(Math.sqrt(luck - 50)) + Math.floor(0.8 * Math.sqrt(level));
+  const correction =
+    (input.flagship ? 15 : 0) +
+    (damageState === 2 ? 18 : 0) +
+    (input.searchlight ? 7 : 0) +
+    (input.starShell ? 4 : 0) +
+    (input.skilledLookout ? 5 : 0) +
+    (input.torpedoSquadronLookout ? 8 : 0) -
+    (input.enemySearchlight ? 5 : 0) -
+    (input.enemyStarShell ? 10 : 0);
+  const coefficients: Record<number, number> = {
+    2: 140,
+    3: 130,
+    4: 115,
+    5: 122,
+    6: 122
+  };
+  const coefficient = Math.max(
+    1,
+    Number(input.typeCoefficient ?? coefficients[Math.trunc(input.cutInKind)] ?? 122) || 122
+  );
+  return clampProbability((luckAndLevel + correction) / coefficient, 0, 1);
 }
 
 export function antiAirStage2Shootdown(input: AntiAirStage2Input) {
   const slotCount = Math.max(0, Math.trunc(input.slotCount));
   if (slotCount <= 0) return 0;
-  const formation = Math.max(0, Number(input.formationModifier) || 0);
-  const defenderAntiAir = Math.max(0, Number(input.defenderAntiAir) || 0);
-  const fleetAntiAir = Math.max(0, Number(input.fleetAntiAir) || 0);
+  const shipAdjustedAntiAir = Math.max(0, Number(input.shipAdjustedAntiAir) || 0);
+  const fleetAdjustedAntiAir = Math.max(0, Number(input.fleetAdjustedAntiAir) || 0);
+  const shipResistance = Math.max(0, Number(input.shipResistance ?? 1) || 0);
+  const fleetResistance = Math.max(0, Number(input.fleetResistance ?? 1) || 0);
+  const combinedFleetModifier = Math.max(0, Number(input.combinedFleetModifier ?? 1) || 0);
   const cutInFixedBonus = Math.max(0, Number(input.cutInFixedBonus ?? 0) || 0);
   const cutInModifier = Math.max(1, Number(input.cutInModifier ?? 1) || 1);
-  const randomFactor = Math.max(0, Math.min(1, Number(input.randomFactor ?? 0) || 0));
-  const effectiveAntiAir = defenderAntiAir * formation + fleetAntiAir * 0.2;
-  const proportional = Math.floor(slotCount * randomFactor * effectiveAntiAir / 900);
-  const fixed = Math.floor((effectiveAntiAir / 60 + cutInFixedBonus) * cutInModifier);
-  return Math.min(slotCount, Math.max(0, proportional + fixed));
+  const minimumGuarantee = Math.max(0, Math.trunc(Number(input.alliedMinimumGuarantee ?? 0) || 0));
+  const resistantShipAntiAir = Math.floor(shipAdjustedAntiAir * shipResistance);
+  const resistantFleetAntiAir = Math.floor(fleetAdjustedAntiAir * fleetResistance);
+  const proportional = input.proportionalTriggered
+    ? Math.floor(resistantShipAntiAir * combinedFleetModifier * slotCount / 400)
+    : 0;
+  const fixed = input.fixedTriggered
+    ? Math.floor(
+      (resistantShipAntiAir + resistantFleetAntiAir) *
+      combinedFleetModifier *
+      cutInModifier /
+      10
+    )
+    : 0;
+  // The AACI fixed bonus augments the allied per-slot minimum, independently
+  // of the Prop and Fixed 50% rolls.
+  return Math.min(
+    slotCount,
+    Math.max(0, proportional + fixed + minimumGuarantee + cutInFixedBonus)
+  );
+}
+
+export function shipAdjustedAntiAir(
+  baseAntiAir: number,
+  equipment: readonly AdjustedAntiAirEquipment[],
+  side: "allied" | "enemy"
+) {
+  const base = Math.max(0, Number(baseAntiAir) || 0);
+  const rawEquipmentAntiAir = equipment.reduce(
+    (sum, item) => sum + Math.max(0, Number(item.antiAir) || 0),
+    0
+  );
+  const weightedEquipment = equipment.reduce(
+    (sum, item) => sum +
+      Math.max(0, Number(item.antiAir) || 0) * shipAntiAirEquipmentWeight(item) +
+      shipAntiAirImprovementBonus(item),
+    0
+  );
+  const raw = side === "allied"
+    ? base + weightedEquipment
+    : 2 * Math.sqrt(base + rawEquipmentAntiAir) + weightedEquipment;
+  return 2 * Math.floor(Math.max(0, raw) / 2);
+}
+
+export function fleetAdjustedAntiAir(
+  equipmentByShip: readonly (readonly AdjustedAntiAirEquipment[])[],
+  formationModifier: number,
+  side: "allied" | "enemy"
+) {
+  const equipmentTotal = equipmentByShip.reduce(
+    (fleetSum, equipment) => fleetSum + Math.floor(equipment.reduce(
+      (shipSum, item) => shipSum +
+        Math.max(0, Number(item.antiAir) || 0) * fleetAntiAirEquipmentWeight(item) +
+        fleetAntiAirImprovementBonus(item),
+      0
+    )),
+    0
+  );
+  const formed = Math.floor(
+    Math.max(0, Number(formationModifier) || 0) * equipmentTotal
+  );
+  return side === "allied" ? (2 / 1.3) * formed : 2 * formed;
+}
+
+function shipAntiAirEquipmentWeight(item: AdjustedAntiAirEquipment) {
+  if (item.type3 === 16 || item.type2 === 36) return 4;
+  if ((item.type2 === 12 || item.type2 === 13) && item.antiAir >= 2) return 3;
+  if (item.type2 === 21) return 6;
+  return 0;
+}
+
+function fleetAntiAirEquipmentWeight(item: AdjustedAntiAirEquipment) {
+  if (item.type3 === 16 || item.type2 === 36) return 0.35;
+  if ((item.type2 === 12 || item.type2 === 13) && item.antiAir >= 2) return 0.4;
+  if (item.type2 === 18) return 0.6;
+  if (item.masterId === 9) return 0.25;
+  if (item.type2 === 21) return 0.2;
+  return 0;
+}
+
+function shipAntiAirImprovementBonus(item: AdjustedAntiAirEquipment) {
+  const stars = Math.sqrt(Math.max(0, Number(item.improvement ?? 0) || 0));
+  if (item.type2 === 21) return 4 * stars;
+  if (item.type3 === 16 || item.type2 === 36) return 2 * stars;
+  return 0;
+}
+
+function fleetAntiAirImprovementBonus(item: AdjustedAntiAirEquipment) {
+  const stars = Math.sqrt(Math.max(0, Number(item.improvement ?? 0) || 0));
+  if (item.type2 === 21 || item.type3 === 16 || item.type2 === 36) return stars;
+  return 0;
 }
 
 export function canOpeningAswByStats(input: OpeningAswEligibilityInput) {
@@ -385,6 +700,23 @@ export function accuracyChance(input: AccuracyChanceInput) {
   return clampProbability(modified / 100, 0.1, 0.97);
 }
 
+export function ptImpAccuracyChance(input: PtAccuracyChanceInput) {
+  const hitTerm =
+    75 +
+    2 * Math.sqrt(Math.max(1, Math.trunc(Number(input.attackerLevel) || 1))) +
+    1.5 * Math.sqrt(Math.max(0, Number(input.attackerLuck) || 0)) +
+    (Number(input.attackerAccuracy) || 0);
+  const equipment = Math.max(0, Number(input.equipmentModifier) || 0);
+  const shipType = Math.max(0, Number(input.shipTypeModifier) || 0);
+  const night = input.night ? 0.7 : 1;
+  const evasion = Math.max(0, Number(input.targetEvasion) || 0);
+  const finalPercent =
+    Math.floor(Math.floor(hitTerm * 0.42 + 24) * equipment * shipType * night) -
+    evasion +
+    1;
+  return clampProbability(finalPercent / 100, 0.1, 0.97);
+}
+
 export function criticalChance(input: CriticalChanceInput) {
   const luck = Math.max(0, Number(input.attackerLuck) || 0);
   const accuracy = Number(input.attackerAccuracy) || 0;
@@ -395,20 +727,33 @@ export function criticalChance(input: CriticalChanceInput) {
   return clampProbability(base * cutIn, 0.02, 0.4);
 }
 
-export function resolveBattleDamage(input: BattleDamageInput) {
+export function resolveBattleDamageOutcome(input: BattleDamageInput): DamageOutcome {
   const capped = softCap(input.preCapPower, input.cap);
   const critical = input.critical ? 1.5 : 1;
-  const attack = Math.floor(capped * critical) * input.postCapModifier;
+  const ordinaryPostCapPower = Math.floor(capped * critical) * input.postCapModifier;
+  const attack = input.ptEquipmentModifier == null
+    ? ordinaryPostCapPower
+    : ptImpShellingPower(ordinaryPostCapPower, input.ptEquipmentModifier);
   const defense = input.armor * 0.7 + input.armorRoll * 0.6;
   const rawDamage = Math.floor((attack - defense) * input.ammoModifier);
-  const targetHp = Math.max(0, Math.trunc(input.targetHp));
+  return resolveDamageOutcome({
+    rawDamage: input.ammoModifier > 0 ? rawDamage : 0,
+    targetHp: input.targetHp,
+    scratchRoll: input.scratchRoll,
+    protectionRoll: input.protectionRoll,
+    protection: input.protection ?? { mode: "none" }
+  });
+}
 
-  if (rawDamage > 0 && input.ammoModifier > 0) {
-    return input.targetSide === 0 ? Math.min(Math.max(0, targetHp - 1), rawDamage) : Math.min(targetHp, rawDamage);
-  }
-  if (targetHp <= 1) return 0;
-  const scratch = Math.floor(targetHp * 0.06);
-  return Math.max(1, Math.min(targetHp - 1, scratch));
+export function ptImpShellingPower(postCapPower: number, equipmentModifier = 1) {
+  const power = Math.max(0, Number(postCapPower) || 0);
+  return (power * 0.3 + Math.sqrt(power) + 10) *
+    Math.max(0, Number(equipmentModifier) || 0);
+}
+
+/** Backwards-compatible numeric wrapper for formula consumers. */
+export function resolveBattleDamage(input: BattleDamageInput) {
+  return resolveBattleDamageOutcome(input).damage;
 }
 
 function combinedShellingPowerBonusFor(input: CombinedPowerBonusInput) {
@@ -450,6 +795,16 @@ function combinedAirPowerBonusFor(input: CombinedPowerBonusInput) {
 
 function clampProbability(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
+}
+
+function unitRoll(value: number) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(1 - Number.EPSILON, numeric));
+}
+
+function inclusiveIntegerRoll(value: number, max: number) {
+  return Math.floor(unitRoll(value) * (Math.max(0, Math.trunc(max)) + 1));
 }
 
 function proficiencyAirPowerBonus(proficiency: number) {

@@ -6,7 +6,7 @@ import { createPracticeBattle, createSortieBattle } from "../src/kcsapi/battle.j
 import { proficiencyExpForVisible, visibleProficiency } from "../src/kcsapi/aircraft-proficiency.js";
 import { MARRIED_SHIP_LEVEL_CAP, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
 import { masterData } from "../src/master/data.js";
-import { createStateStore, type StateStore } from "../src/state/store.js";
+import { createStateStore, STATE_SCHEMA_VERSION, type StateStore } from "../src/state/store.js";
 
 describe("SQLite state store", () => {
   let tempDir: string;
@@ -44,9 +44,57 @@ describe("SQLite state store", () => {
     });
     expect(save.materials.fuel).toBeGreaterThan(0);
     expect(save.decks).toHaveLength(4);
+    expect(save.repairDocks.map((dock) => dock.id)).toEqual([1, 2]);
+    expect(save.buildDocks.map((dock) => dock.id)).toEqual([1, 2]);
     expect(save.ships.length).toBeGreaterThan(0);
     expect(save.slotItems.length).toBeGreaterThan(0);
     expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
+  });
+
+  it("opens repair and construction docks atomically with dock opening keys", () => {
+    store.registerAccount(15);
+    store.setUseItemCount(49, 2);
+
+    expect(store.openRepairDock()).toEqual({
+      ok: true,
+      dock: { id: 3, shipId: 0, completeTime: 0, state: 0 }
+    });
+    expect(store.openBuildDock()).toEqual({
+      ok: true,
+      dock: { id: 3, recipe: {}, resultMasterId: 0, completeTime: 0, state: 0 }
+    });
+    expect(store.getSave().useItems.find((item) => item.id === 49)?.count).toBe(0);
+
+    const beforeInsufficient = store.getSave();
+    expect(store.openRepairDock()).toEqual({ ok: false, error: "Insufficient dock opening keys" });
+    expect(store.getSave()).toEqual(beforeInsufficient);
+
+    store.setUseItemCount(49, 3);
+    expect(store.openRepairDock()).toMatchObject({ ok: true, dock: { id: 4 } });
+    expect(store.openBuildDock()).toMatchObject({ ok: true, dock: { id: 4 } });
+    const beforeReplay = store.getSave();
+    expect(store.openRepairDock()).toEqual({ ok: false, error: "All docks are already open" });
+    expect(store.openBuildDock()).toEqual({ ok: false, error: "All docks are already open" });
+    expect(store.getSave()).toEqual(beforeReplay);
+    expect(store.getSave().useItems.find((item) => item.id === 49)?.count).toBe(1);
+  });
+
+  it("rolls back the dock key consumption when dock creation aborts", () => {
+    store.registerAccount(15);
+    store.setUseItemCount(49, 1);
+    store.db.exec(`
+      CREATE TRIGGER abort_repair_dock_open
+      BEFORE INSERT ON repair_docks
+      WHEN NEW.id = 3
+      BEGIN
+        SELECT RAISE(ABORT, 'injected dock insertion failure');
+      END;
+    `);
+
+    expect(() => store.openRepairDock()).toThrow(/injected dock insertion failure/i);
+    const save = store.getSave();
+    expect(save.repairDocks.map((dock) => dock.id)).toEqual([1, 2]);
+    expect(save.useItems.find((item) => item.id === 49)?.count).toBe(1);
   });
 
   it("creates ship instances with initial max HP from ship master data", () => {
@@ -242,6 +290,7 @@ describe("SQLite state store", () => {
     expect(store.claimBuild(1)).toEqual({ ok: false, error: "Build is not complete" });
 
     vi.advanceTimersByTime(20 * 60_000);
+    store.settle();
     expect(store.getSave().buildDocks[0].state).toBe(3);
   });
 
@@ -356,7 +405,7 @@ describe("SQLite state store", () => {
     expect(repaired.hp).toBe(80);
   });
 
-  it("resets legacy saves that used ship master ids mismatched with cached art", () => {
+  it("refuses an unsupported legacy schema without erasing its save", () => {
     store.registerAccount(15);
     const legacyShipIds = [6, 7, 9, 45, 89];
     for (let index = 0; index < legacyShipIds.length; index += 1) {
@@ -368,14 +417,10 @@ describe("SQLite state store", () => {
     }
     store.updateComment("legacy save should reset");
     store.db.prepare("UPDATE schema_meta SET version = 2").run();
-    store.close();
-
-    store = createStateStore({ databasePath });
-
-    expect(store.hasAccount()).toBe(false);
-    const save = store.registerAccount(15);
-    expect(save.player.comment).toBe("Local offline save");
-    expect(save.ships.map((ship) => ship.masterId)).toEqual([9, 10, 1, 2]);
+    expect(() => createStateStore({ databasePath })).toThrow(/older than the safely supported minimum/i);
+    expect(store.getSave().player.comment).toBe("legacy save should reset");
+    expect(store.getSave().ships.map((ship) => ship.masterId)).toEqual(legacyShipIds);
+    store.db.prepare("UPDATE schema_meta SET version = ?").run(STATE_SCHEMA_VERSION);
   });
 
   it("keeps version 3 saves while migrating battle settlement state", () => {
@@ -503,6 +548,7 @@ describe("SQLite state store", () => {
 
     vi.setSystemTime(startedAt + 6 * 60_000 + 30_000);
     store = createStateStore({ databasePath });
+    store.settle();
     const recovered = store.getSave().materials;
 
     expect(recovered).toMatchObject({
@@ -526,6 +572,7 @@ describe("SQLite state store", () => {
     `).run();
 
     vi.setSystemTime(startedAt + 180_000 - 1);
+    store.settle();
     expect(store.getSave().materials).toMatchObject({
       fuel: 10,
       ammo: 20,
@@ -538,6 +585,7 @@ describe("SQLite state store", () => {
     });
 
     vi.setSystemTime(startedAt + 180_000);
+    store.settle();
     expect(store.getSave().materials).toMatchObject({
       fuel: 13,
       ammo: 23,
@@ -550,7 +598,7 @@ describe("SQLite state store", () => {
     });
   });
 
-  it("clamps naturally recovered base materials at one million", () => {
+  it("does not naturally recover resources already above the HQ soft cap", () => {
     const startedAt = Date.UTC(2026, 5, 18, 2, 0, 0);
     vi.useFakeTimers();
     vi.setSystemTime(startedAt);
@@ -558,11 +606,12 @@ describe("SQLite state store", () => {
     store.db.prepare("UPDATE materials SET fuel = 999999, ammo = 999998, steel = 999997, bauxite = 999999 WHERE player_id = 1").run();
 
     vi.setSystemTime(startedAt + 180_000);
+    store.settle();
     expect(store.getSave().materials).toMatchObject({
-      fuel: 1_000_000,
-      ammo: 1_000_000,
-      steel: 1_000_000,
-      bauxite: 1_000_000
+      fuel: 999_999,
+      ammo: 999_998,
+      steel: 999_997,
+      bauxite: 999_999
     });
   });
 
@@ -574,9 +623,11 @@ describe("SQLite state store", () => {
     store.db.prepare("UPDATE materials SET fuel = 1000000, ammo = 1000000, steel = 1000000, bauxite = 1000000 WHERE player_id = 1").run();
 
     vi.setSystemTime(startedAt + 12 * 180_000);
+    store.settle();
     expect(store.getSave().materials.fuel).toBe(1_000_000);
 
     store.db.prepare("UPDATE materials SET fuel = 999990 WHERE player_id = 1").run();
+    store.settle();
     expect(store.getSave().materials.fuel).toBe(999_990);
   });
 
@@ -721,8 +772,9 @@ describe("SQLite state store", () => {
     store.db.prepare("UPDATE schema_meta SET version = 17").run();
     store.close();
 
-    vi.setSystemTime(new Date("2026-08-01T00:00:00.000+09:00"));
+    vi.setSystemTime(new Date("2026-08-01T05:00:00.000+09:00"));
     store = createStateStore({ databasePath });
+    store.settle();
 
     const columns = (store.db.prepare("PRAGMA table_info(maps)").all() as { name: string }[]).map((row) => row.name);
     const map = store.getSave().maps.find((item) => item.id === 35)!;
@@ -769,7 +821,27 @@ describe("SQLite state store", () => {
     store.changeDeckShip(1, 0, akagi.id);
     store.db.prepare("UPDATE ships SET hp = ? WHERE id = ?").run(5, akagi.id);
     const before = store.getSave().ships.find((ship) => ship.id === akagi.id)!;
-    const battle = createPracticeBattle(store.getSave(), { practiceEnemyId: 1, formation: 1 });
+    const battle = createPracticeBattle(store.getSave(), {
+      practiceEnemyId: 1,
+      formation: 1,
+      practiceRivals: [{
+        id: 1,
+        name: "Air-superiority fixture",
+        level: 120,
+        rank: "元帥",
+        comment: "deterministic aircraft loss",
+        flag: 1,
+        medals: 4,
+        ships: Array.from({ length: 6 }, (_value, index) => ({
+          id: 101 + index,
+          masterId: 277,
+          level: 120,
+          star: 5,
+          slotMasterIds: [20, 20, 20, 20],
+          onSlot: [40, 40, 40, 40, 0]
+        }))
+      }]
+    });
 
     store.recordPracticeBattle(battle.record as unknown as Record<string, unknown>);
     store.applyPracticeBattleResult();

@@ -12,7 +12,10 @@ describe("event debug controls", () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(tmpdir(), "kancolle-debug-events-"));
-    store = createStateStore({ databasePath: path.join(tempDir, "save.sqlite") });
+    store = createStateStore({
+      databasePath: path.join(tempDir, "save.sqlite"),
+      allowSyntheticEvents: true
+    });
     store.registerAccount(15);
     app = await buildApp({
       cacheDir: path.resolve("cache"),
@@ -27,7 +30,45 @@ describe("event debug controls", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("lists cache-backed event candidates and activates the 061 event pack", async () => {
+  it("rejects the synthetic package unless the state store explicitly opts in", async () => {
+    const productionStore = createStateStore({
+      databasePath: path.join(tempDir, "production-save.sqlite")
+    });
+    productionStore.registerAccount(15);
+    const productionApp = await buildApp({
+      cacheDir: path.resolve("cache"),
+      stateStore: productionStore,
+      unknownLogPath: path.join(tempDir, "production-unknown.jsonl")
+    });
+    try {
+      const status = await productionApp.inject({ method: "GET", url: "/debug/api/events/status" });
+      expect(status.json().api_data.candidates).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          areaId: 61,
+          packageKind: "synthetic-debug",
+          productionEligible: false,
+          activatable: false
+        })
+      ]));
+
+      const activation = await productionApp.inject({
+        method: "POST",
+        url: "/debug/api/events/active",
+        payload: { areaId: 61 }
+      });
+      expect(activation.statusCode).toBe(400);
+      expect(activation.json()).toMatchObject({
+        api_result: 400,
+        api_result_msg: expect.stringMatching(/synthetic debug/i)
+      });
+      expect(productionStore.getActiveEventAreaId()).toBeNull();
+    } finally {
+      await productionApp.close();
+      productionStore.close();
+    }
+  });
+
+  it("lists and activates the 061 package under explicit synthetic-debug opt-in", async () => {
     const before = await app.inject({ method: "GET", url: "/debug/api/events/status" });
     expect(before.statusCode).toBe(200);
     expect(before.json().api_data).toMatchObject({
@@ -37,6 +78,8 @@ describe("event debug controls", () => {
           areaId: 61,
           cacheMaps: [1, 2, 3],
           hasEventPack: true,
+          packageKind: "synthetic-debug",
+          productionEligible: false,
           activatable: true
         })
       ])

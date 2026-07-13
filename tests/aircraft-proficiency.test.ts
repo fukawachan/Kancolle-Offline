@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { masterData } from "../src/master/data.js";
 import {
+  AIRCRAFT_PROFICIENCY_TRAINING_RULES,
+  NO_UNVERIFIED_PROFICIENCY_LOSS,
+  STATISTICAL_PROFICIENCY_LOSS_BASELINE,
   aircraftAirPowerBonus,
+  aircraftProficiencyNonWipeLossPenalty,
+  aircraftProficiencyTrainingGain,
+  aircraftProficiencyTrainingRule,
   applyAircraftProficiencyBattleResult,
   initialAircraftProficiencyExp,
   proficiencyExpForVisible,
@@ -58,5 +64,48 @@ describe("aircraft proficiency rules", () => {
       currentCount: 18,
       mode: "practice"
     })).toBe(0);
+  });
+
+  it("uses an explicit aircraft-type training table instead of a catch-all gain", () => {
+    expect(aircraftProficiencyTrainingGain(slotMaster(20))).toBe(1);
+    expect(aircraftProficiencyTrainingGain(slotMaster(16))).toBe(2);
+    expect(aircraftProficiencyTrainingGain(slotMaster(269))).toBe(2);
+    expect(aircraftProficiencyTrainingRule(slotMaster(20))?.evidence.level).toBe("published-table");
+    expect(new Set(AIRCRAFT_PROFICIENCY_TRAINING_RULES.map((rule) => rule.typeId)).size)
+      .toBe(AIRCRAFT_PROFICIENCY_TRAINING_RULES.length);
+  });
+
+  it("fails closed for unverified non-wipe loss and permits an injected statistical baseline", () => {
+    expect(NO_UNVERIFIED_PROFICIENCY_LOSS).toMatchObject({
+      enabled: false,
+      evidence: { level: "missing", source: null }
+    });
+    expect(aircraftProficiencyNonWipeLossPenalty({
+      previousCount: 18,
+      currentCount: 9,
+      profile: NO_UNVERIFIED_PROFICIENCY_LOSS
+    })).toBe(0);
+    expect(aircraftProficiencyNonWipeLossPenalty({
+      previousCount: 18,
+      currentCount: 9,
+      profile: STATISTICAL_PROFICIENCY_LOSS_BASELINE,
+      roll: 0.5
+    })).toBe(10);
+    expect(applyAircraftProficiencyBattleResult({
+      master: slotMaster(20),
+      previousExp: 100,
+      previousCount: 18,
+      currentCount: 9,
+      mode: "sortie"
+    })).toBe(101);
+    expect(applyAircraftProficiencyBattleResult({
+      master: slotMaster(20),
+      previousExp: 100,
+      previousCount: 18,
+      currentCount: 9,
+      mode: "sortie",
+      nonWipeLossProfile: STATISTICAL_PROFICIENCY_LOSS_BASELINE,
+      lossRoll: 0.5
+    })).toBe(91);
   });
 });

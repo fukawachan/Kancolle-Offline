@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { masterData } from "./data.js";
 import { effectiveShipSpeedValue } from "./ship-speed.js";
+import { requirePlayerShipStat } from "./ship-stat-growth.js";
 import type { SaveState } from "../state/types.js";
 
 export type RoutingSpeed = "slow" | "fast" | "fastPlus" | "fastest";
@@ -33,15 +34,45 @@ export type RoutingFleet = {
   equippedShipCounts: Record<string, number>;
 };
 
-type NumericPredicate = {
+export type NumericPredicate = {
   eq?: number;
   gte?: number;
   lte?: number;
 };
 
+export type RoutingCompiledCondition =
+  | { kind: "true" }
+  | { kind: "all"; conditions: RoutingCompiledCondition[] }
+  | { kind: "any"; conditions: RoutingCompiledCondition[] }
+  | { kind: "phase"; value: number }
+  | { kind: "visited"; point: string }
+  | { kind: "speed"; minimum?: RoutingSpeed; maximum?: RoutingSpeed; exact?: RoutingSpeed }
+  | { kind: "flagshipType"; shipType: string }
+  | { kind: "equippedShipCount"; category: "radar" | "drum" | "landingCraft"; count: NumericPredicate }
+  | {
+      kind: "los";
+      coefficient: number;
+      minimum?: number;
+      minimumInclusive?: boolean;
+      maximum?: number;
+      maximumInclusive?: boolean;
+    }
+  | { kind: "allowedShipTypes"; shipTypes: string[] }
+  | {
+      kind: "fleetExpressionCount";
+      terms: ({ kind: "shipType"; shipType: string } | { kind: "shipClass"; classIds: number[] } | { kind: "fleetSize" })[];
+      count?: NumericPredicate;
+      compareToFleetSize?: "=" | ">=" | "<=" | ">" | "<";
+    };
+
 export type RoutingPredicate = {
   fleetSize?: NumericPredicate;
   shipTypes?: Record<string, NumericPredicate>;
+  shipTypeSpeedCounts?: {
+    shipType: string;
+    speed: RoutingSpeed;
+    count: NumericPredicate;
+  }[];
   shipClasses?: Record<string, NumericPredicate>;
   namedShips?: Record<string, NumericPredicate>;
   shipFamilies?: { ids: number[]; count: NumericPredicate; wikiTerm?: string }[];
@@ -60,6 +91,7 @@ export type RoutingPredicate = {
   phase?: NumericPredicate;
   visited?: string;
   wiki?: string;
+  compiledWiki?: RoutingCompiledCondition;
   all?: RoutingPredicate[];
   any?: RoutingPredicate[];
   not?: RoutingPredicate;
@@ -72,6 +104,22 @@ export type RoutingRule = {
   chance?: number;
   select?: string[];
   source?: string;
+  evidence?: RoutingEvidence;
+  diagnostics?: RoutingDiagnostic[];
+};
+
+export type RoutingEvidenceLevel = "exact" | "statistical" | "inferred" | "fallback";
+
+export type RoutingEvidence = {
+  level: RoutingEvidenceLevel;
+  source?: string;
+  revision?: number;
+};
+
+export type RoutingDiagnostic = {
+  code: "unresolved-wiki-term";
+  condition: string;
+  term: string;
 };
 
 export type RoutingEdge = {
@@ -90,6 +138,7 @@ export type RoutingNode = {
 export type RoutingMap = {
   mapId: number;
   revision: number;
+  source?: string;
   edges: RoutingEdge[];
   nodes?: Record<string, RoutingNode>;
   branches: Record<string, RoutingRule[]>;
@@ -107,8 +156,18 @@ export type RouteEvaluationInput = {
 };
 
 export type RouteEvaluation =
-  | { kind: "route"; edgeNo: number; from: string; to: string }
-  | { kind: "select"; edgeNos: number[]; from: string };
+  | { kind: "route"; edgeNo: number; from: string; to: string; evidence?: RoutingEvidence }
+  | { kind: "select"; edgeNos: number[]; from: string; evidence?: RoutingEvidence };
+
+export class UnsupportedRoutingPredicateError extends Error {
+  constructor(
+    readonly condition: string,
+    readonly terms: readonly string[]
+  ) {
+    super(`Unsupported routing predicate term(s): ${terms.join(", ")} (condition: ${condition})`);
+    this.name = "UnsupportedRoutingPredicateError";
+  }
+}
 
 const SPEED_ORDER: RoutingSpeed[] = ["slow", "fast", "fastPlus", "fastest"];
 
@@ -154,31 +213,35 @@ export function evaluateRoute(map: RoutingMap, input: RouteEvaluationInput): Rou
 
   for (const rule of rules) {
     if (rule.when && !matchesPredicate(rule.when, input)) continue;
+    const evidence = rule.evidence ?? inferRoutingRuleEvidence(rule, map.revision);
     if (rule.chance != null && stableRouteRoll(input.seed, map.mapId, input.from, input.step, rule.source) >= rule.chance) {
       continue;
     }
     if (rule.select) {
       const choices = rule.select.map((to) => requireEdge(map, input.from, to));
       if (input.selectedEdgeNo == null) {
-        return { kind: "select", edgeNos: choices.map((edge) => edge.no), from: input.from };
+        return withEvidence(
+          { kind: "select" as const, edgeNos: choices.map((edge) => edge.no), from: input.from },
+          evidence
+        );
       }
       const selected = choices.find((edge) => edge.no === input.selectedEdgeNo);
       if (!selected) {
         throw new Error(`Selected edge ${input.selectedEdgeNo} is not available from ${input.from}`);
       }
-      return routeResult(selected);
+      return routeResult(selected, evidence);
     }
-    if (rule.to) return routeResult(requireEdge(map, input.from, rule.to));
+    if (rule.to) return routeResult(requireEdge(map, input.from, rule.to), evidence);
     if (rule.weights) {
       const destinations = Object.entries(rule.weights).filter(([, weight]) => weight > 0);
       if (destinations.length === 0) throw new Error(`Map ${map.mapId} has an empty weighted rule at ${input.from}`);
       const total = destinations.reduce((sum, [, weight]) => sum + weight, 0);
       let roll = stableRouteRoll(input.seed, map.mapId, input.from, input.step) * total;
       for (const [to, weight] of destinations) {
-        if (roll < weight) return routeResult(requireEdge(map, input.from, to));
+        if (roll < weight) return routeResult(requireEdge(map, input.from, to), evidence);
         roll -= weight;
       }
-      return routeResult(requireEdge(map, input.from, destinations[destinations.length - 1][0]));
+      return routeResult(requireEdge(map, input.from, destinations[destinations.length - 1][0]), evidence);
     }
   }
 
@@ -208,7 +271,6 @@ export function buildRoutingFleet(save: SaveState, deckId: number): RoutingFleet
           name: itemMaster.api_name
         }];
       });
-      const apiSaku = (shipMaster as { api_saku?: number[] } | undefined)?.api_saku;
       return {
         id: ship.id,
         masterId: ship.masterId,
@@ -217,7 +279,7 @@ export function buildRoutingFleet(save: SaveState, deckId: number): RoutingFleet
         name: shipMaster?.api_name ?? `Ship ${ship.masterId}`,
         speed: Number(shipMaster?.api_soku ?? 0),
         level: ship.level,
-        baseLos: Number(ship.stats.baseLos ?? levelStat(apiSaku, ship.level)),
+        baseLos: requirePlayerShipStat(ship.masterId, "los", ship.level),
         equipment
       };
     });
@@ -260,6 +322,14 @@ function matchesPredicate(predicate: RoutingPredicate, input: RouteEvaluationInp
     for (const [type, expected] of Object.entries(predicate.shipTypes)) {
       const count = input.fleet.ships.filter((ship) => shipMatchesType(ship, type)).length;
       if (!matchesNumber(count, expected)) return false;
+    }
+  }
+  if (predicate.shipTypeSpeedCounts) {
+    for (const expected of predicate.shipTypeSpeedCounts) {
+      const count = input.fleet.ships.filter((ship) => (
+        shipMatchesType(ship, expected.shipType) && effectiveShipSpeed(ship) === expected.speed
+      )).length;
+      if (!matchesNumber(count, expected.count)) return false;
     }
   }
   if (predicate.shipClasses) {
@@ -306,7 +376,7 @@ function matchesPredicate(predicate: RoutingPredicate, input: RouteEvaluationInp
     if (predicate.los.lt != null && score >= predicate.los.lt) return false;
   }
   if (predicate.visited && !(input.visited ?? []).includes(predicate.visited)) return false;
-  if (predicate.wiki) {
+  if (predicate.compiledWiki || predicate.wiki) {
     const compiledTerms = new Set(
       [
         ...(predicate.countExpressions ?? []).map((expression) => expression.wikiTerm),
@@ -315,7 +385,9 @@ function matchesPredicate(predicate: RoutingPredicate, input: RouteEvaluationInp
         .filter((term): term is string => Boolean(term))
         .map(normalizeWikiConditionText)
     );
-    if (!matchesWikiCondition(predicate.wiki, input, compiledTerms)) return false;
+    const compiled = predicate.compiledWiki
+      ?? compileWikiCondition(predicate.wiki!, compiledTerms);
+    if (!matchesCompiledWikiCondition(compiled, input)) return false;
   }
   return true;
 }
@@ -327,21 +399,59 @@ function matchesNumber(value: number, expected: NumericPredicate) {
   return true;
 }
 
-function routeResult(edge: RoutingEdge): RouteEvaluation {
-  return { kind: "route", edgeNo: edge.no, from: edge.from, to: edge.to };
+function routeResult(edge: RoutingEdge, evidence?: RoutingEvidence): RouteEvaluation {
+  return withEvidence({ kind: "route" as const, edgeNo: edge.no, from: edge.from, to: edge.to }, evidence);
+}
+
+function withEvidence<T extends { kind: "route" | "select" }>(result: T, evidence?: RoutingEvidence): T & {
+  evidence?: RoutingEvidence;
+} {
+  return evidence?.level && evidence.level !== "exact" ? { ...result, evidence } : result;
+}
+
+export function inferRoutingRuleEvidence(rule: RoutingRule, revision?: number): RoutingEvidence {
+  const source = rule.source;
+  const normalizedSource = source?.toLowerCase() ?? "";
+  const hasPublishedPercentage = /\d+(?:\.\d+)?\s*%/.test(source ?? "");
+  const positiveWeights = Object.values(rule.weights ?? {}).filter((weight) => weight > 0);
+  const equalAssumedWeights = positiveWeights.length > 1
+    && positiveWeights.every((weight) => weight === positiveWeights[0])
+    && !hasPublishedPercentage;
+  const assumedCoinFlip = rule.chance != null && !hasPublishedPercentage;
+  let level: RoutingEvidenceLevel;
+  if (
+    normalizedSource.includes("no published exact fallback")
+    || normalizedSource.includes("fallback")
+    || equalAssumedWeights
+    || assumedCoinFlip
+  ) {
+    level = "fallback";
+  } else if (
+    rule.chance != null
+    || rule.weights
+    || normalizedSource.includes("random")
+    || /(?:随机|概率|约|\d(?:\.\d+)?\s*%)/.test(source ?? "")
+  ) {
+    level = "statistical";
+  } else if (
+    normalizedSource.includes("inferred")
+    || /(?:[?？]|可能|不明|样本太少|推定)/.test(source ?? "")
+  ) {
+    level = "inferred";
+  } else {
+    level = "exact";
+  }
+  return {
+    level,
+    ...(source ? { source } : {}),
+    ...(revision != null ? { revision } : {})
+  };
 }
 
 function requireEdge(map: RoutingMap, from: string, to: string) {
   const edge = map.edges.find((candidate) => candidate.from === from && candidate.to === to);
   if (!edge) throw new Error(`Map ${map.mapId} has no edge ${from} -> ${to}`);
   return edge;
-}
-
-function levelStat(range: number[] | undefined, level: number) {
-  if (!range || range.length === 0) return 0;
-  const min = Number(range[0] ?? 0);
-  const max = Number(range[1] ?? min);
-  return Math.floor(min + (max - min) * Math.min(99, Math.max(1, level)) / 99);
 }
 
 function buildTypeCounts(ships: RoutingShip[]) {
@@ -376,7 +486,8 @@ function effectiveShipSpeed(ship: RoutingShip): RoutingSpeed {
   const value = effectiveShipSpeedValue(
     ship.speed,
     ship.classId,
-    ship.equipment.map((item) => ({ masterId: item.masterId, improvement: item.improvement }))
+    ship.equipment.map((item) => ({ masterId: item.masterId, improvement: item.improvement })),
+    { masterId: ship.masterId, shipType: ship.shipType }
   );
   if (value >= 20) return "fastest";
   if (value >= 15) return "fastPlus";
@@ -402,147 +513,369 @@ function equipmentImprovementLos(item: RoutingEquipment) {
   return 0;
 }
 
-function matchesWikiCondition(raw: string, input: RouteEvaluationInput, compiledTerms = new Set<string>()): boolean {
-  const text = normalizeWikiConditionText(raw);
-  if (!text) return true;
+export function compileRoutingPredicate(predicate: RoutingPredicate): RoutingPredicate {
+  const all = predicate.all?.map(compileRoutingPredicate);
+  const any = predicate.any?.map(compileRoutingPredicate);
+  const not = predicate.not ? compileRoutingPredicate(predicate.not) : undefined;
+  const compiledTerms = compiledWikiTerms(predicate);
+  return {
+    ...predicate,
+    ...(all ? { all } : {}),
+    ...(any ? { any } : {}),
+    ...(not ? { not } : {}),
+    ...(predicate.compiledWiki
+      ? { compiledWiki: predicate.compiledWiki }
+      : predicate.wiki
+        ? { compiledWiki: compileWikiCondition(predicate.wiki, compiledTerms) }
+        : {})
+  };
+}
 
-  const orParts = text.split(/\s*(?:或|、)\s*/).filter(Boolean);
+function compiledWikiTerms(predicate: RoutingPredicate) {
+  return new Set(
+    [
+      ...(predicate.countExpressions ?? []).map((expression) => expression.wikiTerm),
+      ...(predicate.shipFamilies ?? []).map((family) => family.wikiTerm)
+    ]
+      .filter((term): term is string => Boolean(term))
+      .map(normalizeWikiConditionText)
+  );
+}
+
+function compileWikiCondition(raw: string, compiledTerms = new Set<string>()): RoutingCompiledCondition {
+  const unresolvedTerms = unresolvedWikiConditionTerms(raw, compiledTerms);
+  if (unresolvedTerms.length > 0) {
+    throw new UnsupportedRoutingPredicateError(raw, unresolvedTerms);
+  }
+  const text = normalizeWikiConditionText(raw);
+  if (!text) return { kind: "true" };
+
+  const orParts = text.split(/\s*(?:或(?!以上)|、)\s*/).filter(Boolean);
   if (orParts.length > 1 && orParts.every((part) => containsPredicateToken(part))) {
-    return orParts.some((part) => matchesWikiCondition(part, input, compiledTerms));
+    return {
+      kind: "any",
+      conditions: orParts.map((part) => compileWikiCondition(part, compiledTerms))
+    };
   }
 
   const andParts = text.split(/\s*且\s*/).filter(Boolean);
-  return andParts.every((part) => {
+  const losCoefficient = Number(text.match(/分歧点系数\s*=\s*(\d+)/)?.[1] ?? 1);
+  const conditions = andParts.map((part) => {
     const term = part.trim();
-    return compiledTerms.has(term) || matchesWikiTerm(term, input);
+    return compiledTerms.has(term)
+      ? { kind: "true" as const }
+      : compileWikiTerm(term, losCoefficient);
   });
+  return conditions.length === 1 ? conditions[0] : { kind: "all", conditions };
+}
+
+function compileWikiTerm(rawTerm: string, losCoefficient: number): RoutingCompiledCondition {
+  const term = cleanWikiTerm(rawTerm);
+  if (!term || /^(其余|其他情况|上述判定全部失败|去[A-Z]判定失败)/.test(term)) {
+    return { kind: "true" };
+  }
+  if (/^(?:即|以上逐条依次判定)$/.test(term)) return { kind: "true" };
+  const phase = term.match(/P([123])阶段/);
+  if (phase) return { kind: "phase", value: Number(phase[1]) };
+  const visited = term.match(/经过([A-Z])/);
+  if (visited) return { kind: "visited", point: visited[1] };
+  if (/^分歧点系数\s*=\s*\d+$/.test(term)) return { kind: "true" };
+
+  if (/高速\+(?:或)?以上|高速\+、最速|高速\+(?:的)?舰队|^\[?高速\+\]?$/.test(term)) {
+    return { kind: "speed", minimum: "fastPlus" };
+  }
+  if (/最速/.test(term)) return { kind: "speed", exact: "fastest" };
+  if (/高速以上|高速舰队/.test(term)) return { kind: "speed", minimum: "fast" };
+  if (/高速以下/.test(term)) return { kind: "speed", maximum: "fast" };
+  if (/低速舰队/.test(term)) return { kind: "speed", exact: "slow" };
+
+  const flagship = term.match(/([A-Z]+)旗舰/);
+  if (flagship) return { kind: "flagshipType", shipType: flagship[1] };
+  if (/装备(?:电探|雷达)的船数/.test(term)) {
+    return { kind: "equippedShipCount", category: "radar", count: requireCountPredicate(term) };
+  }
+  if (/运输桶/.test(term)) {
+    return { kind: "equippedShipCount", category: "drum", count: requireCountPredicate(term) };
+  }
+  if (/大发系/.test(term)) {
+    return { kind: "equippedShipCount", category: "landingCraft", count: requireCountPredicate(term) };
+  }
+  if (/索敌/.test(term)) return compileWikiLos(term, losCoefficient);
+  if (/只包含|不包含.+以外的舰种/.test(term)) {
+    const shipTypes = extractTypeTokens(term);
+    if (shipTypes.length > 0) return { kind: "allowedShipTypes", shipTypes };
+  }
+  if (/不包含|包含/.test(term)) {
+    throw new UnsupportedRoutingPredicateError(term, [term]);
+  }
+
+  const chainedComparison = term.match(/^(\d+)\s*<=\s*([^<>=\s]+(?:\+[^<>=\s]+)*)\s*<=\s*(\d+)$/);
+  if (chainedComparison) {
+    return {
+      kind: "fleetExpressionCount",
+      terms: compileFleetCountTerms(chainedComparison[2]),
+      count: { gte: Number(chainedComparison[1]), lte: Number(chainedComparison[3]) }
+    };
+  }
+
+  const comparison = term.match(/^([^<>=\s]+(?:\+[^<>=\s]+)*)\s*(>=|<=|=|>|<)\s*(\d+|舰队船数)$/);
+  if (comparison) {
+    const operator = comparison[2] as "=" | ">=" | "<=" | ">" | "<";
+    return {
+      kind: "fleetExpressionCount",
+      terms: compileFleetCountTerms(comparison[1]),
+      ...(comparison[3] === "舰队船数"
+        ? { compareToFleetSize: operator }
+        : { count: integerPredicate(operator, Number(comparison[3])) })
+    };
+  }
+
+  const range = term.match(/^([^<>=\s]+(?:\+[^<>=\s]+)*)\s*=\s*(\d+)\s*[~～-]\s*(\d+)/);
+  if (range) {
+    return {
+      kind: "fleetExpressionCount",
+      terms: compileFleetCountTerms(range[1]),
+      count: { gte: Number(range[2]), lte: Number(range[3]) }
+    };
+  }
+
+  if (/舰队船数/.test(term)) {
+    return {
+      kind: "fleetExpressionCount",
+      terms: [{ kind: "fleetSize" }],
+      count: requireCountPredicate(term)
+    };
+  }
+  throw new UnsupportedRoutingPredicateError(term, [term]);
+}
+
+function compileFleetCountTerms(expression: string): Extract<RoutingCompiledCondition, { kind: "fleetExpressionCount" }>["terms"] {
+  return expression.split("+").map((token) => {
+    if (token === "舰队船数") return { kind: "fleetSize" as const };
+    if (token === "大鹰级") return { kind: "shipClass" as const, classIds: [76] };
+    if (TYPE_GROUPS[token]) return { kind: "shipType" as const, shipType: token };
+    throw new UnsupportedRoutingPredicateError(expression, [token]);
+  });
+}
+
+function requireCountPredicate(term: string): NumericPredicate {
+  const range = term.match(/=\s*(\d+)\s*[~～-]\s*(\d+)/);
+  if (range) return { gte: Number(range[1]), lte: Number(range[2]) };
+  const comparison = term.match(/(>=|<=|=|>|<)\s*(\d+)/);
+  if (!comparison) throw new UnsupportedRoutingPredicateError(term, [term]);
+  return integerPredicate(comparison[1] as "=" | ">=" | "<=" | ">" | "<", Number(comparison[2]));
+}
+
+function integerPredicate(operator: "=" | ">=" | "<=" | ">" | "<", expected: number): NumericPredicate {
+  if (operator === "=") return { eq: expected };
+  if (operator === ">=") return { gte: expected };
+  if (operator === "<=") return { lte: expected };
+  if (operator === ">") return { gte: expected + 1 };
+  return { lte: expected - 1 };
+}
+
+function compileWikiLos(term: string, coefficient: number): RoutingCompiledCondition {
+  const chained = term.match(/(\d+(?:\.\d+)?)\s*<=\s*索敌\s*<\s*(\d+(?:\.\d+)?)/);
+  if (chained) {
+    return {
+      kind: "los",
+      coefficient,
+      minimum: Number(chained[1]),
+      minimumInclusive: true,
+      maximum: Number(chained[2]),
+      maximumInclusive: false
+    };
+  }
+  const range = term.match(/索敌\s*(\d+(?:\.\d+)?)\s*[~～-]\s*(\d+(?:\.\d+)?)/)
+    ?? term.match(/(\d+(?:\.\d+)?)\s*[~～-]\s*(\d+(?:\.\d+)?)索敌/);
+  if (range) {
+    return {
+      kind: "los",
+      coefficient,
+      minimum: Number(range[1]),
+      minimumInclusive: true,
+      maximum: Number(range[2]),
+      maximumInclusive: false
+    };
+  }
+  const comparison = term.match(/索敌\s*(>=|<=|>|<)\s*(\d+(?:\.\d+)?)/);
+  if (comparison) return losComparison(coefficient, comparison[1], Number(comparison[2]));
+  const above = term.match(/(\d+(?:\.\d+)?)索敌以上|(\d+(?:\.\d+)?)以上索敌/);
+  if (above) return losComparison(coefficient, ">=", Number(above[1] ?? above[2]));
+  const atMost = term.match(/(\d+(?:\.\d+)?)索敌以下/);
+  if (atMost) return losComparison(coefficient, "<=", Number(atMost[1]));
+  const below = term.match(/索敌不足\s*(\d+(?:\.\d+)?)/);
+  if (below) return losComparison(coefficient, "<", Number(below[1]));
+  throw new UnsupportedRoutingPredicateError(term, [term]);
+}
+
+function losComparison(coefficient: number, operator: string, expected: number): RoutingCompiledCondition {
+  if (operator === ">=" || operator === ">") {
+    return { kind: "los", coefficient, minimum: expected, minimumInclusive: operator === ">=" };
+  }
+  return { kind: "los", coefficient, maximum: expected, maximumInclusive: operator === "<=" };
+}
+
+function matchesCompiledWikiCondition(condition: RoutingCompiledCondition, input: RouteEvaluationInput): boolean {
+  if (condition.kind === "true") return true;
+  if (condition.kind === "all") return condition.conditions.every((item) => matchesCompiledWikiCondition(item, input));
+  if (condition.kind === "any") return condition.conditions.some((item) => matchesCompiledWikiCondition(item, input));
+  if (condition.kind === "phase") return input.phase === condition.value;
+  if (condition.kind === "visited") return (input.visited ?? []).includes(condition.point);
+  if (condition.kind === "speed") {
+    const index = SPEED_ORDER.indexOf(input.fleet.speed);
+    if (condition.exact && input.fleet.speed !== condition.exact) return false;
+    if (condition.minimum && index < SPEED_ORDER.indexOf(condition.minimum)) return false;
+    if (condition.maximum && index > SPEED_ORDER.indexOf(condition.maximum)) return false;
+    return true;
+  }
+  if (condition.kind === "flagshipType") {
+    return Boolean(input.fleet.ships[0] && shipMatchesType(input.fleet.ships[0], condition.shipType));
+  }
+  if (condition.kind === "equippedShipCount") {
+    return matchesNumber(input.fleet.equippedShipCounts[condition.category] ?? 0, condition.count);
+  }
+  if (condition.kind === "los") {
+    const score = calculateFleetLos33(input.fleet, condition.coefficient, input.playerLevel ?? 1);
+    if (condition.minimum != null) {
+      if (condition.minimumInclusive === false ? score <= condition.minimum : score < condition.minimum) return false;
+    }
+    if (condition.maximum != null) {
+      if (condition.maximumInclusive ? score > condition.maximum : score >= condition.maximum) return false;
+    }
+    return true;
+  }
+  if (condition.kind === "allowedShipTypes") {
+    return input.fleet.ships.every((ship) => condition.shipTypes.some((type) => shipMatchesType(ship, type)));
+  }
+
+  const count = condition.terms.reduce((sum, term) => {
+    if (term.kind === "fleetSize") return sum + input.fleet.ships.length;
+    if (term.kind === "shipClass") {
+      return sum + input.fleet.ships.filter((ship) => term.classIds.includes(ship.classId)).length;
+    }
+    return sum + input.fleet.ships.filter((ship) => shipMatchesType(ship, term.shipType)).length;
+  }, 0);
+  if (condition.compareToFleetSize) {
+    return compareNumber(count, condition.compareToFleetSize, input.fleet.ships.length);
+  }
+  return matchesNumber(count, condition.count ?? {});
 }
 
 function normalizeWikiConditionText(raw: string) {
   return raw
     .replace(/[？?约]/g, "")
     .replace(/舰队中/g, "")
+    .replace(/CL\(\+CT\)/g, "CL+CT")
+    // A generated child row can inherit a parent of the form "X, or the
+    // previous X decision failed". Reaching that child already proves the
+    // parent decision did not route, so retain the child conjunction instead
+    // of accidentally parsing `X OR child` with the wrong precedence.
+    .replace(/(?:去[A-Z]判定失败(?:时)?\s*或\s*[^且]+|[^且]+\s*或\s*去[A-Z]判定失败(?:时)?)/g, "上述判定全部失败")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function matchesWikiTerm(term: string, input: RouteEvaluationInput): boolean {
-  term = term
-    .replace(/\s*[：:]?\s*(?:大概率|小概率|一定概率).*$/g, "")
-    .replace(/\s*[：:]\s*\d+(?:\.\d+)?\s*%.*$/g, "")
-    .replace(/\s*从(?:左|右)出发.*$/g, "")
-    .replace(/[，,：:；;]+$/g, "")
-    .trim();
+export function routingPredicateDiagnostics(predicate: RoutingPredicate): RoutingDiagnostic[] {
+  const nested = [
+    ...(predicate.all ?? []),
+    ...(predicate.any ?? []),
+    ...(predicate.not ? [predicate.not] : [])
+  ].flatMap(routingPredicateDiagnostics);
+  if (!predicate.wiki) return nested;
+  const compiledTerms = new Set(
+    [
+      ...(predicate.countExpressions ?? []).map((expression) => expression.wikiTerm),
+      ...(predicate.shipFamilies ?? []).map((family) => family.wikiTerm)
+    ]
+      .filter((term): term is string => Boolean(term))
+      .map(normalizeWikiConditionText)
+  );
+  return [
+    ...nested,
+    ...unresolvedWikiConditionTerms(predicate.wiki, compiledTerms).map((term) => ({
+      code: "unresolved-wiki-term" as const,
+      condition: predicate.wiki!,
+      term
+    }))
+  ];
+}
+
+function unresolvedWikiConditionTerms(raw: string, compiledTerms: ReadonlySet<string>): string[] {
+  const text = normalizeWikiConditionText(raw);
+  if (!text) return [];
+
+  const orParts = text.split(/\s*(?:或(?!以上)|、)\s*/).filter(Boolean);
+  if (orParts.length > 1 && orParts.every((part) => containsPredicateToken(part))) {
+    return [...new Set(orParts.flatMap((part) => unresolvedWikiConditionTerms(part, compiledTerms)))];
+  }
+
+  return [...new Set(text
+    .split(/\s*且\s*/)
+    .map((term) => term.trim())
+    .filter((term) => !compiledTerms.has(term) && !wikiTermIsSupported(term)))];
+}
+
+function wikiTermIsSupported(rawTerm: string) {
+  const term = cleanWikiTerm(rawTerm);
   if (!term || /^(其余|其他情况|上述判定全部失败|去[A-Z]判定失败)/.test(term)) return true;
-  if (/^(?:即|以上逐条依次判定|舰队船数|DD\+DE数量)$/.test(term)) return true;
-  if (/P1阶段/.test(term)) return input.phase === 1;
-  if (/P2阶段/.test(term)) return input.phase === 2;
-  if (/P3阶段/.test(term)) return input.phase === 3;
-  if (/经过([A-Z])/.test(term)) return (input.visited ?? []).includes(term.match(/经过([A-Z])/)![1]);
-  if (/最速/.test(term)) return input.fleet.speed === "fastest";
-  if (/高速\+(?:或)?以上|高速\+、最速|高速\+(?:的)?舰队|^\[?高速\+\]?$/.test(term)) {
-    return SPEED_ORDER.indexOf(input.fleet.speed) >= SPEED_ORDER.indexOf("fastPlus");
-  }
-  if (/高速以上|高速舰队/.test(term)) return SPEED_ORDER.indexOf(input.fleet.speed) >= SPEED_ORDER.indexOf("fast");
-  if (/高速以下/.test(term)) return SPEED_ORDER.indexOf(input.fleet.speed) <= SPEED_ORDER.indexOf("fast");
-  if (/低速舰队/.test(term)) return input.fleet.speed === "slow";
-  if (/([A-Z]+)旗舰/.test(term)) {
-    const type = term.match(/([A-Z]+)旗舰/)![1];
-    return Boolean(input.fleet.ships[0] && shipMatchesType(input.fleet.ships[0], type));
-  }
-  if (/装备(?:电探|雷达)的船数/.test(term)) return matchesWikiCount(input.fleet.equippedShipCounts.radar ?? 0, term);
-  if (/运输桶/.test(term)) return matchesWikiCount(input.fleet.equippedShipCounts.drum ?? 0, term);
-  if (/大发系/.test(term)) return matchesWikiCount(input.fleet.equippedShipCounts.landingCraft ?? 0, term);
-  if (/索敌/.test(term)) return matchesWikiLos(term, input);
-  if (/只包含/.test(term)) {
-    const allowed = [...term.matchAll(/\b(BBV|FBB|CVL|CVB|CLT|CAV|SSV|BB|CV|CA|CL|CT|DD|DE|SS|AV|AO|LHA|AS|AR)\b/g)].map((match) => match[1]);
-    return allowed.length > 0 && input.fleet.ships.every((ship) => allowed.some((type) => shipMatchesType(ship, type)));
-  }
-  if (/不包含.+以外的舰种/.test(term)) {
-    const allowed = [...term.matchAll(/\b(BBV|FBB|CVL|CVB|CLT|CAV|SSV|BB|CV|CA|CL|CT|DD|DE|SS|AV|AO|LHA|AS|AR)\b/g)].map((match) => match[1]);
-    return allowed.length > 0 && input.fleet.ships.every((ship) => allowed.some((type) => shipMatchesType(ship, type)));
-  }
-  if (/不包含/.test(term)) {
-    const names = namedTokens(term.replace(/^.*不包含/, ""));
-    return names.every((name) => !input.fleet.ships.some((ship) => shipNameMatches(ship.name, name)));
-  }
-  if (/包含/.test(term)) {
-    const names = namedTokens(term.replace(/^.*包含/, ""));
-    return names.every((name) => input.fleet.ships.some((ship) => shipNameMatches(ship.name, name)));
-  }
+  if (/^(?:即|以上逐条依次判定)$/.test(term)) return true;
+  if (/P[123]阶段/.test(term) || /经过[A-Z]/.test(term)) return true;
+  if (/^分歧点系数\s*=\s*\d+$/.test(term)) return true;
+  if (/最速/.test(term)) return true;
+  if (/高速\+(?:或)?以上|高速\+、最速|高速\+(?:的)?舰队|^\[?高速\+\]?$/.test(term)) return true;
+  if (/高速以上|高速舰队|高速以下|低速舰队/.test(term)) return true;
+
+  const flagship = term.match(/([A-Z]+)旗舰/);
+  if (flagship) return Boolean(TYPE_GROUPS[flagship[1]]);
+  if (/装备(?:电探|雷达)的船数|运输桶|大发系/.test(term)) return hasNumericComparison(term);
+  if (/索敌/.test(term)) return wikiLosTermIsSupported(term);
+  if (/只包含|不包含.+以外的舰种/.test(term)) return extractTypeTokens(term).length > 0;
+  // Named-ship inclusion/exclusion must have a generated shipFamilies term.
+  // It is intentionally not accepted here by display name alone.
+  if (/不包含|包含/.test(term)) return false;
 
   const chainedComparison = term.match(/^(\d+)\s*<=\s*([^<>=\s]+(?:\+[^<>=\s]+)*)\s*<=\s*(\d+)$/);
-  if (chainedComparison) {
-    const value = countFleetExpression(chainedComparison[2], input.fleet);
-    return value >= Number(chainedComparison[1]) && value <= Number(chainedComparison[3]);
-  }
-
+  if (chainedComparison) return fleetExpressionIsTyped(chainedComparison[2]);
   const comparison = term.match(/^([^<>=\s]+(?:\+[^<>=\s]+)*)\s*(>=|<=|=|>|<)\s*(\d+|舰队船数)$/);
-  if (comparison) {
-    const value = countFleetExpression(comparison[1], input.fleet);
-    const expected = comparison[3] === "舰队船数" ? input.fleet.ships.length : Number(comparison[3]);
-    return compareNumber(value, comparison[2], expected);
-  }
-
+  if (comparison) return fleetExpressionIsTyped(comparison[1]);
   const range = term.match(/^([^<>=\s]+(?:\+[^<>=\s]+)*)\s*=\s*(\d+)\s*[~～-]\s*(\d+)$/);
-  if (range) {
-    const value = countFleetExpression(range[1], input.fleet);
-    return value >= Number(range[2]) && value <= Number(range[3]);
-  }
-
-  if (/舰队船数/.test(term)) return matchesWikiCount(input.fleet.ships.length, term);
+  if (range) return fleetExpressionIsTyped(range[1]);
+  if (/舰队船数/.test(term)) return hasNumericComparison(term);
   return false;
 }
 
-function countFleetExpression(expression: string, fleet: RoutingFleet) {
-  return expression.split("+").reduce((sum, token) => {
-    if (token === "舰队船数") return sum + fleet.ships.length;
-    if (TYPE_GROUPS[token]) return sum + fleet.ships.filter((ship) => shipMatchesType(ship, token)).length;
-    if (token === "大鹰级") return sum + fleet.ships.filter((ship) => ship.classId === 76).length;
-    return sum + fleet.ships.filter((ship) => shipNameMatches(ship.name, token)).length;
-  }, 0);
+function cleanWikiTerm(term: string) {
+  return term
+    .replace(/\s*[：:]?\s*(?:大概率|小概率|一定概率).*$/g, "")
+    .replace(/\s*[：:]\s*\d+(?:\.\d+)?\s*%.*$/g, "")
+    .replace(/\s*从(?:左|右|[12])出发.*$/g, "")
+    .replace(/^即[，,]?\s*/g, "")
+    .replace(/时[：:]?$/g, "")
+    .replace(/[，,：:；;]+$/g, "")
+    .trim();
 }
 
-function shipNameMatches(shipName: string, expected: string) {
-  return normalizeShipName(shipName).includes(normalizeShipName(expected));
+function extractTypeTokens(term: string) {
+  return [...term.matchAll(/\b(BBV|FBB|CVL|CVB|CLT|CAV|SSV|BB|CV|CA|CL|CT|DD|DE|SS|AV|AO|LHA|AS|AR)\b/g)]
+    .map((match) => match[1]);
 }
 
-function normalizeShipName(value: string) {
-  const replacements: Record<string, string> = {
-    風: "风",
-    鶴: "鹤",
-    鳳: "凤",
-    張: "张",
-    長: "长",
-    門: "门",
-    陸: "陆",
-    黒: "黑"
-  };
-  return value
-    .normalize("NFKC")
-    .replace(/[風鶴鳳張長門陸黒]/g, (character) => replacements[character])
-    .replace(/\s+/g, "");
+function fleetExpressionIsTyped(expression: string) {
+  return expression.split("+").every((token) => token === "舰队船数" || token === "大鹰级" || Boolean(TYPE_GROUPS[token]));
 }
 
-function matchesWikiCount(value: number, term: string) {
-  const range = term.match(/=\s*(\d+)\s*[~～-]\s*(\d+)/);
-  if (range) return value >= Number(range[1]) && value <= Number(range[2]);
-  const comparison = term.match(/(>=|<=|=|>|<)\s*(\d+)/);
-  return comparison ? compareNumber(value, comparison[1], Number(comparison[2])) : true;
+function hasNumericComparison(term: string) {
+  return /=\s*\d+\s*[~～-]\s*\d+/.test(term) || /(>=|<=|=|>|<)\s*\d+/.test(term);
 }
 
-function matchesWikiLos(term: string, input: RouteEvaluationInput) {
-  const coefficient = Number(term.match(/分歧点系数\s*=\s*(\d+)/)?.[1] ?? 1);
-  const score = calculateFleetLos33(input.fleet, coefficient, input.playerLevel ?? 1);
-  const range = term.match(/索敌\s*(\d+(?:\.\d+)?)\s*[~～-]\s*(\d+(?:\.\d+)?)/);
-  if (range) return score >= Number(range[1]) && score < Number(range[2]);
-  const comparison = term.match(/索敌\s*(>=|<=|>|<)\s*(\d+(?:\.\d+)?)/);
-  if (comparison) return compareNumber(score, comparison[1], Number(comparison[2]));
-  const above = term.match(/(\d+(?:\.\d+)?)索敌以上/);
-  if (above) return score >= Number(above[1]);
-  const below = term.match(/(\d+(?:\.\d+)?)索敌以下|索敌不足\s*(\d+(?:\.\d+)?)/);
-  if (below) return score < Number(below[1] ?? below[2]);
-  return false;
+function wikiLosTermIsSupported(term: string) {
+  return /\d+(?:\.\d+)?\s*<=\s*索敌\s*<\s*\d+(?:\.\d+)?/.test(term)
+    || /索敌\s*\d+(?:\.\d+)?\s*[~～-]\s*\d+(?:\.\d+)?/.test(term)
+    || /\d+(?:\.\d+)?\s*[~～-]\s*\d+(?:\.\d+)?索敌/.test(term)
+    || /索敌\s*(>=|<=|>|<)\s*\d+(?:\.\d+)?/.test(term)
+    || /\d+(?:\.\d+)?索敌以上/.test(term)
+    || /\d+(?:\.\d+)?索敌以下|索敌不足\s*\d+(?:\.\d+)?/.test(term);
 }
 
 function compareNumber(value: number, operator: string, expected: number) {
@@ -551,14 +884,6 @@ function compareNumber(value: number, operator: string, expected: number) {
   if (operator === ">") return value > expected;
   if (operator === "<") return value < expected;
   return value === expected;
-}
-
-function namedTokens(text: string) {
-  return text
-    .replace(/[、，,]|\s+和\s+/g, "+")
-    .split("+")
-    .map((token) => token.replace(/[^一-龥ぁ-んァ-ヶA-Za-z0-9]/g, "").trim())
-    .filter((token) => token.length >= 2 && !["舰队", "以上", "以下"].includes(token));
 }
 
 function containsPredicateToken(text: string) {

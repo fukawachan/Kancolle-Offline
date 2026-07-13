@@ -1,0 +1,31 @@
+{
+  "domain": "quest",
+  "generatedAt": "2026-07-12T13:23:48.836Z",
+  "generator": "scripts/generate-quest-data.mjs",
+  "repositoryRevision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "bytes": 456513,
+      "contentType": "application/json; charset=utf-8",
+      "etag": "W/\"66716736-6f741\"",
+      "evidence": "exact",
+      "file": "data.json",
+      "finalUrl": "https://kcwikizh.github.io/kcwiki-quest-data/data.json",
+      "lastModified": "Tue, 18 Jun 2024 10:53:42 GMT",
+      "license": {
+        "note": "Compiled community quest database; consult the pinned upstream repository for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwikizh/kcwiki-quest-data/tree/f3a555a1326bf026fd5704d076ce145a7cdf8414"
+      },
+      "parameters": {
+        "buildArtifact": "data.json"
+      },
+      "requestedUrl": "https://kcwikizh.github.io/kcwiki-quest-data/data.json",
+      "retrievedAt": "2026-07-12T13:23:48.836Z",
+      "revision": "f3a555a1326bf026fd5704d076ce145a7cdf8414",
+      "sha256": "ede8253dc1108ad65c187b7b61c2b8b64dec2fa987e37871d628ae83fde9e3bd",
+      "status": 200
+    }
+  ]
+}

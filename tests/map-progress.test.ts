@@ -128,7 +128,8 @@ describe("normal-map battle progression", () => {
     expect(useItemCount(store, 57)).toBe(0);
 
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-08-01T00:00:00.000+09:00"));
+    vi.setSystemTime(new Date("2026-08-01T05:00:00.000+09:00"));
+    store.settle();
     expect(store.getSave().maps.find((map) => map.id === 16)).toMatchObject({
       cleared: 0,
       gauge: 7,
@@ -160,7 +161,7 @@ describe("normal-map battle progression", () => {
     store.close();
   });
 
-  it("advances all four 7-5 phases and accepts a non-sinking victory at M", () => {
+  it("advances all four 7-5 phases and requires an S victory at M", () => {
     const store = registeredStore();
     store.startSortie(1, 7, 5);
 
@@ -168,6 +169,8 @@ describe("normal-map battle progression", () => {
       settleAt(store, { mapId: 75, point: "K", node: 11, isBoss: false, flagshipHp: 0 });
     }
     settleAt(store, { mapId: 75, point: "M", node: 15, isBoss: false, flagshipHp: 1, rank: "B" });
+    expect(store.getSave().maps.find((map) => map.id === 75)).toMatchObject({ phase: 2, gauge: 1 });
+    settleAt(store, { mapId: 75, point: "M", node: 15, isBoss: false, flagshipHp: 1, rank: "S" });
     expect(store.getSave().maps.find((map) => map.id === 75)).toMatchObject({ phase: 3, gauge: 3 });
 
     for (let count = 0; count < 3; count += 1) {
@@ -185,11 +188,120 @@ describe("normal-map battle progression", () => {
     });
     store.close();
   });
+
+  it("runs 5-6 from transport landing through the R unlock and both boss gauges", () => {
+    const store = registeredStore();
+    expect(store.startSortie(1, 5, 6)).not.toBeNull();
+
+    const before = store.getSave();
+    const beforeDevmat = before.materials.devmat;
+    const beforeFactoryMaterial = useItemCount(store, 104);
+    const beforeRanking = before.recordStats.rankingPoints;
+
+    settleAt(store, {
+      mapId: 56,
+      point: "G",
+      node: 11,
+      isBoss: true,
+      flagshipHp: 1,
+      rank: "S",
+      transportSPoints: 100
+    });
+    settleAt(store, {
+      mapId: 56,
+      point: "G",
+      node: 11,
+      isBoss: true,
+      flagshipHp: 1,
+      rank: "S",
+      transportSPoints: 100
+    });
+    settleAt(store, {
+      mapId: 56,
+      point: "G",
+      node: 11,
+      isBoss: true,
+      flagshipHp: 1,
+      rank: "A",
+      transportSPoints: 115
+    });
+    expect(store.getSave().maps.find((map) => map.id === 56)).toMatchObject({
+      cleared: 0,
+      phase: 2,
+      phaseProgress: 0,
+      gauge: 1
+    });
+
+    expect(store.startSortie(1, 5, 6)).not.toBeNull();
+    const arrivalSession = store.getSave().sortieSession!;
+    store.db.prepare("UPDATE sortie_sessions SET node = 18, state_json = ? WHERE id = ?").run(
+      JSON.stringify({
+        ...arrivalSession.state,
+        point: "H",
+        phase: 2,
+        routeStep: 8,
+        visited: ["Start", "A", "H"]
+      }),
+      arrivalSession.id
+    );
+    expect(store.nextSortieNode()?.state.point).toBe("R");
+    expect(store.getSave().maps.find((map) => map.id === 56)).toMatchObject({ phase: 3, gauge: 2 });
+
+    for (let count = 0; count < 2; count += 1) {
+      settleAt(store, { mapId: 56, point: "N", node: 14, isBoss: true, flagshipHp: 0 });
+    }
+    expect(store.getSave().maps.find((map) => map.id === 56)).toMatchObject({ phase: 4, gauge: 3 });
+
+    for (let count = 0; count < 3; count += 1) {
+      settleAt(store, { mapId: 56, point: "Z", node: 30, isBoss: true, flagshipHp: 0 });
+    }
+    const repeated = store.applySortieBattleResult();
+    const cleared = store.getSave();
+    expect(repeated.applied).toBe(false);
+    expect(cleared.maps.find((map) => map.id === 56)).toMatchObject({
+      cleared: 1,
+      phase: 5,
+      phaseProgress: 0,
+      gauge: 0,
+      clearCount: 1
+    });
+    expect(cleared.materials.devmat).toBe(beforeDevmat + 4);
+    expect(useItemCount(store, 104)).toBe(beforeFactoryMaterial + 1);
+    expect(cleared.recordStats.rankingPoints).toBe(beforeRanking + 225);
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-08-01T05:00:00.000+09:00"));
+    store.settle();
+    expect(store.getSave().maps.find((map) => map.id === 56)).toMatchObject({
+      unlocked: 1,
+      cleared: 0,
+      phase: 1,
+      phaseProgress: 0,
+      gauge: 280,
+      clearCount: 1
+    });
+    expect(store.getSave().materials.devmat).toBe(beforeDevmat + 4);
+    expect(useItemCount(store, 104)).toBe(beforeFactoryMaterial + 1);
+    vi.useRealTimers();
+    store.close();
+  });
+
+  it("unlocks 5-6 only after 5-5 has been cleared at least once", () => {
+    const store = createStateStore({ databasePath: ":memory:" });
+    store.registerAccount(15);
+    expect(store.getSave().maps.find((map) => map.id === 56)?.unlocked).toBe(0);
+
+    store.db.prepare("UPDATE maps SET cleared = 1, clear_count = 1 WHERE id = 55").run();
+    store.settle();
+    expect(store.getSave().maps.find((map) => map.id === 56)?.unlocked).toBe(1);
+    store.close();
+  });
 });
 
 function registeredStore() {
   const store = createStateStore({ databasePath: ":memory:" });
   store.registerAccount(15);
+  store.db.prepare("UPDATE maps SET unlocked = 1").run();
   return store;
 }
 
@@ -206,6 +318,7 @@ function settleAt(
     isBoss: boolean;
     flagshipHp: number;
     rank?: "S" | "A" | "B" | "C";
+    transportSPoints?: number;
   }
 ) {
   const battle = createSortieBattle(store.getSave(), { formation: 1 });
@@ -223,7 +336,18 @@ function settleAt(
       mapId: input.mapId,
       node: input.node,
       point: input.point,
-      isBoss: input.isBoss
+      isBoss: input.isBoss,
+      ...(input.transportSPoints == null
+        ? {}
+        : {
+            visited: ["Start", "E", input.point],
+            transportLanding: {
+              mapId: input.mapId,
+              phase: 1,
+              point: "E",
+              sRankPoints: input.transportSPoints
+            }
+          })
     },
     after: {
       ...battle.record.after,

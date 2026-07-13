@@ -23,6 +23,24 @@ function loadGeneratorExports() {
 }
 
 describe("master data generation", () => {
+  it("preserves player evasion, ASW, and LoS growth bounds", () => {
+    const { mapShip } = loadGeneratorExports();
+
+    expect(mapShip({
+      _api_id: 9,
+      _evasion: 40,
+      _evasion_max: 89,
+      _asw: 20,
+      _asw_max: 49,
+      _los: 5,
+      _los_max: 19
+    })).toMatchObject({
+      api_houk: [40, 89],
+      api_tais: [20, 49],
+      api_saku: [5, 19]
+    });
+  });
+
   it("maps wiki remodel material and reversible remodel costs into internal extra costs", () => {
     const { buildShipRemodelExtraCosts } = loadGeneratorExports();
 

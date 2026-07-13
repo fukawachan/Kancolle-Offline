@@ -95,14 +95,15 @@ describe("normal-map routing evaluator", () => {
     expect(calculateFleetLos33(fleet, 1, save.player.level)).toBeCloseTo(14.24, 2);
   });
 
-  it("snapshots the official ship class and level-scaled base LoS", () => {
+  it("snapshots the official ship class and master-driven base LoS through level 188", () => {
     const save = saveWithLos();
     save.ships[0].stats = {};
-
-    const ship = buildRoutingFleet(save, 1).ships[0];
-
-    expect(ship.classId).toBe(12);
-    expect(ship.baseLos).toBe(5);
+    for (const [level, expectedLos] of [[1, 5], [50, 12], [99, 19], [188, 31]] as const) {
+      save.ships[0].level = level;
+      const ship = buildRoutingFleet(save, 1).ships[0];
+      expect(ship.classId).toBe(12);
+      expect(ship.baseLos).toBe(expectedLos);
+    }
   });
 
   it("uses turbine and boiler equipment for effective fleet speed", () => {
@@ -154,6 +155,64 @@ describe("normal-map routing evaluator", () => {
     map.branches.A[0] = { when: { los: { coefficient: 1, gte: score } }, to: "C" };
     expect(evaluateRoute(map, { fleet, seed: 1, step: 1, phase: 1, from: "A", playerLevel: 10 }))
       .toMatchObject({ to: "C" });
+  });
+
+  it("honors chained LoS lower bounds and inclusive 'or below' wording", () => {
+    const fleet = fleetContext(1);
+    // Formula 33 at Cn1/HQ1: sqrt(361) - ceil(0.4) + 2*(6-1) = 28.
+    fleet.ships[0].baseLos = 361;
+    const inclusiveMap: RoutingMap = {
+      mapId: 16,
+      revision: 1,
+      edges: [
+        { no: 1, from: "A", to: "B" },
+        { no: 2, from: "A", to: "C" }
+      ],
+      branches: {
+        A: [
+          { when: { wiki: "分歧点系数=1 且 28索敌以下" }, to: "C" },
+          { to: "B" }
+        ]
+      }
+    };
+    expect(evaluateRoute(inclusiveMap, {
+      fleet,
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "A",
+      playerLevel: 1
+    })).toMatchObject({ to: "C" });
+
+    const chainedMap: RoutingMap = {
+      ...inclusiveMap,
+      mapId: 75,
+      branches: {
+        A: [
+          { when: { wiki: "分歧点系数=1 且 53<=索敌<59" }, to: "C" },
+          { to: "B" }
+        ]
+      }
+    };
+    // Score 52 is below the random range and score 53 is exactly inside it.
+    fleet.ships[0].baseLos = 1_849;
+    expect(evaluateRoute(chainedMap, {
+      fleet,
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "A",
+      playerLevel: 1
+    })).toMatchObject({ to: "B" });
+    fleet.ships[0].baseLos = 1_936;
+    expect(evaluateRoute(chainedMap, {
+      fleet,
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "A",
+      playerLevel: 1
+    })).toMatchObject({ to: "C" });
   });
 
   it("matches specified-ship remodel families by master id", () => {
@@ -215,7 +274,7 @@ describe("normal-map routing evaluator", () => {
       .toMatchObject({ to: "C" });
   });
 
-  it("does not treat an unsupported wiki condition as matched", () => {
+  it("fails closed with the unsupported wiki term in the diagnostic", () => {
     const map: RoutingMap = {
       mapId: 11,
       revision: 1,
@@ -231,8 +290,37 @@ describe("normal-map routing evaluator", () => {
       }
     };
 
-    expect(evaluateRoute(map, { fleet: fleetContext(1), seed: 1, step: 1, phase: 1, from: "A" }))
-      .toMatchObject({ to: "B" });
+    expect(() => evaluateRoute(map, {
+      fleet: fleetContext(1),
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "A"
+    })).toThrow(/尚未支持的条件/);
+  });
+
+  it("fails closed on an unexpanded compact probability-table header", () => {
+    const map: RoutingMap = {
+      mapId: 12,
+      revision: 1,
+      edges: [
+        { no: 1, from: "Start", to: "A" },
+        { no: 2, from: "Start", to: "B" }
+      ],
+      branches: {
+        Start: [
+          { when: { wiki: "舰队船数" }, weights: { A: 1, B: 1 } }
+        ]
+      }
+    };
+
+    expect(() => evaluateRoute(map, {
+      fleet: fleetContext(1),
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "Start"
+    })).toThrow(/舰队船数/);
   });
 
   it("supports declarative ship-class counts", () => {
@@ -301,6 +389,44 @@ describe("normal-map routing evaluator", () => {
 
     expect(evaluateRoute(map, { fleet: fleetContext(1), seed: 1, step: 1, phase: 1, from: "A" }))
       .toMatchObject({ to: "C" });
+  });
+
+  it("retains child predicates inherited after a failed prior decision", () => {
+    const map: RoutingMap = {
+      mapId: 25,
+      revision: 1,
+      edges: [
+        { no: 1, from: "A", to: "B" },
+        { no: 2, from: "A", to: "C" }
+      ],
+      branches: {
+        A: [
+          { when: { wiki: "索敌>=49 或 去H判定失败 且 SS系>=1" }, to: "C" },
+          { to: "B" }
+        ]
+      }
+    };
+    const surfaceFleet = fleetContext(1);
+    surfaceFleet.ships[0].baseLos = 2_500;
+
+    expect(evaluateRoute(map, {
+      fleet: surfaceFleet,
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "A",
+      playerLevel: 1
+    })).toMatchObject({ to: "B" });
+
+    surfaceFleet.ships[0].shipType = 13;
+    expect(evaluateRoute(map, {
+      fleet: surfaceFleet,
+      seed: 1,
+      step: 1,
+      phase: 1,
+      from: "A",
+      playerLevel: 1
+    })).toMatchObject({ to: "C" });
   });
 
   it("ignores probability annotations after a fleet-count condition", () => {
@@ -383,7 +509,18 @@ function saveWithLos(): SaveState {
       exp: 0,
       comment: "",
       tutorialProgress: 100,
-      options: { bgmFlag: 1, voiceFlag: 1, seFlag: 1, volBgm: 80, volSe: 80, volVoice: 80 },
+      options: {
+        bgmFlag: 1,
+        voiceFlag: 1,
+        seFlag: 1,
+        volBgm: 80,
+        volSe: 80,
+        volVoice: 80,
+        friendlyRequestFlag: 0,
+        friendlyRequestType: 0,
+        ossItems: [0, 0, 0, 0],
+        languageType: 0
+      },
       flagshipPosition: 1,
       combinedFleet: 0,
       portBgmId: 1,
@@ -436,7 +573,16 @@ function saveWithLos(): SaveState {
     expeditionRuns: [],
     expeditionSettings: { fixedSeed: null, clockOffsetMs: 0, unlockAll: 0 },
     eventSettings: { activeAreaId: null },
-    recordStats: { battleWin: 0, battleLose: 0, practiceWin: 0, practiceLose: 0, missionCount: 0, missionSuccess: 0 },
+    recordStats: {
+      battleWin: 0,
+      battleLose: 0,
+      practiceWin: 0,
+      practiceLose: 0,
+      missionCount: 0,
+      missionSuccess: 0,
+      rankingPoints: 0,
+      rankingPeriodKey: "2026-07"
+    },
     useItems: []
   };
 }

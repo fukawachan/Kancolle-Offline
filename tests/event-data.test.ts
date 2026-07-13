@@ -2,6 +2,7 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   eventDefinition,
+  eventResourceStatus,
   eventSupportExpeditionDefinitions,
   eventSupportExpeditionMasters,
   eventRoutingMap,
@@ -19,7 +20,21 @@ describe("local event data package", () => {
   });
 
   it("validates the cache-backed 061 event maps and route references", () => {
-    const validation = validateEventPackage(61, resourceManifest);
+    const rejected = validateEventPackage(61, resourceManifest);
+    expect(rejected).toMatchObject({ ok: false, error: expect.stringMatching(/synthetic debug/i) });
+
+    const productionStatus = eventResourceStatus(resourceManifest)[0];
+    expect(productionStatus).toMatchObject({
+      packageId: "synthetic-debug-061-v1",
+      packageKind: "synthetic-debug",
+      productionEligible: false,
+      cacheComplete: true,
+      packageComplete: true,
+      activatable: false
+    });
+    expect(eventResourceStatus(resourceManifest, null, { allowSynthetic: true })[0].activatable).toBe(true);
+
+    const validation = validateEventPackage(61, resourceManifest, { allowSynthetic: true });
     expect(validation.ok).toBe(true);
 
     const event = eventDefinition(61)!;

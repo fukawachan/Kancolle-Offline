@@ -1,18 +1,20 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFrozenSourceSession, generatedOutputPath } from "./lib/frozen-source.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const CACHE_DIR = path.join(ROOT, ".local", "sortie-data-cache");
-const OUTPUT_PATH = path.join(ROOT, "src", "master", "sortie-data.generated.json");
+const OUTPUT_PATH = generatedOutputPath(path.join(ROOT, "src", "master", "sortie-data.generated.json"));
 const DROP_BASE_URL = "https://db.kcwiki.cn";
-const START2_URL = "https://api.kcwiki.org/start2";
-const ENEMY_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/wiki/enemy.json";
-const ENEMY_EQUIPMENT_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/wiki/enemyEquipment.json";
-const SHIP_URL = "https://cdn.jsdelivr.net/gh/kcwiki/kancolle-data@master/wiki/ship.json";
-const REFRESH_CACHE = process.argv.includes("--refresh");
+const KANCOLLE_DATA_COMMIT = "a8018819ad330b73c714fbba195794453c8dfde3";
+const DATA_BASE = `https://raw.githubusercontent.com/kcwiki/kancolle-data/${KANCOLLE_DATA_COMMIT}`;
+const START2_URL = `${DATA_BASE}/api/api_start2.json`;
+const ENEMY_URL = `${DATA_BASE}/wiki/enemy.json`;
+const ENEMY_EQUIPMENT_URL = `${DATA_BASE}/wiki/enemyEquipment.json`;
+const SHIP_URL = `${DATA_BASE}/wiki/ship.json`;
 const WIKI_RAW_URLS = new Map([
   [52, "https://zh.kcwiki.cn/wiki/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-2?action=raw"],
+  [56, "https://zh.kcwiki.cn/wiki/%E5%8D%97%E6%96%B9%E6%B5%B7%E5%9F%9F/5-6?action=raw"],
   [72, "https://zh.kcwiki.cn/wiki/%E5%8D%97%E8%A5%BF%E6%B5%B7%E5%9F%9F/7-2?action=raw"]
 ]);
 const FORMATION_IDS = new Map([
@@ -29,12 +31,16 @@ const FORMATION_IDS = new Map([
   ["警戒陣", 6],
   ["警戒阵", 6]
 ]);
+// Enemy combined fleets use the four cruising formations.  The drop source
+// serializes those fleets as twelve slash-separated ships followed by the
+// formation id, without an explicit main/escort delimiter.
+const ENEMY_COMBINED_FORMATION_IDS = new Set([11, 12, 13, 14]);
 const NORMAL_MAP_IDS = [
   11, 12, 13, 14, 15, 16,
   21, 22, 23, 24, 25,
   31, 32, 33, 34, 35,
   41, 42, 43, 44, 45,
-  51, 52, 53, 54, 55,
+  51, 52, 53, 54, 55, 56,
   61, 62, 63, 64, 65,
   71, 72, 73, 74, 75
 ];
@@ -62,9 +68,12 @@ const SHIP_TYPE_NAMES = new Map([
   [21, "練習巡洋艦"],
   [22, "補給艦"]
 ]);
+const session = await createFrozenSourceSession("sortie", {
+  generator: "scripts/generate-sortie-data.mjs",
+  userAgent: "kancolle-local-sortie-generator"
+});
 
 async function main() {
-  await mkdir(CACHE_DIR, { recursive: true });
   console.log("Fetching kcwiki master sources...");
   const [start2Response, enemyData, enemyEquipmentData, shipData] = await Promise.all([
     fetchJsonCached("start2.json", START2_URL),
@@ -104,7 +113,10 @@ async function main() {
   process.stdout.write("\n");
 
   const enemyIds = new Set(
-    fetchedPoints.flatMap((point) => point.encounters.flatMap((encounter) => encounter.shipIds))
+    fetchedPoints.flatMap((point) => point.encounters.flatMap((encounter) => [
+      ...encounter.shipIds,
+      ...(encounter.enemyCombinedShipIds ?? [])
+    ]))
   );
   const equipmentIds = new Set();
   const enemyTemplates = {};
@@ -154,7 +166,7 @@ async function main() {
   validateGeneratedData(maps, enemyTemplates, enemyShips, enemySlots);
 
   const generated = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: session.generatedAt,
     sources: {
       drop: `${DROP_BASE_URL}/drop/`,
       start2: START2_URL,
@@ -168,6 +180,7 @@ async function main() {
     enemySlots
   };
   await writeFile(OUTPUT_PATH, `${JSON.stringify(generated)}\n`);
+  await session.finalize({ repositoryRevision: KANCOLLE_DATA_COMMIT });
 
   const nodeCount = maps.reduce(
     (sum, map) => sum + map.points.reduce((pointSum, point) => pointSum + point.nodeNos.length, 0),
@@ -188,16 +201,19 @@ function parseMapPoints(mapId, html) {
     "g"
   );
   return [...html.matchAll(expression)].map((match) => {
-    const hrefMatch = match[1].match(/^([A-Z]+)-([A-Z]+)\.html$/);
+    const hrefMatch = match[1].match(/^([A-Z]+\d*)-([A-Z]+)\.html$/);
     if (!hrefMatch) throw new Error(`Unexpected drop link for map ${mapId}: ${match[1]}`);
     const nodeNos = parseNodeNos(match[2]);
     if (nodeNos.length === 0) throw new Error(`Missing node numbers for map ${mapId} point ${hrefMatch[1]}`);
+    // 5-6 is a three-gauge map. The drop source only decorates the final point
+    // as "Boss", but G and N are also phase bosses in the published map rules.
+    const isMap56PhaseBoss = mapId === 56 && ["G", "N", "Z"].includes(hrefMatch[1]);
     return {
       mapId,
       point: hrefMatch[1],
       ranks: hrefMatch[2],
       title: match[2].replace(/\s*\([^)]+\)\s*$/, ""),
-      isBoss: match[3].includes("Boss"),
+      isBoss: match[3].includes("Boss") || isMap56PhaseBoss,
       nodeNos
     };
   });
@@ -228,7 +244,13 @@ function buildPointData(point, dropData, shipByJapaneseName, fallbackEncounters 
         shipType: shipName === "(无)" ? "" : SHIP_TYPE_NAMES.get(numberValue(ship._type)) ?? "",
         rankWeights: rankWeightsOf(entry.rankCount),
         totalWeight: numberValue(entry.totalCount),
-        enemyWeights: sortedObject(enemyWeights)
+        enemyWeights: sortedObject(enemyWeights),
+        evidence: {
+          level: "statistical",
+          source: `drop-${point.mapId}-${point.point}-${point.ranks}.json`,
+          sampleSize: numberValue(entry.totalCount),
+          observedAt: dropData.timeRange ?? []
+        }
       };
     })
     .sort((left, right) => {
@@ -244,7 +266,12 @@ function buildPointData(point, dropData, shipByJapaneseName, fallbackEncounters 
         shipIds: parsed.shipIds,
         ...(parsed.enemyCombinedShipIds.length > 0 ? { enemyCombinedShipIds: parsed.enemyCombinedShipIds } : {}),
         formation: parsed.formation,
-        weight: rankCounts.reduce((sum, count) => sum + count, 0)
+        weight: rankCounts.reduce((sum, count) => sum + count, 0),
+        evidence: {
+          level: "statistical",
+          source: `drop-${point.mapId}-${point.point}-${point.ranks}.json`,
+          sampleSize: rankCounts.reduce((sum, count) => sum + count, 0)
+        }
       };
     })
     .sort((left, right) => left.key.localeCompare(right.key));
@@ -257,7 +284,13 @@ function buildPointData(point, dropData, shipByJapaneseName, fallbackEncounters 
       shipType: "",
       rankWeights: [encounters.length, encounters.length, encounters.length],
       totalWeight: encounters.length * 3,
-      enemyWeights: Object.fromEntries(encounters.map((encounter) => [encounter.key, [1, 1, 1]]))
+      enemyWeights: Object.fromEntries(encounters.map((encounter) => [encounter.key, [1, 1, 1]])),
+      evidence: {
+        level: "fallback",
+        source: `wiki-${point.mapId}.txt`,
+        sampleSize: 0,
+        observedAt: []
+      }
     });
   }
   return {
@@ -271,7 +304,15 @@ function buildPointData(point, dropData, shipByJapaneseName, fallbackEncounters 
     nodeNos: point.nodeNos,
     encounters,
     dropPool,
-    observedAt: dropData.timeRange ?? []
+    observedAt: dropData.timeRange ?? [],
+    evidence: {
+      level: numberValue(dropData.totalCount) > 0 ? "statistical" : "fallback",
+      source: numberValue(dropData.totalCount) > 0
+        ? `drop-${point.mapId}-${point.point}-${point.ranks}.json`
+        : `wiki-${point.mapId}.txt`,
+      sampleSize: numberValue(dropData.totalCount),
+      observedAt: dropData.timeRange ?? []
+    }
   };
 }
 
@@ -288,16 +329,22 @@ function parseWikiPointEncounters(point, wikiRaw) {
   const enemyExpression = /^\s*\|\s*敌方(\d*)\s*=(.*)$/gm;
   for (const match of block.matchAll(enemyExpression)) {
     const suffix = match[1];
-    const shipIds = [...match[2].matchAll(/\{\{深海横幅\|(\d+)/g)].map((item) => Number(item[1]));
-    if (shipIds.length === 0) continue;
+    const parsedShipIds = [...match[2].matchAll(/\{\{深海横幅\|(\d+)/g)].map((item) => Number(item[1]));
+    if (parsedShipIds.length === 0) continue;
     const formationLine = block.match(new RegExp(`^\\s*\\|\\s*阵型${suffix}\\s*=(.*)$`, "m"))?.[1] ?? "";
     const formation = formationId(formationLine);
+    const { shipIds, enemyCombinedShipIds } = splitEnemyFormation(parsedShipIds, formation, `wiki:${point.mapId}-${point.point}`);
     encounters.push({
       key: `wiki:${point.mapId}-${point.point}-${suffix || "1"}/${formation}`,
       shipIds,
-      enemyCombinedShipIds: [],
+      enemyCombinedShipIds,
       formation,
-      weight: 1
+      weight: 1,
+      evidence: {
+        level: "fallback",
+        source: `wiki-${point.mapId}.txt`,
+        sampleSize: 0
+      }
     });
   }
   return encounters;
@@ -312,11 +359,33 @@ function formationId(value) {
 
 function parseEnemyFleetKey(key) {
   const [mainFleetKey, escortFleetKey = ""] = key.split(/\s*(?:\|\||\+護衛\+|\+escort\+)\s*/i, 2);
-  const shipIds = [...mainFleetKey.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
-  const enemyCombinedShipIds = [...escortFleetKey.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
   const formation = Number(key.match(/\/(\d+)$/)?.[1] ?? 1);
-  if (shipIds.length === 0) throw new Error(`Cannot parse enemy fleet: ${key}`);
-  return { shipIds, enemyCombinedShipIds, formation };
+  const parsedMain = [...mainFleetKey.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
+  const parsedEscort = [...escortFleetKey.matchAll(/\((\d+)\)/g)].map((match) => Number(match[1]));
+  if (parsedMain.length === 0) throw new Error(`Cannot parse enemy fleet: ${key}`);
+  if (parsedEscort.length > 0) {
+    validateEnemyFleetSides(parsedMain, parsedEscort, key);
+    return { shipIds: parsedMain, enemyCombinedShipIds: parsedEscort, formation };
+  }
+  const split = splitEnemyFormation(parsedMain, formation, key);
+  return { ...split, formation };
+}
+
+function splitEnemyFormation(shipIds, formation, evidenceKey) {
+  if (shipIds.length <= 6) return { shipIds, enemyCombinedShipIds: [] };
+  if (!ENEMY_COMBINED_FORMATION_IDS.has(formation)) {
+    throw new Error(`Enemy fleet exceeds six ships without a combined formation (${evidenceKey})`);
+  }
+  const main = shipIds.slice(0, 6);
+  const escort = shipIds.slice(6);
+  validateEnemyFleetSides(main, escort, evidenceKey);
+  return { shipIds: main, enemyCombinedShipIds: escort };
+}
+
+function validateEnemyFleetSides(main, escort, evidenceKey) {
+  if (main.length < 1 || main.length > 6 || escort.length > 6) {
+    throw new Error(`Invalid enemy main/escort split ${main.length}+${escort.length} (${evidenceKey})`);
+  }
 }
 
 function enemyShipMaster(enemy, enemyId, onSlot, slotCount) {
@@ -402,6 +471,7 @@ function validateGeneratedData(maps, enemyTemplates, enemyShips, enemySlots) {
     }
     for (const point of map.points) {
       for (const encounter of point.encounters) {
+        validateEnemyFleetSides(encounter.shipIds, encounter.enemyCombinedShipIds ?? [], encounter.key);
         for (const shipId of [...encounter.shipIds, ...(encounter.enemyCombinedShipIds ?? [])]) {
           if (!enemyTemplates[shipId] || !enemyShipIds.has(shipId)) throw new Error(`Missing enemy ${shipId}`);
           for (const slotId of enemyTemplates[shipId].slots) {
@@ -419,19 +489,39 @@ async function fetchJsonCached(filename, url) {
 }
 
 async function fetchTextCached(filename, url) {
-  const cachePath = path.join(CACHE_DIR, filename);
-  if (!REFRESH_CACHE) {
-    try {
-      return await readFile(cachePath, "utf8");
-    } catch {
-      // Populate the local cache below.
-    }
-  }
-  const response = await fetch(url, { headers: { "user-agent": "kancolle-local-sortie-generator" } });
-  if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}`);
-  const text = await response.text();
-  await writeFile(cachePath, text);
-  return text;
+  const repositorySource = ["start2.json", "enemy.json", "enemy-equipment.json", "ship.json"].includes(filename);
+  const wikiFallback = filename.startsWith("wiki-");
+  return session.readText(filename, url, repositorySource
+    ? {
+        revision: KANCOLLE_DATA_COMMIT,
+        evidence: "exact",
+        license: {
+          spdx: "NOASSERTION",
+          url: `https://github.com/kcwiki/kancolle-data/tree/${KANCOLLE_DATA_COMMIT}`,
+          note: "Community master-data snapshot; consult the pinned upstream repository for terms"
+        }
+      }
+    : {
+        evidence: wikiFallback ? "fallback" : "statistical",
+        parameters: sortieSourceParameters(filename),
+        license: {
+          spdx: "NOASSERTION",
+          url: wikiFallback ? "https://zh.kcwiki.cn/" : "https://db.kcwiki.cn/",
+          note: wikiFallback
+            ? "Community wiki fallback used only when the statistical endpoint has no samples"
+            : "Aggregated community observations; no machine-readable license was published"
+        }
+      });
+}
+
+function sortieSourceParameters(filename) {
+  const drop = filename.match(/^drop-(\d+)-([A-Z]+)-([SAB]+)\.json$/);
+  if (drop) return { kind: "drop", mapId: Number(drop[1]), point: drop[2], ranks: drop[3] };
+  const map = filename.match(/^map-(\d+)\.html$/);
+  if (map) return { kind: "map-index", mapId: Number(map[1]) };
+  const wiki = filename.match(/^wiki-(\d+)\.txt$/);
+  if (wiki) return { kind: "wiki-fallback", mapId: Number(wiki[1]) };
+  return { kind: "unknown" };
 }
 
 async function mapLimit(items, limit, task) {

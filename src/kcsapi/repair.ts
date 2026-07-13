@@ -29,7 +29,10 @@ export function repairTimeMs(ship: Ship, master?: ShipMaster): number {
   if (lostHp <= 0) return 0;
 
   const level = Math.max(1, safeInt(ship.level, 1));
-  const seconds = 30 + lostHp * level * 10 * repairTimeMultiplier(master);
+  const levelSeconds = level <= 11
+    ? level * 10
+    : level * 5 + Math.floor(Math.sqrt(level - 11)) * 10 + 50;
+  const seconds = 30 + lostHp * levelSeconds * repairTimeMultiplier(master);
   return Math.floor(seconds * 1000);
 }
 

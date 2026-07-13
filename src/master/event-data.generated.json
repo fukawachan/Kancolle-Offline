@@ -1,5 +1,13 @@
 {
+  "schemaVersion": 1,
+  "packageId": "synthetic-debug-061-v1",
+  "packageKind": "synthetic-debug",
   "generatedAt": "2026-07-08T00:00:00.000Z",
+  "evidence": {
+    "level": "synthetic",
+    "checkedAt": "2026-07-12T00:00:00.000Z",
+    "detail": "Protocol and cached-map debug scaffold only; not a current or historical official event package."
+  },
   "sources": {
     "cache": "cache/kcs2/resources/map/061",
     "kcnav": "https://tsunkit.net/nav/"
@@ -128,6 +136,7 @@
           "sallyFlag": [1, 0, 0],
           "sallyArea": 1,
           "airBaseDecks": 1,
+          "unlock": { "clearedMapIds": [] },
           "bgm": { "moving": 154, "map": [155, 155], "boss": [156, 156] },
           "phaseBreakpoints": [17, 20, 26],
           "ranks": {
@@ -162,6 +171,7 @@
           "sallyFlag": [1, 0, 0],
           "sallyArea": 2,
           "airBaseDecks": 1,
+          "unlock": { "clearedMapIds": [611] },
           "bgm": { "moving": 154, "map": [155, 155], "boss": [156, 156] },
           "phaseBreakpoints": [16, 25, 32],
           "ranks": {
@@ -191,6 +201,7 @@
           "sallyFlag": [1, 0, 0],
           "sallyArea": 3,
           "airBaseDecks": 2,
+          "unlock": { "clearedMapIds": [612] },
           "bgm": { "moving": 154, "map": [155, 155], "boss": [156, 156] },
           "phaseBreakpoints": [9, 25, 45],
           "ranks": {

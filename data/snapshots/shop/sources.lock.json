@@ -1,0 +1,29 @@
+{
+  "domain": "shop",
+  "generatedAt": "2026-07-12T13:23:48.831Z",
+  "generator": "scripts/generate-shop-data.mjs",
+  "repositoryRevision": "a8018819ad330b73c714fbba195794453c8dfde3",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "bytes": 2996980,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"06efd538834c804205b465f8a710c50bd3266d8a57b18c2dc444e4e2e82caa63\"",
+      "evidence": "exact",
+      "file": "start2.json",
+      "finalUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "lastModified": null,
+      "license": {
+        "note": "Community master-data snapshot; consult the pinned upstream repository for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwiki/kancolle-data/tree/a8018819ad330b73c714fbba195794453c8dfde3"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "retrievedAt": "2026-07-12T13:23:48.831Z",
+      "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
+      "sha256": "7dde437696386aadf5b48c661c43f04a381dbcc145e84993b387c54cdf754dac",
+      "status": 200
+    }
+  ]
+}

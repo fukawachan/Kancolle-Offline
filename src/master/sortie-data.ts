@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import type { ShipMaster, SlotMaster } from "./catalog.js";
+import { resolveEnemyStaticStat } from "./ship-stat-growth.js";
 
 export type SortieRank = "S" | "A" | "B";
 export type SortieBattleRank = SortieRank | "C";
@@ -16,6 +17,13 @@ export type EnemyUnitTemplate = {
   luck: number;
   accuracy?: number;
   evasion?: number;
+  asw?: number;
+  los?: number;
+  statEvidence?: {
+    evasion: "published" | "unavailable";
+    asw: "published" | "unavailable";
+    los: "published" | "unavailable";
+  };
   range: number;
   slots: readonly number[];
   onSlot: readonly number[];
@@ -28,15 +36,25 @@ export type SortieEncounter = {
   formation: number;
   weight: number;
   baseExp?: number;
+  evidence?: SortieEvidence;
 };
 
 export type SortieDropEntry = {
   shipId: number | null;
   shipName: string;
   shipType: string;
+  /** Optional event/limited-drop ownership cap from a versioned source. */
+  maxOwned?: number;
   rankWeights: readonly [number, number, number];
   totalWeight: number;
   enemyWeights: Record<string, readonly [number, number, number]>;
+  evidence?: SortieEvidence & { observedAt?: readonly string[] };
+};
+
+export type SortieEvidence = {
+  level: "exact" | "statistical" | "fallback";
+  source: string;
+  sampleSize: number;
 };
 
 export type SortieNodeData = {
@@ -51,6 +69,9 @@ export type SortieNodeData = {
   encounters: readonly SortieEncounter[];
   dropPool: readonly SortieDropEntry[];
   baseExp?: number;
+  /** Source observation window retained from the frozen community sample. */
+  observedAt: readonly string[];
+  evidence?: SortieEvidence & { observedAt?: readonly string[] };
 };
 
 export type SelectedSortieEncounter = {
@@ -65,12 +86,14 @@ export type SelectedSortieEncounter = {
   enemyCombinedShipIds: readonly number[];
   formation: number;
   baseExp?: number;
+  observedAt: readonly string[];
 };
 
 export type SelectedSortieDrop = {
   shipId: number | null;
   shipName: string;
   shipType: string;
+  maxOwned?: number;
 };
 
 type GeneratedPoint = Omit<SortieNodeData, "node"> & {
@@ -91,12 +114,30 @@ type GeneratedSortieData = {
 const require = createRequire(import.meta.url);
 const GENERATED = require("./sortie-data.generated.json") as GeneratedSortieData;
 
-export const ENEMY_UNIT_TEMPLATES = GENERATED.enemyTemplates as Record<number, EnemyUnitTemplate>;
+export const ENEMY_UNIT_TEMPLATES = Object.fromEntries(
+  Object.entries(GENERATED.enemyTemplates).map(([id, template]) => {
+    const masterId = Number(id);
+    const evasion = resolveEnemyStaticStat(masterId, "evasion");
+    const asw = resolveEnemyStaticStat(masterId, "asw");
+    const los = resolveEnemyStaticStat(masterId, "los");
+    return [masterId, {
+      ...template,
+      ...(evasion.ok ? { evasion: evasion.value } : {}),
+      ...(asw.ok ? { asw: asw.value } : {}),
+      ...(los.ok ? { los: los.value } : {}),
+      statEvidence: {
+        evasion: evasion.ok ? "published" : "unavailable",
+        asw: asw.ok ? "published" : "unavailable",
+        los: los.ok ? "published" : "unavailable"
+      }
+    } satisfies EnemyUnitTemplate];
+  })
+) as Record<number, EnemyUnitTemplate>;
 export const DEEP_SEA_SHIP_MASTERS = GENERATED.enemyShips;
 export const DEEP_SEA_SLOT_MASTERS = GENERATED.enemySlots;
 
 const SORTIE_NODES: readonly SortieNodeData[] = GENERATED.maps.flatMap((map) =>
-  map.points.flatMap(({ nodeNos, observedAt: _observedAt, ...point }) =>
+  map.points.flatMap(({ nodeNos, ...point }) =>
     nodeNos.map((node) => ({
       ...point,
       mapId: map.mapId,
@@ -108,6 +149,10 @@ const SORTIE_NODES: readonly SortieNodeData[] = GENERATED.maps.flatMap((map) =>
 const SORTIE_NODE_BY_MAP_AND_NODE = new Map(
   SORTIE_NODES.map((node) => [sortieNodeKey(node.mapId, node.node), node] as const)
 );
+
+for (const node of SORTIE_NODES) {
+  for (const encounter of node.encounters) validateEnemyFleetSplit(encounter, `${node.mapId}:${node.point}`);
+}
 
 const SORTIE_POINT_BASE_EXP = new Map<string, number>([
   ["35:B", 300]
@@ -149,7 +194,8 @@ export function selectSortieEncounter(
     shipIds: encounter.shipIds,
     enemyCombinedShipIds: encounter.enemyCombinedShipIds ?? [],
     formation: encounter.formation,
-    baseExp: encounter.baseExp ?? node.baseExp ?? SORTIE_POINT_BASE_EXP.get(sortiePointKey(node.mapId, node.point))
+    baseExp: encounter.baseExp ?? node.baseExp ?? SORTIE_POINT_BASE_EXP.get(sortiePointKey(node.mapId, node.point)),
+    observedAt: node.observedAt
   };
 }
 
@@ -173,7 +219,8 @@ export function selectSortieDrop(input: {
   return {
     shipId: picked.shipId,
     shipName: picked.shipName,
-    shipType: picked.shipType
+    shipType: picked.shipType,
+    ...(picked.maxOwned == null ? {} : { maxOwned: Math.max(0, Math.trunc(picked.maxOwned)) })
   };
 }
 
@@ -215,4 +262,12 @@ function weightedPick<T>(items: readonly T[], weightFor: (item: T) => number, se
 
 function positiveModulo(value: number, modulus: number) {
   return ((value % modulus) + modulus) % modulus;
+}
+
+function validateEnemyFleetSplit(encounter: SortieEncounter, evidence: string) {
+  const mainCount = encounter.shipIds.length;
+  const escortCount = encounter.enemyCombinedShipIds?.length ?? 0;
+  if (mainCount < 1 || mainCount > 6 || escortCount > 6) {
+    throw new Error(`Invalid enemy fleet split ${mainCount}+${escortCount} at ${evidence} (${encounter.key})`);
+  }
 }

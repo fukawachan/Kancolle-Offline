@@ -3,15 +3,23 @@ import formbody from "@fastify/formbody";
 import Fastify, { type FastifyInstance, type FastifyReply } from "fastify";
 import { readdir, readFile } from "node:fs/promises";
 import { stat } from "node:fs/promises";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ResponseFormat } from "../kcsapi/envelope.js";
 import { API_HTTP_STATUS, apiError, apiOk, serializeApiResponse } from "../kcsapi/envelope.js";
 import { handleKcsApi, requestToHandlerInput } from "../kcsapi/handlers.js";
+import { validateCriticalCommand } from "../kcsapi/request-validation.js";
 import { createResourceManifest, readMappedResource } from "../resources/manifest.js";
 import type { FileResource, ResourceManifest } from "../resources/types.js";
 import { renderBootstrap } from "./bootstrap.js";
 import { patchKcsMainJs } from "./client-patches.js";
+import {
+  assertPlayableSaveClosure,
+  DEFAULT_GAMEPLAY_PROFILE,
+  validateGameplayClosure,
+  type GameplayProfile
+} from "../master/gameplay-profile.js";
 import { renderLauncher, renderWorldPage } from "./launcher.js";
 import { LOCAL_WORLD_ID } from "../state/store.js";
 import type { StateStore } from "../state/store.js";
@@ -41,11 +49,22 @@ export type BuildAppOptions = {
   unknownLogPath: string;
   responseFormat?: ResponseFormat;
   arsenalRandom?: () => number;
+  gameplayProfile?: GameplayProfile;
+  /** Pre-authorized token for deterministic embedding/tests. Production login replaces it. */
+  apiToken?: string;
 };
 
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   await assertCacheDir(options.cacheDir);
   const resourceManifest = await createResourceManifest(options.cacheDir);
+  const gameplayProfile = options.gameplayProfile ?? DEFAULT_GAMEPLAY_PROFILE;
+  const gameplayClosure = validateGameplayClosure(
+    gameplayProfile,
+    resourceManifest,
+    options.stateStore.hasAccount() ? options.stateStore.getSave() : undefined
+  );
+  assertPlayableSaveClosure(gameplayClosure);
+  let activeApiToken = options.apiToken && options.apiToken.length >= 16 ? options.apiToken : null;
 
   const app = Fastify({ logger: false, bodyLimit: 10 * 1024 * 1024 });
   await app.register(formbody);
@@ -63,6 +82,21 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
 
   app.get("/", async (_request, reply) => {
     return reply.type("text/html; charset=utf-8").send(renderLauncher());
+  });
+
+  app.get("/local/gameplay-profile.json", async (_request, reply) => {
+    return reply
+      .header("cache-control", "no-store")
+      .send({
+        profile: gameplayProfile,
+        closure: {
+          exposedShipCount: gameplayClosure.masterAssets.exposedShipIds.length,
+          exposedSlotCount: gameplayClosure.masterAssets.exposedSlotIds.length,
+          shipMastersWithoutDisplayResources: gameplayClosure.masterAssets.shipMastersWithoutDisplayResources,
+          slotMastersWithoutDisplayResources: gameplayClosure.masterAssets.slotMastersWithoutDisplayResources,
+          shipResourcesWithoutMasters: gameplayClosure.masterAssets.shipResourcesWithoutMasters
+        }
+      });
   });
 
   app.get("/kcs2/index.php", async (request, reply) => {
@@ -114,7 +148,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       .header("cache-control", "no-store")
       .send(patchKcsMainJs(
         await readFile(path.join(options.cacheDir, "kcs2/js/main.js"), "utf8"),
-        { activeEventAreaId: options.stateStore.getActiveEventAreaId() }
+        { activeEventAreaId: profileActiveEventArea(gameplayProfile, options.stateStore.getActiveEventAreaId()) }
       ));
   });
 
@@ -137,10 +171,11 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     if (!options.stateStore.hasAccount()) {
       return sendApi(reply, apiError("Local Kancolle account has not been registered. Select a world first.", 403));
     }
+    activeApiToken = `local-${viewerId}-${randomBytes(32).toString("hex")}`;
     return sendApi(reply, {
       api_result: 1,
       api_result_msg: "成功",
-      api_token: `local-${viewerId}-${Date.now()}`,
+      api_token: activeApiToken,
       api_starttime: Date.now()
     });
   });
@@ -150,11 +185,24 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
       return sendApi(reply, apiError("Local Kancolle account has not been registered. Select a world first.", 403));
     }
     const input = requestToHandlerInput(request);
+    if (request.method !== "POST") {
+      return sendApi(reply, apiError("KCS API endpoints require POST", 405, {}, 405));
+    }
+    const suppliedToken = input.body.api_token ?? input.query.api_token;
+    if (!activeApiToken || !tokensEqual(suppliedToken, activeApiToken)) {
+      return sendApi(reply, apiError("Invalid or expired KCS API token", 401, {}, 401));
+    }
+    const validation = validateCriticalCommand(input);
+    if (!validation.ok) {
+      return sendApi(reply, apiError(validation.error, 400, {}, 400));
+    }
+    options.stateStore.settle(Date.now());
     const payload = await handleKcsApi(input, {
       stateStore: options.stateStore,
       unknownLogPath: options.unknownLogPath,
       resourceManifest,
-      arsenalRandom: options.arsenalRandom ?? Math.random
+      arsenalRandom: options.arsenalRandom ?? Math.random,
+      gameplayProfile
     });
     return sendApi(reply, payload);
   });
@@ -236,6 +284,18 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
 
   return app;
+}
+
+function tokensEqual(actual: unknown, expected: string) {
+  if (typeof actual !== "string") return false;
+  const left = Buffer.from(actual);
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+function profileActiveEventArea(profile: GameplayProfile, activeAreaId: number | null) {
+  if (!profile.capabilities.currentEvent) return null;
+  return profile.eventId == null || profile.eventId === activeAreaId ? activeAreaId : null;
 }
 
 function contentTypeFor(filePath: string) {

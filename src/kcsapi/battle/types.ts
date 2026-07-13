@@ -3,6 +3,9 @@ import type { EnemyTargetKind } from "../../master/enemy-classification.js";
 import type { SelectedSortieEncounter } from "../../master/sortie-data.js";
 import type { BattleRng } from "../battle-formulas.js";
 import type { PracticeRival } from "../practice.js";
+import type { DamageControlActivation } from "./damage-control.js";
+import type { BattlePhaseName } from "./data/endpoint-modes.js";
+import type { LandBaseWavePayload } from "./land-base.js";
 
 export type BattleInput = {
   formation?: number;
@@ -37,6 +40,12 @@ export type BattleEndpointKind =
   | "combinedEcNightToDay";
 
 export type BattleFleetKind = "main" | "escort" | "enemyMain" | "enemyEscort";
+export type BattleStatEvidenceKind = "player-growth" | "enemy-static" | "unavailable";
+export type BattleStatEvidence = {
+  evasion: BattleStatEvidenceKind;
+  asw: BattleStatEvidenceKind;
+  los: BattleStatEvidenceKind;
+};
 
 export type BattleFleet = {
   kind: BattleFleetKind;
@@ -64,6 +73,13 @@ export type Side = 0 | 1;
 
 export type BattleSortieContext = SelectedSortieEncounter & {
   seed: number;
+  visited?: readonly string[];
+  transportLanding?: {
+    mapId: number;
+    phase: number;
+    point: string;
+    sRankPoints: number;
+  };
 };
 
 export type PracticeResultContext = {
@@ -84,6 +100,8 @@ export type AirSlot = {
   maxCount: number;
   improvement: number;
   proficiency: number;
+  /** Conventional air phases must not infer land-base-only mechanics. */
+  landBase?: boolean;
 };
 
 export type EquippedSlot = {
@@ -105,6 +123,7 @@ export type BattleUnit = {
   masterId: number;
   level: number;
   hp: number;
+  startingHp?: number;
   hpFloor: number;
   maxHp: number;
   baseFirepower: number;
@@ -128,6 +147,9 @@ export type BattleUnit = {
   onSlot: number[];
   originalOnSlot: number[];
   damageDealt: number;
+  damageControlActivated?: boolean;
+  damageControlActivations?: DamageControlActivation[];
+  statEvidence?: BattleStatEvidence;
 };
 
 export type BattleUnitSlotSnapshot = {
@@ -147,6 +169,7 @@ export type BattleUnitSnapshot = {
   shipId: number;
   masterId: number;
   level: number;
+  startingHp?: number;
   hpFloor: number;
   maxHp: number;
   baseFirepower: number;
@@ -168,6 +191,9 @@ export type BattleUnitSnapshot = {
   equippedSlots: BattleUnitSlotSnapshot[];
   onSlot: number[];
   originalOnSlot: number[];
+  damageControlActivated?: boolean;
+  damageControlActivations?: DamageControlActivation[];
+  statEvidence?: BattleStatEvidence;
 };
 
 export type HougekiPayload = {
@@ -247,6 +273,7 @@ export type BattlePayload = Record<string, any> & {
 export type AirBaseAircraftLossRecord = {
   areaId: number;
   baseId: number;
+  wave: 1 | 2;
   squadronId: number;
   slotItemId: number;
   slotMasterId: number;
@@ -258,6 +285,12 @@ export type AirBaseAircraftLossRecord = {
 export type BattleRecord = {
   endpoint: BattleEndpointKind;
   mode: BattleMode;
+  /** Ordered phase plan consumed by the battle executor. */
+  phaseSequence?: BattlePhaseName[];
+  nightContact?: {
+    touchPlane: [number, number];
+    flarePos: [number, number];
+  };
   combinedType?: number;
   deckId: number;
   escortDeckId?: number;
@@ -286,7 +319,7 @@ export type BattleRecord = {
     fCombinedOnSlotByShipId?: Record<number, number[]>;
   };
   phases: {
-    airBaseAttack: Record<string, unknown> | null;
+    airBaseAttack: LandBaseWavePayload[] | null;
     kouku: KoukuPayload | null;
     kouku2: KoukuPayload | null;
     openingTaisen: HougekiPayload | null;
@@ -312,6 +345,7 @@ export type BattleRecord = {
     enemy: Record<number, number>;
   };
   airBaseAircraftLosses?: AirBaseAircraftLossRecord[];
+  damageControlActivations?: DamageControlActivation[];
   support?: {
     deckId: number;
     missionId: number;
@@ -333,6 +367,8 @@ export type BattleResultRecord = {
   dropShipId: number;
   dropShipName: string;
   dropShipType: string;
+  /** Optional versioned limited-drop cap; settlement rechecks current ownership. */
+  dropMaxOwned?: number;
 };
 
 export type FleetSettlementSlot = {
@@ -355,14 +391,6 @@ export type BattleSettlementRecord = {
   escort?: FleetSettlementSlot[];
 };
 
-export type DamageInput = {
-  attackPower: number;
-  armor: number;
-  armorRoll: number;
-  ammoModifier: number;
-  targetHp?: number;
-};
-
 export type ShellingAttackProfile = {
   preCapPower: number;
   cap: number;
@@ -373,4 +401,11 @@ export type ShellingAttackProfile = {
   slotIds: number[];
   nightCarrierAttack?: boolean;
   fallbackSlotIds?: number[];
+  ptEquipmentModifier?: number;
+  forceScratch?: boolean;
+  nightCutInCandidates?: Array<{
+    spType: number;
+    hits: number;
+    modifier: number;
+  }>;
 };

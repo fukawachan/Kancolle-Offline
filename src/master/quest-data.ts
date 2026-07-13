@@ -28,6 +28,11 @@ export type QuestDefinition = {
   rewards: readonly QuestReward[];
   prerequisites: readonly number[];
   requirements: QuestRequirement;
+  evidence?: {
+    level: "exact" | "statistical" | "fallback";
+    sourceRevision: string;
+    sourceQuestId: number;
+  };
 };
 
 export const QUEST_PAGE_SIZE = 5;

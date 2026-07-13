@@ -10,7 +10,6 @@ export type SlotEquipType = (typeof masterData.api_mst_slotitem_equiptype)[numbe
 const PAGES_PER_BLOCK = 7;
 const ITEMS_PER_PAGE = 10;
 const ITEMS_PER_BLOCK = PAGES_PER_BLOCK * ITEMS_PER_PAGE;
-const GENERATED_SLOT_ICON_TYPES = Array.from({ length: 59 }, (_value, index) => index + 1);
 const VOICE_FLAG_BE_LEFT = 1;
 const VOICE_FLAG_TIME_SIGNAL = 2;
 const VOICE_FLAG_TIRED_BE_LEFT = 4;
@@ -31,13 +30,14 @@ export function buildShipMasters(resourceManifest: ResourceManifest): ShipMaster
   const baseById = new Map(masterData.api_mst_ship.map((ship) => [ship.api_id, ship] as const));
   const deepSeaById = new Map(DEEP_SEA_SHIP_MASTERS.map((ship) => [ship.api_id, ship] as const));
   const resourceBackedIds = shipDisplayResourceIds(resourceManifest);
-  const ids = resourceBackedIds.size > 0 ? new Set<number>(resourceBackedIds) : new Set<number>(baseById.keys());
-
-  for (const id of deepSeaById.keys()) ids.add(id);
+  const knownIds = new Set<number>([...baseById.keys(), ...deepSeaById.keys()]);
+  const ids = resourceBackedIds.size > 0
+    ? new Set<number>([...resourceBackedIds].filter((id) => knownIds.has(id)))
+    : knownIds;
 
   return [...ids]
     .sort((a, b) => a - b)
-    .map((id) => normalizeShipVoiceFlag(baseById.get(id) ?? deepSeaById.get(id) ?? generatedShipMaster(id), resourceManifest));
+    .map((id) => normalizeShipVoiceFlag(baseById.get(id) ?? deepSeaById.get(id)!, resourceManifest));
 }
 
 function shipDisplayResourceIds(resourceManifest: ResourceManifest) {
@@ -52,15 +52,64 @@ function shipDisplayResourceIds(resourceManifest: ResourceManifest) {
 export function buildSlotMasters(resourceManifest: ResourceManifest): SlotMaster[] {
   const baseById = new Map(masterData.api_mst_slotitem.map((slot) => [slot.api_id, slot] as const));
   const deepSeaById = new Map(DEEP_SEA_SLOT_MASTERS.map((slot) => [slot.api_id, slot] as const));
-  const ids = new Set<number>(resourceManifest.slot.card.keys());
+  const displayIds = slotDisplayResourceIds(resourceManifest);
+  const ids = displayIds.size > 0
+    ? new Set<number>([
+        ...[...baseById.keys()].filter((id) => displayIds.has(id)),
+        ...deepSeaById.keys()
+      ])
+    : new Set<number>([...baseById.keys(), ...deepSeaById.keys()]);
 
-  if (ids.size === 0) {
-    for (const id of resourceManifest.slot.cardThumbnail.keys()) ids.add(id);
-  }
-  for (const id of baseById.keys()) ids.add(id);
-  for (const id of deepSeaById.keys()) ids.add(id);
+  return [...ids]
+    .sort((a, b) => a - b)
+    .map((id) => baseById.get(id) ?? deepSeaById.get(id)!)
+    .filter((slot): slot is SlotMaster => slot != null);
+}
 
-  return [...ids].sort((a, b) => a - b).map((id) => baseById.get(id) ?? deepSeaById.get(id) ?? generatedSlotMaster(id));
+export type MasterAssetClosureReport = {
+  exposedShipIds: number[];
+  exposedSlotIds: number[];
+  shipMastersWithoutDisplayResources: number[];
+  slotMastersWithoutDisplayResources: number[];
+  shipResourcesWithoutMasters: number[];
+  slotResourcesWithoutMasters: number[];
+};
+
+/**
+ * Reports version drift without manufacturing gameplay data to cover it up.
+ * Only the exposed id sets are safe to serialize to this cached client.
+ */
+export function masterAssetClosureReport(resourceManifest: ResourceManifest): MasterAssetClosureReport {
+  const baseShipIds = new Set(masterData.api_mst_ship.map((ship) => ship.api_id));
+  const deepSeaShipIds = new Set(DEEP_SEA_SHIP_MASTERS.map((ship) => ship.api_id));
+  const baseSlotIds = new Set(masterData.api_mst_slotitem.map((slot) => slot.api_id));
+  const deepSeaSlotIds = new Set(DEEP_SEA_SLOT_MASTERS.map((slot) => slot.api_id));
+  const shipResourceIds = shipDisplayResourceIds(resourceManifest);
+  const slotResourceIds = slotDisplayResourceIds(resourceManifest);
+
+  return {
+    exposedShipIds: buildShipMasters(resourceManifest).map((ship) => ship.api_id),
+    exposedSlotIds: buildSlotMasters(resourceManifest).map((slot) => slot.api_id),
+    shipMastersWithoutDisplayResources: [...baseShipIds]
+      .filter((id) => !shipResourceIds.has(id))
+      .sort((a, b) => a - b),
+    slotMastersWithoutDisplayResources: [...baseSlotIds]
+      .filter((id) => !slotResourceIds.has(id))
+      .sort((a, b) => a - b),
+    shipResourcesWithoutMasters: [...shipResourceIds]
+      .filter((id) => !baseShipIds.has(id) && !deepSeaShipIds.has(id))
+      .sort((a, b) => a - b),
+    slotResourcesWithoutMasters: [...slotResourceIds]
+      .filter((id) => !baseSlotIds.has(id) && !deepSeaSlotIds.has(id))
+      .sort((a, b) => a - b)
+  };
+}
+
+function slotDisplayResourceIds(resourceManifest: ResourceManifest) {
+  return new Set<number>([
+    ...resourceManifest.slot.card.keys(),
+    ...resourceManifest.slot.cardThumbnail.keys()
+  ]);
 }
 
 export function buildSlotEquipTypes(slotItems: SlotMaster[]): SlotEquipType[] {
@@ -138,42 +187,6 @@ function slotPictureBookEntry(slot: SlotMaster, indexNo: number) {
   };
 }
 
-function generatedShipMaster(api_id: number): ShipMaster {
-  const name = `Ship ${String(api_id).padStart(4, "0")}`;
-  return {
-    api_id,
-    api_sortno: api_id,
-    api_sort_id: api_id,
-    api_name: name,
-    api_yomi: name.toLowerCase().replace(/\s+/g, ""),
-    api_stype: 2,
-    api_ctype: 1,
-    api_afterlv: 0,
-    api_aftershipid: 0,
-    api_taik: [1, 1],
-    api_souk: [0, 0],
-    api_houg: [0, 0],
-    api_raig: [0, 0],
-    api_tyku: [0, 0],
-    api_saku: [0, 0],
-    api_luck: [0, 0],
-    api_soku: 10,
-    api_leng: 1,
-    api_slot_num: 0,
-    api_maxeq: [0, 0, 0, 0, 0],
-    api_buildtime: 0,
-    api_broken: [0, 0, 0, 0],
-    api_powup: [0, 0, 0, 0],
-    api_backs: 1,
-    api_getmes: "",
-    api_fuel_max: 0,
-    api_bull_max: 0,
-    api_afterfuel: 0,
-    api_afterbull: 0,
-    api_voicef: 0
-  };
-}
-
 function normalizeShipVoiceFlag(ship: ShipMaster, resourceManifest: ResourceManifest): ShipMaster {
   const apiVoicef = Number(ship.api_voicef || 0);
   const normalizedVoicef = apiVoicef & supportedVoiceFlags(ship.api_id, resourceManifest);
@@ -196,43 +209,6 @@ function supportedVoiceFlags(shipId: number, resourceManifest: ResourceManifest)
     flags |= VOICE_FLAG_TIRED_BE_LEFT;
   }
   return flags;
-}
-
-function generatedSlotMaster(api_id: number): SlotMaster {
-  const iconType = GENERATED_SLOT_ICON_TYPES[(api_id - 1) % GENERATED_SLOT_ICON_TYPES.length] ?? 1;
-  const name = `Equipment ${String(api_id).padStart(4, "0")}`;
-  return {
-    api_id,
-    api_sortno: api_id,
-    api_name: name,
-    api_yomi: name.toLowerCase().replace(/\s+/g, ""),
-    api_type: [1, 1, iconType, iconType, 0],
-    api_taik: 0,
-    api_souk: 0,
-    api_houg: 0,
-    api_raig: 0,
-    api_soku: 0,
-    api_baku: 0,
-    api_tyku: 0,
-    api_tais: 0,
-    api_atap: 0,
-    api_houm: 0,
-    api_raim: 0,
-    api_houk: 0,
-    api_raik: 0,
-    api_bakk: 0,
-    api_saku: 0,
-    api_sakb: 0,
-    api_luck: 0,
-    api_leng: 1,
-    api_rare: 1,
-    api_broken: [0, 0, 0, 0],
-    api_info: "",
-    api_usebull: "0",
-    api_version: 1,
-    api_cost: null,
-    api_distance: null
-  };
 }
 
 function blockFirstIndexNo(blockNo: number) {

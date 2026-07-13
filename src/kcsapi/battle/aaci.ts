@@ -11,7 +11,20 @@ export type AaciEquipmentSummary = {
   highAngleGuns: number[];
   aaGuns: number[];
   radars: number[];
+  airRadars?: number[];
+  specialAaGuns?: number[];
+  aaDirectors?: number[];
 };
+
+export type AaciShipProfile =
+  | "generic"
+  | "akizukiClass"
+  | "mayaKaiNi"
+  | "isuzuKaiNi"
+  | "kasumiKaiNiB"
+  | "satsukiKaiNi"
+  | "fumizukiKaiNi"
+  | "kinuKaiNi";
 
 export type AaciPattern = {
   kind: number;
@@ -70,4 +83,119 @@ export function selectGenericAaci(unitIndex: number, equipment: AaciEquipmentSum
     };
   }
   return null;
+}
+
+/**
+ * Returns every equipment pattern the ship can roll. A fleet must continue to
+ * later candidates when an earlier/high-priority AACI roll fails.
+ */
+export function selectAaciCandidates(
+  unitIndex: number,
+  equipment: AaciEquipmentSummary,
+  profile: AaciShipProfile = "generic"
+) {
+  const candidates = specializedAaciCandidates(unitIndex, equipment, profile);
+  const generic = genericAaciCandidates(unitIndex, equipment);
+  const unique = new Map<number, AaciCandidate>();
+  for (const candidate of [...candidates, ...generic]) unique.set(candidate.kind, candidate);
+  return [...unique.values()].sort((a, b) =>
+    b.fixedBonus - a.fixedBonus ||
+    b.modifier - a.modifier ||
+    a.unitIndex - b.unitIndex ||
+    a.kind - b.kind
+  );
+}
+
+export function selectActivatedAaci(
+  candidates: readonly AaciCandidate[],
+  chance: (probability: number) => boolean
+) {
+  for (const candidate of candidates) {
+    if (chance(candidate.activationRate)) return candidate;
+  }
+  return null;
+}
+
+function genericAaciCandidates(unitIndex: number, equipment: AaciEquipmentSummary) {
+  const candidates: AaciCandidate[] = [];
+  if (equipment.highAngleGuns.length >= 2 && equipment.radars.length >= 1) {
+    candidates.push(candidate(
+      unitIndex,
+      5,
+      [...equipment.highAngleGuns.slice(0, 2), equipment.radars[0]]
+    ));
+  }
+  if (equipment.highAngleGuns.length >= 1 && equipment.aaGuns.length >= 1 && equipment.radars.length >= 1) {
+    candidates.push(candidate(
+      unitIndex,
+      7,
+      [equipment.highAngleGuns[0], equipment.aaGuns[0], equipment.radars[0]]
+    ));
+  }
+  if (equipment.highAngleGuns.length >= 1 && equipment.radars.length >= 1) {
+    candidates.push(candidate(
+      unitIndex,
+      8,
+      [equipment.highAngleGuns[0], equipment.radars[0]]
+    ));
+  }
+  return candidates;
+}
+
+function specializedAaciCandidates(
+  unitIndex: number,
+  equipment: AaciEquipmentSummary,
+  profile: AaciShipProfile
+) {
+  const candidates: AaciCandidate[] = [];
+  const airRadars = equipment.airRadars ?? equipment.radars;
+  const specialAaGuns = equipment.specialAaGuns ?? [];
+  if (profile === "akizukiClass") {
+    if (equipment.highAngleGuns.length >= 2 && airRadars.length >= 1) {
+      candidates.push(candidate(unitIndex, 1, [
+        ...equipment.highAngleGuns.slice(0, 2),
+        airRadars[0]
+      ]));
+    }
+    if (equipment.highAngleGuns.length >= 1 && airRadars.length >= 1) {
+      candidates.push(candidate(unitIndex, 2, [equipment.highAngleGuns[0], airRadars[0]]));
+    }
+    if (equipment.highAngleGuns.length >= 2) {
+      candidates.push(candidate(unitIndex, 3, equipment.highAngleGuns.slice(0, 2)));
+    }
+  }
+  if (profile === "mayaKaiNi" && equipment.highAngleGuns.length >= 1 && specialAaGuns.length >= 1) {
+    if (airRadars.length >= 1) {
+      candidates.push(candidate(unitIndex, 10, [
+        equipment.highAngleGuns[0],
+        specialAaGuns[0],
+        airRadars[0]
+      ]));
+    }
+    candidates.push(candidate(unitIndex, 11, [equipment.highAngleGuns[0], specialAaGuns[0]]));
+  }
+  if (profile === "isuzuKaiNi" && equipment.highAngleGuns.length >= 1 && equipment.aaGuns.length >= 1) {
+    candidates.push(candidate(unitIndex, 14, [equipment.highAngleGuns[0], equipment.aaGuns[0]]));
+  }
+  if (profile === "kasumiKaiNiB" && equipment.highAngleGuns.length >= 1) {
+    if (equipment.aaGuns.length >= 1) {
+      candidates.push(candidate(unitIndex, 15, [equipment.highAngleGuns[0], equipment.aaGuns[0]]));
+    }
+    if (airRadars.length >= 1) {
+      candidates.push(candidate(unitIndex, 16, [equipment.highAngleGuns[0], airRadars[0]]));
+    }
+  }
+  if ((profile === "satsukiKaiNi" || profile === "fumizukiKaiNi") && specialAaGuns.length >= 1) {
+    candidates.push(candidate(unitIndex, 17, [specialAaGuns[0]]));
+  }
+  if (profile === "kinuKaiNi" && specialAaGuns.length >= 1) {
+    candidates.push(candidate(unitIndex, 18, [specialAaGuns[0]]));
+  }
+  return candidates;
+}
+
+function candidate(unitIndex: number, kind: number, useItems: number[]): AaciCandidate {
+  const pattern = aaciPattern(kind);
+  if (!pattern) throw new Error(`Missing AACI pattern ${kind}`);
+  return { unitIndex, ...pattern, useItems };
 }

@@ -1,10 +1,18 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { createFrozenSourceSession, generatedOutputPath } from "./lib/frozen-source.mjs";
 
 const QUEST_DATA_URL = "https://kcwikizh.github.io/kcwiki-quest-data/data.json";
+const QUEST_DATA_COMMIT = "f3a555a1326bf026fd5704d076ce145a7cdf8414";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
+const outputPath = generatedOutputPath(path.join(root, "src/master/quest-data.generated.ts"));
+const masterDataPath = path.resolve(process.env.MASTER_DATA_PATH || path.join(root, "src/master/generated-data.ts"));
+const session = await createFrozenSourceSession("quest", {
+  generator: "scripts/generate-quest-data.mjs",
+  userAgent: "kancolle-local-quest-generator"
+});
 
 const materialRewards = new Map([
   ["高速修復材", "repairKit"],
@@ -105,16 +113,19 @@ function normalizeReward(reward, indexes) {
   return { kind: "special", name, amount };
 }
 
-const [questResponse, generatedSource] = await Promise.all([
-  fetch(QUEST_DATA_URL),
-  readFile(path.join(root, "src/master/generated-data.ts"), "utf8")
+const [rawQuests, generatedSource] = await Promise.all([
+  session.readJson("data.json", QUEST_DATA_URL, {
+    revision: QUEST_DATA_COMMIT,
+    evidence: "exact",
+    parameters: { buildArtifact: "data.json" },
+    license: {
+      spdx: "NOASSERTION",
+      url: `https://github.com/kcwikizh/kcwiki-quest-data/tree/${QUEST_DATA_COMMIT}`,
+      note: "Compiled community quest database; consult the pinned upstream repository for terms"
+    }
+  }),
+  readFile(masterDataPath, "utf8")
 ]);
-
-if (!questResponse.ok) {
-  throw new Error(`Failed to download quest data: ${questResponse.status} ${questResponse.statusText}`);
-}
-
-const rawQuests = await questResponse.json();
 const generatedMasters = loadGeneratedMasters(generatedSource);
 const indexes = {
   ships: byName(generatedMasters.SHIPS, "api_name", "api_id"),
@@ -143,12 +154,18 @@ const quests = rawQuests
     prerequisites: Array.isArray(quest.prerequisite)
       ? quest.prerequisite.map((id) => Number(id)).filter((id) => Number.isFinite(id))
       : [],
-    requirements: quest.requirements ?? { category: "unknown" }
+    requirements: quest.requirements ?? { category: "unknown" },
+    evidence: {
+      level: quest.requirements?.category && quest.requirements.category !== "unknown" ? "exact" : "fallback",
+      sourceRevision: QUEST_DATA_COMMIT,
+      sourceQuestId: Number(quest.game_id)
+    }
   }))
   .sort((a, b) => a.id - b.id);
 
 const output = `// Auto-generated from ${QUEST_DATA_URL}
-// Generated: ${new Date().toISOString()}
+// Generated: ${session.generatedAt}
+// Source revision: ${QUEST_DATA_COMMIT}
 // Quest entries: ${quests.length}
 
 import type { QuestDefinition } from "./quest-data.js";
@@ -156,5 +173,6 @@ import type { QuestDefinition } from "./quest-data.js";
 export const GENERATED_QUEST_DEFINITIONS = ${JSON.stringify(quests, null, 2)} as const satisfies readonly QuestDefinition[];
 `;
 
-await writeFile(path.join(root, "src/master/quest-data.generated.ts"), output);
+await writeFile(outputPath, output);
+await session.finalize({ repositoryRevision: QUEST_DATA_COMMIT });
 console.log(`Wrote ${quests.length} quests to src/master/quest-data.generated.ts`);

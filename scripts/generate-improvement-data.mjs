@@ -1,11 +1,13 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createFrozenSourceSession, generatedOutputPath } from "./lib/frozen-source.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUTPUT = path.join(ROOT, "src", "master", "improvement-data.generated.json");
+const OUTPUT = generatedOutputPath(path.join(ROOT, "src", "master", "improvement-data.generated.json"));
 const ARSENAL_URL = "https://fleet.diablohu.com/arsenal/";
-const KC3_AKASHI_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/akashi.json";
+const KC3_COMMIT = "27208e9b0f22fa6e3d98bd61c1873e97a85a5faa";
+const KC3_AKASHI_URL = `https://raw.githubusercontent.com/KC3Kai/KC3Kai/${KC3_COMMIT}/src/data/akashi.json`;
 const DETAIL_MARKER = '<span class="improvement improvement-details">';
 const BODY_MARKER = 'class="body body-2 body-all"';
 const DAY_COUNT = 7;
@@ -32,34 +34,33 @@ const USE_ITEM_NAMES = new Map([
   ["新型兵装資材", 94]
 ]);
 
-async function fetchText(url, attempts = 4) {
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetch(url, { headers: { "user-agent": "kancolle-local-offline-api" } });
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      return await response.text();
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, attempt * 250));
-    }
-  }
-  throw new Error(`Unable to fetch ${url}: ${String(lastError)}`);
-}
+const session = await createFrozenSourceSession("improvement", {
+  generator: "scripts/generate-improvement-data.mjs",
+  userAgent: "kancolle-local-improvement-generator"
+});
 
 async function loadArsenalHtml() {
-  const localPath = process.env.ARSENAL_HTML_PATH;
-  if (localPath) return readFile(localPath, "utf8");
-  return fetchText(ARSENAL_URL);
+  return session.readText("arsenal.html", ARSENAL_URL, {
+    evidence: "exact",
+    parameters: { table: "all improvement recipes", locale: "zh-CN" },
+    license: {
+      spdx: "NOASSERTION",
+      url: ARSENAL_URL,
+      note: "Public community mechanics table; no machine-readable license was published"
+    }
+  });
 }
 
 async function loadKc3Akashi() {
-  try {
-    return JSON.parse(await fetchText(KC3_AKASHI_URL));
-  } catch (error) {
-    console.warn(`KC3Kai cross-check skipped: ${String(error)}`);
-    return null;
-  }
+  return session.readJson("kc3-akashi.json", KC3_AKASHI_URL, {
+    revision: KC3_COMMIT,
+    evidence: "exact",
+    license: {
+      spdx: "MIT",
+      url: `https://github.com/KC3Kai/KC3Kai/blob/${KC3_COMMIT}/LICENSE`,
+      note: "KC3Kai repository license"
+    }
+  });
 }
 
 function parseRecipes(html) {
@@ -100,7 +101,13 @@ function parseRecipeSegment(segment, id) {
       high: parseCostStage(blocks["★+6 ~ MAX"] ?? ""),
       convert: parseConvertStage(blocks["升级"] ?? "")
     },
-    secretaries: parseSecretaries(segment, strongEnd)
+    secretaries: parseSecretaries(segment, strongEnd),
+    evidence: {
+      level: "exact",
+      source: "arsenal.html",
+      sourceRow: id,
+      crossCheckRevision: KC3_COMMIT
+    }
   };
 
   if (recipe.secretaries.length === 0) {
@@ -264,17 +271,17 @@ async function main() {
   validateRecipes(recipes);
 
   const result = {
-    generatedAt: new Date().toISOString(),
+    generatedAt: session.generatedAt,
     sources: {
-      arsenal: process.env.ARSENAL_HTML_PATH ? `file://${path.resolve(process.env.ARSENAL_HTML_PATH)}` : ARSENAL_URL,
+      arsenal: ARSENAL_URL,
       kc3Akashi: KC3_AKASHI_URL
     },
     crossCheck: crossCheckWithKc3(recipes, kc3Akashi),
     recipes
   };
 
-  await mkdir(path.dirname(OUTPUT), { recursive: true });
   await writeFile(OUTPUT, `${JSON.stringify(result)}\n`);
+  await session.finalize({ repositoryRevisions: { kc3Kai: KC3_COMMIT } });
   console.log(`Generated ${OUTPUT}`);
   console.log(`  recipes: ${recipes.length}`);
 }

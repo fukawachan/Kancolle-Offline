@@ -9,6 +9,10 @@ describe("battle endpoint mode configuration", () => {
       airBase: true,
       phaseSequence: ["airBase", "kouku"]
     });
+    expect(battleEndpointMode("api_req_sortie/airbattle")).toMatchObject({
+      endpoint: "sortieAir",
+      phaseSequence: ["kouku", "kouku2"]
+    });
     expect(battleEndpointMode("api_req_combined_battle/battle_water")).toMatchObject({
       endpoint: "combinedBattleWater",
       mode: "combined",
@@ -22,6 +26,10 @@ describe("battle endpoint mode configuration", () => {
     expect(battleEndpointMode("api_req_combined_battle/ec_battle")).toMatchObject({
       endpoint: "combinedEcBattle",
       enemyCombined: "active"
+    });
+    expect(battleEndpointMode("api_req_combined_battle/airbattle")).toMatchObject({
+      endpoint: "combinedAir",
+      phaseSequence: ["kouku", "kouku2"]
     });
   });
 

@@ -9,6 +9,7 @@ export type PracticeRivalShip = {
   level: number;
   star: number;
   slotMasterIds: number[];
+  slotProficiencyExp?: number[];
   onSlot: number[];
 };
 
@@ -24,13 +25,27 @@ export type PracticeRival = {
 };
 
 export type PracticeBatch = {
+  schemaVersion: 2;
+  simulationMode: "offline-synthetic";
+  seed: number;
   periodKey: string;
   generatedAt: number;
+  matchingKind: number;
   rivals: PracticeRival[];
 };
 
+export const PRACTICE_SIMULATION_BOUNDARY = Object.freeze({
+  schemaVersion: 2 as const,
+  mode: "offline-synthetic" as const,
+  opponentSource: "deterministic-local-generator" as const,
+  liveServerEquivalent: false,
+  seedInputs: ["JST exercise period", "matching kind", "schema version"] as const,
+  disclaimer: "Generated opponents are not live-server player snapshots."
+});
+
 export type GeneratePracticeBatchOptions = {
   availableShipIds?: Iterable<number>;
+  matchingKind?: number;
 };
 
 const RIVAL_COUNT = 5;
@@ -84,26 +99,40 @@ export function generatePracticeBatch(
   generatedAt = Date.now(),
   options: GeneratePracticeBatchOptions = {}
 ): PracticeBatch {
-  const rng = new BattleRng(seedFromPeriod(periodKey));
+  const matchingKind = normalizeMatchingKind(options.matchingKind);
+  const seed = seedFromPeriod(`${periodKey}:matching-${matchingKind}:schema-${PRACTICE_SIMULATION_BOUNDARY.schemaVersion}`);
+  const rng = new BattleRng(seed);
   const pool = practiceShipPool(options);
   const twoShipRivals = balancedTwoShipRivals(rng);
   return {
+    schemaVersion: PRACTICE_SIMULATION_BOUNDARY.schemaVersion,
+    simulationMode: PRACTICE_SIMULATION_BOUNDARY.mode,
+    seed,
     periodKey,
     generatedAt: Math.trunc(generatedAt),
+    matchingKind,
     rivals: Array.from({ length: RIVAL_COUNT }, (_value, index) =>
-      practiceRival(index + 1, rng, pool, twoShipRivals.has(index))
+      practiceRival(index + 1, rng, pool, twoShipRivals.has(index), matchingKind)
     )
   };
 }
 
 export function practiceRivalById(rivals: PracticeRival[], id: number) {
-  return cloneRival(rivals.find((rival) => rival.id === id) ?? rivals[0] ?? practiceRival(1, new BattleRng(1), PRACTICE_SHIP_POOL));
+  return cloneRival(
+    rivals.find((rival) => rival.id === id)
+    ?? rivals[0]
+    ?? practiceRival(1, new BattleRng(1), PRACTICE_SHIP_POOL, false, 2)
+  );
 }
 
 export function clonePracticeBatch(batch: PracticeBatch): PracticeBatch {
   return {
+    schemaVersion: PRACTICE_SIMULATION_BOUNDARY.schemaVersion,
+    simulationMode: PRACTICE_SIMULATION_BOUNDARY.mode,
+    seed: batch.seed,
     periodKey: batch.periodKey,
     generatedAt: batch.generatedAt,
+    matchingKind: normalizeMatchingKind(batch.matchingKind),
     rivals: batch.rivals.map(cloneRival)
   };
 }
@@ -111,15 +140,20 @@ export function clonePracticeBatch(batch: PracticeBatch): PracticeBatch {
 export function isPracticeBatch(value: unknown): value is PracticeBatch {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const batch = value as PracticeBatch;
-  return typeof batch.periodKey === "string" &&
+  return batch.schemaVersion === PRACTICE_SIMULATION_BOUNDARY.schemaVersion &&
+    batch.simulationMode === PRACTICE_SIMULATION_BOUNDARY.mode &&
+    Number.isInteger(batch.seed) &&
+    typeof batch.periodKey === "string" &&
     Number.isFinite(batch.generatedAt) &&
+    (batch.matchingKind == null || [1, 2, 3].includes(batch.matchingKind)) &&
     Array.isArray(batch.rivals) &&
     batch.rivals.every(isPracticeRival);
 }
 
 export function practiceBatchMatchesOptions(batch: PracticeBatch, options: GeneratePracticeBatchOptions = {}) {
   const pool = new Set(practiceShipPool(options));
-  return batch.rivals.every((rival) => rival.ships.every((ship) => pool.has(ship.masterId)));
+  return normalizeMatchingKind(batch.matchingKind) === normalizeMatchingKind(options.matchingKind)
+    && batch.rivals.every((rival) => rival.ships.every((ship) => pool.has(ship.masterId)));
 }
 
 export function shipTotalExpForPracticeLevel(level: number) {
@@ -164,28 +198,40 @@ export function practiceMemberExp(playerLevel: number, enemyLevel: number, rank:
   return row[rank as keyof typeof row] ?? row.S;
 }
 
-function practiceRival(id: number, rng: BattleRng, pool: number[], forceTwoShips = false): PracticeRival {
-  const level = rng.intInclusive(80, 120);
+function practiceRival(
+  id: number,
+  rng: BattleRng,
+  pool: number[],
+  forceTwoShips = false,
+  matchingKind = 2
+): PracticeRival {
+  const normalizedKind = normalizeMatchingKind(matchingKind);
+  const [minimumLevel, maximumLevel] = normalizedKind === 1 ? [100, 120]
+    : normalizedKind === 2 ? [80, 110]
+      : [60, 120];
+  const level = rng.intInclusive(minimumLevel, maximumLevel);
   const shipCount = forceTwoShips ? 2 : rng.intInclusive(3, 6);
   return {
     id,
-    name: `Exercise Fleet ${id}`,
+    name: `Offline Simulated Fleet ${id}`,
     level,
     rank: rankForLevel(level),
-    comment: "Generated local practice opponent",
+    comment: "Offline simulation; not a live-server opponent",
     flag: 1,
     medals: Math.max(0, Math.floor((level - 80) / 10)),
-    ships: practiceShips(id, shipCount, rng, pool)
+    ships: practiceShips(id, shipCount, rng, pool, normalizedKind)
   };
 }
 
-function practiceShips(rivalId: number, count: number, rng: BattleRng, shipPool: number[]) {
+function practiceShips(rivalId: number, count: number, rng: BattleRng, shipPool: number[], matchingKind: number) {
   const pool = [...shipPool];
   return Array.from({ length: count }, (_value, index) => {
     const pickedIndex = rng.int(pool.length);
     const masterId = pool.splice(pickedIndex, 1)[0] ?? 9;
     const master = masterData.api_mst_ship.find((ship) => ship.api_id === masterId);
-    const level = rng.intInclusive(80, 188);
+    const level = matchingKind === 1 ? rng.intInclusive(100, 188)
+      : matchingKind === 2 ? rng.intInclusive(80, 160)
+        : rng.intInclusive(50, 188);
     const loadout = practiceShipLoadout(master, level, rng);
     return {
       id: rivalId * 100 + index + 1,
@@ -193,6 +239,7 @@ function practiceShips(rivalId: number, count: number, rng: BattleRng, shipPool:
       level,
       star: Math.max(1, Math.min(5, Math.floor(level / 35))),
       slotMasterIds: loadout.slotMasterIds,
+      slotProficiencyExp: loadout.slotProficiencyExp,
       onSlot: loadout.onSlot
     };
   });
@@ -230,8 +277,18 @@ function practiceShipLoadout(
     5,
     0
   );
+  const slotProficiencyExp = slotMasterIds.map((slotMasterId) =>
+    isAircraftSlotMaster(slotMasterId) ? rng.pick([0, 10, 25, 40, 55, 70, 85, 100]) : 0
+  );
+  const aircraftIndexes = slotMasterIds
+    .map((slotMasterId, index) => isAircraftSlotMaster(slotMasterId) ? index : -1)
+    .filter((index) => index >= 0);
+  if (aircraftIndexes.length > 0 && aircraftIndexes.every((index) => slotProficiencyExp[index] === 100)) {
+    slotProficiencyExp[aircraftIndexes[0]] = 70;
+  }
   return {
     slotMasterIds,
+    slotProficiencyExp,
     onSlot
   };
 }
@@ -282,7 +339,12 @@ function rankForLevel(level: number) {
 function cloneRival(rival: PracticeRival): PracticeRival {
   return {
     ...rival,
-    ships: rival.ships.map((ship) => ({ ...ship }))
+    ships: rival.ships.map((ship) => ({
+      ...ship,
+      slotMasterIds: [...ship.slotMasterIds],
+      slotProficiencyExp: [...(ship.slotProficiencyExp ?? [])],
+      onSlot: [...ship.onSlot]
+    }))
   };
 }
 
@@ -307,6 +369,11 @@ function isPracticeRivalShip(value: unknown): value is PracticeRivalShip {
     Number.isInteger(ship.star) &&
     Array.isArray(ship.slotMasterIds) &&
     ship.slotMasterIds.every(Number.isInteger) &&
+    (ship.slotProficiencyExp == null || (
+      Array.isArray(ship.slotProficiencyExp) &&
+      ship.slotProficiencyExp.length === ship.slotMasterIds.length &&
+      ship.slotProficiencyExp.every((value) => Number.isInteger(value) && value >= 0 && value <= 100)
+    )) &&
     Array.isArray(ship.onSlot) &&
     ship.onSlot.every(Number.isFinite);
 }
@@ -318,6 +385,11 @@ function seedFromPeriod(periodKey: string) {
 
 function positiveModulo(value: number, divisor: number) {
   return ((value % divisor) + divisor) % divisor;
+}
+
+export function normalizeMatchingKind(value: unknown) {
+  const normalized = Math.trunc(Number(value));
+  return normalized === 1 || normalized === 3 ? normalized : 2;
 }
 
 function safeNum(value: unknown, fallback = 0) {

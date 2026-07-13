@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createStateStore, type StateStore } from "../src/state/store.js";
+import { createStateStore, STATE_SCHEMA_VERSION, type StateStore } from "../src/state/store.js";
 
 describe("persisted expedition lifecycle", () => {
   let tempDir: string;
@@ -23,7 +23,7 @@ describe("persisted expedition lifecycle", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("migrates to schema v19 and seeds only the first expedition unlocked", () => {
+  it("migrates to the current schema and seeds only the first expedition unlocked", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const state = store.getMissionMemberState();
     const save = store.getSave();
@@ -40,7 +40,7 @@ describe("persisted expedition lifecycle", () => {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'air_bases'")
       .get();
 
-    expect(version.version).toBe(19);
+    expect(version.version).toBe(STATE_SCHEMA_VERSION);
     expect(save.player).toMatchObject({ maxChara: 300, maxSlotItem: 500 });
     expect(save.presetSlotSettings).toEqual({ maxNum: 4 });
     expect(save.presetDeckSettings).toEqual({ maxNum: 3 });
@@ -65,10 +65,26 @@ describe("persisted expedition lifecycle", () => {
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'preset_decks'")
       .get();
 
-    expect(version.version).toBe(19);
+    expect(version.version).toBe(STATE_SCHEMA_VERSION);
     expect(save.presetDeckSettings).toEqual({ maxNum: 3 });
     expect(save.presetDecks).toEqual([]);
     expect(presetDeckTable).toBeTruthy();
+  });
+
+  it("migrates the v20 one-shot initial ship marker as already claimed", () => {
+    store.db.prepare("ALTER TABLE players DROP COLUMN initial_ship_claimed").run();
+    store.db.prepare("UPDATE schema_meta SET version = 19").run();
+    store.close();
+
+    store = createStateStore({ databasePath });
+    const player = store.db.prepare("SELECT initial_ship_claimed FROM players WHERE id = 1").get() as {
+      initial_ship_claimed: number;
+    };
+    const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
+
+    expect(version.version).toBe(STATE_SCHEMA_VERSION);
+    expect(player.initial_ship_claimed).toBe(1);
+    expect(store.claimInitialShip(9)).toMatchObject({ ok: false, error: expect.stringMatching(/already/i) });
   });
 
   it("migrates legacy placeholder furniture to valid six-slot defaults", () => {
@@ -84,7 +100,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(19);
+    expect(version.version).toBe(STATE_SCHEMA_VERSION);
     expect(save.furniture.owned).toEqual(expect.arrayContaining([1, 38, 72, 102, 133, 164]));
     expect(save.furniture.set).toEqual({
       api_floor: 1,
@@ -127,7 +143,7 @@ describe("persisted expedition lifecycle", () => {
     const version = store.db.prepare("SELECT version FROM schema_meta").get() as { version: number };
     const save = store.getSave();
 
-    expect(version.version).toBe(19);
+    expect(version.version).toBe(STATE_SCHEMA_VERSION);
     expect(save.recordStats).toMatchObject({
       battleWin: 0,
       battleLose: 0,
@@ -181,12 +197,35 @@ describe("persisted expedition lifecycle", () => {
     expect(store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 2)?.api_state).toBe(1);
   });
 
+  it("allows normal expeditions to be repeated after their result is claimed", () => {
+    expect(store.startExpedition(2, 1, "normal-first").ok).toBe(true);
+    store.forceCompleteExpedition(2);
+    expect(store.claimExpedition(2).ok).toBe(true);
+    expect(store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 1)?.api_state).toBe(2);
+
+    expect(store.startExpedition(2, 1, "normal-second").ok).toBe(true);
+  });
+
+  it("does not allow two fleets to run the same expedition concurrently", () => {
+    const shipA = store.createShip(9);
+    const shipB = store.createShip(10);
+    store.changeDeckShip(3, 0, shipA.id);
+    store.changeDeckShip(3, 1, shipB.id);
+
+    expect(store.startExpedition(2, 1, "fleet-two").ok).toBe(true);
+    expect(store.startExpedition(3, 1, "fleet-three")).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/another fleet/i),
+    });
+  });
+
   it("marks naturally completed expeditions as ready without settling rewards", () => {
     const before = store.getSave().materials.ammo;
     const started = store.startExpedition(2, 1, "natural-complete");
     if (!started.ok) throw new Error(started.error);
 
     store.setExpeditionClockOffset(started.run.completeAt - Date.now() + 1);
+    store.settle();
     const completed = store.getSave();
 
     expect(completed.decks[1].missionState).toEqual({
@@ -252,18 +291,62 @@ describe("persisted expedition lifecycle", () => {
 
   it("resets monthly expedition availability at the JST boundary", () => {
     store.unlockAllExpeditions(true);
+    const lightCruiser = store.createShip(21);
+    store.changeDeckShip(2, 2, 3);
+    store.changeDeckShip(2, 3, lightCruiser.id);
+    store.db.prepare("UPDATE ships SET level = 50 WHERE id IN (1, 2, 3, ?)").run(lightCruiser.id);
     store.setExpeditionClockOffset(Date.UTC(2026, 5, 14, 2) - Date.now());
-    expect(store.startExpedition(2, 103, "monthly").ok).toBe(true);
+    expect(store.startExpedition(2, 42, "monthly").ok).toBe(true);
     store.forceCompleteExpedition(2);
     expect(store.claimExpedition(2).ok).toBe(true);
     expect(
-      store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 103)?.api_state
+      store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 42)?.api_state
     ).toBe(2);
 
     store.setExpeditionClockOffset(Date.UTC(2026, 5, 15, 4) - Date.now());
     expect(
-      store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 103)?.api_state
+      store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 42)?.api_state
     ).toBe(1);
+  });
+
+  it("consumes monthly availability only after a successful claim", () => {
+    store.unlockAllExpeditions(true);
+    store.setExpeditionClockOffset(Date.UTC(2026, 5, 14, 2) - Date.now());
+
+    expect(store.startExpedition(2, 42, "monthly-failure").ok).toBe(true);
+    store.forceCompleteExpedition(2);
+    const failed = store.claimExpedition(2);
+    expect(failed.ok).toBe(true);
+    if (failed.ok) expect(failed.result.clearResult).toBe(0);
+
+    let progress = store.getSave().expeditionProgress.find((item) => item.missionId === 42);
+    expect(progress).toMatchObject({ completedCount: 0, periodCount: 0 });
+    expect(
+      store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 42)?.api_state
+    ).toBe(1);
+
+    expect(store.startExpedition(2, 42, "monthly-recall").ok).toBe(true);
+    store.setExpeditionClockOffset(Date.UTC(2026, 5, 14, 2, 6) - Date.now());
+    expect(store.recallExpedition(2).ok).toBe(true);
+    store.forceCompleteExpedition(2);
+    expect(store.claimExpedition(2).ok).toBe(true);
+
+    progress = store.getSave().expeditionProgress.find((item) => item.missionId === 42);
+    expect(progress).toMatchObject({ completedCount: 0, periodCount: 0 });
+    expect(
+      store.getMissionMemberState().api_list_items.find((item) => item.api_mission_id === 42)?.api_state
+    ).toBe(1);
+  });
+
+  it("rejects a monthly expedition whose timer would cross the reset", () => {
+    store.unlockAllExpeditions(true);
+    store.setExpeditionClockOffset(Date.UTC(2026, 5, 15, 2, 30) - Date.now());
+
+    expect(store.startExpedition(2, 42, "monthly-overlap")).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/reset boundary/i),
+    });
+    expect(store.getSave().expeditionRuns).toEqual([]);
   });
 
   it("returns recalled fleets without expedition rewards", () => {

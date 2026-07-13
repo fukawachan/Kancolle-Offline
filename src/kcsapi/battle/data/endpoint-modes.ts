@@ -1,9 +1,22 @@
 import type { BattleEndpointKind, BattleMode } from "../types.js";
 
+export type BattlePhaseName =
+  | "support"
+  | "airBase"
+  | "kouku"
+  | "kouku2"
+  | "openingTaisen"
+  | "openingAtack"
+  | "hougeki1"
+  | "hougeki2"
+  | "hougeki3"
+  | "raigeki"
+  | "night";
+
 export type BattleEndpointMode = {
   endpoint: BattleEndpointKind;
   mode: BattleMode;
-  phaseSequence: string[];
+  phaseSequence: BattlePhaseName[];
   targetPolicy: "normal" | "airOnly" | "landBased" | "combinedSurface" | "combinedWater" | "escortFirst" | "enemyCombined";
   airBase: boolean;
   enemyCombined: "none" | "payload" | "active";
@@ -21,7 +34,7 @@ export const BATTLE_ENDPOINT_MODES: Record<string, BattleEndpointMode> = {
   "api_req_sortie/airbattle": {
     endpoint: "sortieAir",
     mode: "sortie",
-    phaseSequence: ["kouku"],
+    phaseSequence: ["kouku", "kouku2"],
     targetPolicy: "airOnly",
     airBase: false,
     enemyCombined: "none"
@@ -85,7 +98,7 @@ export const BATTLE_ENDPOINT_MODES: Record<string, BattleEndpointMode> = {
   "api_req_combined_battle/airbattle": {
     endpoint: "combinedAir",
     mode: "combined",
-    phaseSequence: ["kouku"],
+    phaseSequence: ["kouku", "kouku2"],
     targetPolicy: "airOnly",
     airBase: false,
     enemyCombined: "payload"

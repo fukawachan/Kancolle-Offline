@@ -6,6 +6,8 @@ import { shipTotalExpForLevel } from "../src/kcsapi/experience.js";
 import { buildApp } from "../src/server/app.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
 
+const API_TOKEN = "test-api-token-0000000000000004";
+
 describe("debug inventory controls", () => {
   let tempDir: string;
   let store: StateStore;
@@ -18,7 +20,8 @@ describe("debug inventory controls", () => {
     app = await buildApp({
       cacheDir: path.resolve("cache"),
       stateStore: store,
-      unknownLogPath: path.join(tempDir, "unknown.jsonl")
+      unknownLogPath: path.join(tempDir, "unknown.jsonl"),
+      apiToken: API_TOKEN
     });
   });
 
@@ -33,7 +36,10 @@ describe("debug inventory controls", () => {
       method: "POST",
       url: `/kcsapi/${pathname}`,
       payload: new URLSearchParams(
-        Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        {
+          api_token: API_TOKEN,
+          ...Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, String(value)]))
+        }
       ).toString(),
       headers: { "content-type": "application/x-www-form-urlencoded" }
     });

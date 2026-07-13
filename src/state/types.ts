@@ -23,6 +23,10 @@ export type PlayerOptions = {
   volBgm: number;
   volSe: number;
   volVoice: number;
+  friendlyRequestFlag: number;
+  friendlyRequestType: number;
+  ossItems: [number, number, number, number];
+  languageType: number;
 };
 
 export type Materials = {
@@ -166,6 +170,8 @@ export type RecordStats = {
   practiceLose: number;
   missionCount: number;
   missionSuccess: number;
+  rankingPoints: number;
+  rankingPeriodKey: string;
 };
 
 export type UseItemInventory = {
@@ -221,6 +227,7 @@ export type MapState = {
   phase: number;
   phaseProgress: number;
   periodKey: string;
+  clearCount: number;
 };
 
 export type EventSettings = {
@@ -242,6 +249,7 @@ export type SaveState = {
   materials: Materials;
   ships: Ship[];
   slotItems: SlotItem[];
+  relocatingSlotItemIds?: number[];
   airBases: AirBase[];
   presetSlots: PresetSlot[];
   presetSlotSettings: PresetSlotSettings;

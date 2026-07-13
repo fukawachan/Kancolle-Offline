@@ -1,0 +1,52 @@
+{
+  "domain": "expedition",
+  "generatedAt": "2026-07-12T13:24:35.889Z",
+  "generator": "scripts/generate-expedition-data.mjs",
+  "repositoryRevisions": {
+    "kancolleData": "a8018819ad330b73c714fbba195794453c8dfde3",
+    "successCheck": "3a20af2f43d8ac679dd1aed3069fdabcd735c930"
+  },
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "bytes": 10534,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"4f4b6e1e8c9711ea7b84159d5a90ab298e897ea1117e6bfcbea595422251465d\"",
+      "evidence": "exact",
+      "file": "mission_extend.js",
+      "finalUrl": "https://raw.githubusercontent.com/Nishisonic/SuccessCheck/3a20af2f43d8ac679dd1aed3069fdabcd735c930/mission_extend.js",
+      "lastModified": null,
+      "license": {
+        "note": "Community mechanics/master snapshot; consult the pinned upstream revision for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/Nishisonic/SuccessCheck/tree/3a20af2f43d8ac679dd1aed3069fdabcd735c930"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/Nishisonic/SuccessCheck/3a20af2f43d8ac679dd1aed3069fdabcd735c930/mission_extend.js",
+      "retrievedAt": "2026-07-12T13:24:35.889Z",
+      "revision": "3a20af2f43d8ac679dd1aed3069fdabcd735c930",
+      "sha256": "7eea443ceb930ae04c7731deee3bfab0d84f0335f9438ced695e6d3923364d5a",
+      "status": 200
+    },
+    {
+      "bytes": 2996980,
+      "contentType": "text/plain; charset=utf-8",
+      "etag": "W/\"06efd538834c804205b465f8a710c50bd3266d8a57b18c2dc444e4e2e82caa63\"",
+      "evidence": "exact",
+      "file": "start2.json",
+      "finalUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "lastModified": null,
+      "license": {
+        "note": "Community mechanics/master snapshot; consult the pinned upstream revision for terms",
+        "spdx": "NOASSERTION",
+        "url": "https://github.com/kcwiki/kancolle-data/tree/a8018819ad330b73c714fbba195794453c8dfde3"
+      },
+      "parameters": null,
+      "requestedUrl": "https://raw.githubusercontent.com/kcwiki/kancolle-data/a8018819ad330b73c714fbba195794453c8dfde3/api/api_start2.json",
+      "retrievedAt": "2026-07-12T13:24:35.889Z",
+      "revision": "a8018819ad330b73c714fbba195794453c8dfde3",
+      "sha256": "7dde437696386aadf5b48c661c43f04a381dbcc145e84993b387c54cdf754dac",
+      "status": 200
+    }
+  ]
+}

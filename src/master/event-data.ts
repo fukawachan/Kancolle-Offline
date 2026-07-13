@@ -23,6 +23,13 @@ export type EventRankDefinition = {
   rewards: readonly EventReward[];
 };
 
+export type EventPackageKind = "versioned-event" | "synthetic-debug";
+
+export type EventPhaseDefinition = Omit<MapPhaseDefinition, "required"> & {
+  required?: number;
+  requiredByRank?: Readonly<Record<string, number>>;
+};
+
 export type EventNodeDefinition = {
   node: number;
   point: string;
@@ -32,6 +39,7 @@ export type EventNodeDefinition = {
   colorNo: number;
   encounters?: readonly SortieEncounter[];
   dropPool?: readonly SortieDropEntry[];
+  observedAt?: readonly string[];
 };
 
 export type EventMapDefinition = {
@@ -45,12 +53,16 @@ export type EventMapDefinition = {
   sallyFlag: readonly [number, number, number];
   sallyArea: number;
   airBaseDecks: number;
+  unlock?: {
+    clearedMapIds: readonly number[];
+  };
   bgm: {
     moving: number;
     map: readonly [number, number];
     boss: readonly [number, number];
   };
   phaseBreakpoints: readonly number[];
+  phases?: readonly EventPhaseDefinition[];
   ranks: Record<string, EventRankDefinition>;
   nodes: readonly EventNodeDefinition[];
 };
@@ -76,6 +88,9 @@ export type EventCandidateStatus = {
   active: boolean;
   cacheMaps: number[];
   hasEventPack: boolean;
+  packageId: string;
+  packageKind: EventPackageKind;
+  productionEligible: boolean;
   maps: {
     id: number;
     areaId: number;
@@ -89,13 +104,27 @@ export type EventCandidateStatus = {
 };
 
 type GeneratedEventData = {
+  schemaVersion: number;
+  packageId: string;
+  packageKind: EventPackageKind;
   generatedAt: string;
+  evidence: {
+    level: string;
+    checkedAt: string;
+    detail: string;
+  };
   sources: Record<string, string>;
   events: EventDefinition[];
 };
 
 const require = createRequire(import.meta.url);
 const GENERATED = require("./event-data.generated.json") as GeneratedEventData;
+if (GENERATED.schemaVersion !== 1) {
+  throw new Error(`Unsupported event package schema ${GENERATED.schemaVersion}`);
+}
+export const EVENT_PACKAGE_ID = GENERATED.packageId;
+export const EVENT_PACKAGE_KIND = GENERATED.packageKind;
+export const EVENT_PACKAGE_PRODUCTION_ELIGIBLE = EVENT_PACKAGE_KIND === "versioned-event";
 const EVENTS = GENERATED.events;
 const EVENT_BY_AREA_ID = new Map(EVENTS.map((event) => [event.areaId, event] as const));
 const EVENT_MAP_BY_ID = new Map(EVENTS.flatMap((event) => event.maps.map((map) => [map.id, map] as const)));
@@ -238,7 +267,8 @@ export function selectEventSortieEncounter(
     shipIds: encounter.shipIds,
     enemyCombinedShipIds: encounter.enemyCombinedShipIds ?? [],
     formation: encounter.formation,
-    baseExp: encounter.baseExp ?? node.baseExp
+    baseExp: encounter.baseExp ?? node.baseExp,
+    observedAt: node.observedAt
   };
 }
 
@@ -262,7 +292,8 @@ export function selectEventSortieDrop(input: {
   return {
     shipId: picked.shipId,
     shipName: picked.shipName,
-    shipType: picked.shipType
+    shipType: picked.shipType,
+    ...(picked.maxOwned == null ? {} : { maxOwned: Math.max(0, Math.trunc(picked.maxOwned)) })
   };
 }
 
@@ -279,14 +310,38 @@ export function eventInitialMapGauge(mapId: number, rank: number) {
 export function eventMapPhaseDefinitions(mapId: number, rank: number): readonly MapPhaseDefinition[] | undefined {
   const map = eventMapById(mapId);
   if (!map) return undefined;
+  if (map.phases && map.phases.length > 0) {
+    const normalizedRank = String(Math.max(1, Math.min(4, Math.trunc(rank) || 3)));
+    return map.phases.map((phase) => ({
+      ...phase,
+      required: Math.max(1, Math.trunc(
+        phase.requiredByRank?.[normalizedRank]
+          ?? phase.requiredByRank?.["3"]
+          ?? phase.required
+          ?? 1
+      ))
+    }));
+  }
   const hp = eventRankDefinition(map, rank).maxMapHp;
   const boss = map.nodes.find((node) => node.boss);
   if (!boss) return undefined;
-  return [{ point: boss.point, required: hp, condition: "sink" }];
+  return [{
+    id: "boss",
+    point: boss.point,
+    required: hp,
+    condition: "sink",
+    gaugeNo: 1,
+    gaugeType: "hp"
+  }];
 }
 
 export function eventTerminalMapPhase(mapId: number) {
-  return eventMapById(mapId) ? 2 : 1;
+  const map = eventMapById(mapId);
+  return map ? Math.max(1, (map.phases?.length ?? 1) + 1) : 1;
+}
+
+export function eventMapUnlockPrerequisites(mapId: number) {
+  return eventMapById(mapId)?.unlock?.clearedMapIds ?? [];
 }
 
 export function eventMapClearRewards(mapId: number, rank: number) {
@@ -294,7 +349,11 @@ export function eventMapClearRewards(mapId: number, rank: number) {
   return map ? eventRankDefinition(map, rank).rewards : [];
 }
 
-export function eventResourceStatus(resourceManifest: ResourceManifest, activeAreaId: number | null = null) {
+export function eventResourceStatus(
+  resourceManifest: ResourceManifest,
+  activeAreaId: number | null = null,
+  options: { allowSynthetic?: boolean } = {}
+) {
   return EVENTS.map((event): EventCandidateStatus => {
     const maps = event.maps.map((map) => {
       const status = eventMapCacheStatus(resourceManifest, map);
@@ -311,23 +370,37 @@ export function eventResourceStatus(resourceManifest: ResourceManifest, activeAr
     });
     const cacheComplete = maps.every((map) => map.hasThumbnail && map.hasImage && map.hasInfo && map.hasSpots);
     const packageComplete = event.maps.length > 0 && event.maps.every((map) => map.nodes.some((node) => node.boss));
+    const productionEligible = EVENT_PACKAGE_PRODUCTION_ELIGIBLE;
     return {
       areaId: event.areaId,
       name: event.name,
       cacheComplete,
       packageComplete,
-      activatable: cacheComplete && packageComplete,
+      activatable: cacheComplete && packageComplete && (productionEligible || options.allowSynthetic === true),
       active: activeAreaId === event.areaId,
       cacheMaps: maps.filter((map) => map.hasThumbnail && map.hasImage && map.hasInfo && map.hasSpots).map((map) => map.mapNo),
       hasEventPack: packageComplete,
+      packageId: EVENT_PACKAGE_ID,
+      packageKind: EVENT_PACKAGE_KIND,
+      productionEligible,
       maps
     };
   });
 }
 
-export function validateEventPackage(areaId: number, resourceManifest?: ResourceManifest) {
+export function validateEventPackage(
+  areaId: number,
+  resourceManifest?: ResourceManifest,
+  options: { allowSynthetic?: boolean } = {}
+) {
   const event = eventDefinition(areaId);
   if (!event) return { ok: false as const, error: `Event area ${areaId} has no local event package` };
+  if (!EVENT_PACKAGE_PRODUCTION_ELIGIBLE && options.allowSynthetic !== true) {
+    return {
+      ok: false as const,
+      error: `Event package ${EVENT_PACKAGE_ID} is synthetic debug data and requires explicit opt-in`
+    };
+  }
   if (resourceManifest) {
     const missing = event.maps.flatMap((map) => {
       const status = eventMapCacheStatus(resourceManifest, map);
@@ -338,6 +411,14 @@ export function validateEventPackage(areaId: number, resourceManifest?: Resource
     }
   }
   for (const map of event.maps) {
+    if (EVENT_PACKAGE_PRODUCTION_ELIGIBLE && (!map.phases || map.phases.length === 0)) {
+      return { ok: false as const, error: `Event map ${map.id} has no versioned phase definitions` };
+    }
+    for (const prerequisiteId of map.unlock?.clearedMapIds ?? []) {
+      if (!event.maps.some((candidate) => candidate.id === prerequisiteId)) {
+        return { ok: false as const, error: `Event map ${map.id} has unknown unlock prerequisite ${prerequisiteId}` };
+      }
+    }
     if (!map.nodes.some((node) => node.boss)) return { ok: false as const, error: `Event map ${map.id} has no boss node` };
     const routing = eventRoutingMap(map.areaId, map.mapNo);
     if (!routing) return { ok: false as const, error: `Event map ${map.id} has no routing graph` };
@@ -348,6 +429,12 @@ export function validateEventPackage(areaId: number, resourceManifest?: Resource
       for (const encounter of node.encounters ?? []) {
         if (encounter.shipIds.length === 0) {
           return { ok: false as const, error: `Event map ${map.id} node ${node.node} has an empty enemy formation` };
+        }
+        if (encounter.shipIds.length > 6 || (encounter.enemyCombinedShipIds?.length ?? 0) > 6) {
+          return {
+            ok: false as const,
+            error: `Event map ${map.id} node ${node.node} has an invalid enemy main/escort split`
+          };
         }
       }
     }
@@ -413,7 +500,8 @@ function toSortieNode(map: EventMapDefinition, node: EventNodeDefinition): Sorti
     eventId: node.eventId,
     colorNo: node.colorNo,
     encounters: node.encounters ?? [],
-    dropPool: node.dropPool ?? []
+    dropPool: node.dropPool ?? [],
+    observedAt: node.observedAt ?? []
   };
 }
 
