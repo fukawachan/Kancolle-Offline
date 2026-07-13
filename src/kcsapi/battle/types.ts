@@ -234,6 +234,25 @@ export type KoukuStage3Payload = {
   api_edam: number[];
 };
 
+export type AirFirePayload = {
+  api_idx: number;
+  api_kind: number;
+  api_use_items: number[];
+};
+
+export type KoukuStage2Payload = {
+  api_f_count: number;
+  api_f_lostcount: number;
+  api_e_count: number;
+  api_e_lostcount: number;
+  /**
+   * The cached client reads AACI animation data from Stage 2. Historical
+   * records produced by this server may still carry this field at the kouku
+   * root; the response boundary normalizes those records before serialization.
+   */
+  api_air_fire?: AirFirePayload;
+};
+
 export type KoukuPayload = {
   api_plane_from: number[][];
   api_stage1: {
@@ -244,19 +263,9 @@ export type KoukuPayload = {
     api_disp_seiku: number;
     api_touch_plane: number[];
   };
-  api_stage2: {
-    api_f_count: number;
-    api_f_lostcount: number;
-    api_e_count: number;
-    api_e_lostcount: number;
-  } | null;
+  api_stage2: KoukuStage2Payload | null;
   api_stage3: KoukuStage3Payload | null;
   api_stage3_combined?: KoukuStage3Payload | null;
-  api_air_fire?: {
-    api_idx: number;
-    api_kind: number;
-    api_use_items: number[];
-  };
 };
 
 export type BattlePayload = Record<string, any> & {

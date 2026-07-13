@@ -65,7 +65,6 @@ export type LandBaseAirPhase = {
   api_stage1: unknown;
   api_stage2: unknown;
   api_stage3: unknown;
-  api_air_fire?: unknown;
 };
 
 export type LandBaseWavePayload = {
@@ -76,7 +75,6 @@ export type LandBaseWavePayload = {
   api_stage1: unknown;
   api_stage2: unknown;
   api_stage3: unknown;
-  api_air_fire?: unknown;
 };
 
 export type LandAttackSpecialModifierRule = {
@@ -174,8 +172,7 @@ export function landBaseWavePayload(
     })),
     api_stage1: phase.api_stage1 ?? null,
     api_stage2: phase.api_stage2 ?? null,
-    api_stage3: phase.api_stage3 ?? null,
-    ...(phase.api_air_fire ? { api_air_fire: phase.api_air_fire } : {})
+    api_stage3: phase.api_stage3 ?? null
   };
 }
 

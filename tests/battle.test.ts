@@ -234,7 +234,12 @@ describe("sortie battle simulation", () => {
     if (!kouku?.api_stage2 || !kouku.api_stage3) {
       throw new Error("expected interception and airstrike stages");
     }
-    expect(kouku.api_stage2.api_f_count).toBeLessThan(40);
+    const friendlySnapshot = battle.record.units?.friendly[0];
+    const survivingAttackAircraft = friendlySnapshot?.equippedSlots
+      .filter((slot) => slot.slotMasterId === 23)
+      .reduce((sum, slot) => sum + (friendlySnapshot.onSlot[slot.index] ?? 0), 0) ?? 0;
+    expect(kouku.api_stage2.api_f_count).toBe(survivingAttackAircraft + kouku.api_stage2.api_f_lostcount);
+    expect(kouku.api_stage2.api_f_count).toBeLessThan(kouku.api_stage1.api_f_count);
     expect(kouku.api_stage3.api_edam.some((damage) => damage > 0)).toBe(true);
     expect(battle.record.aircraftLosses?.friendly[akagi.id]).toBeGreaterThan(0);
     const stage3 = kouku.api_stage3;
@@ -258,6 +263,7 @@ describe("sortie battle simulation", () => {
     expect(battle.payload.api_stage_flag).toEqual([1, 0, 0]);
     expect(battle.payload.api_kouku?.api_stage2).toBeNull();
     expect(battle.payload.api_kouku?.api_stage3).toBeNull();
+    expect(battle.payload.api_kouku).not.toHaveProperty("api_air_fire");
   });
 
   it("uses 3-5 B sortie base experience for settlement multipliers", () => {
@@ -306,51 +312,75 @@ describe("sortie battle simulation", () => {
     }
   });
 
-  it("plays Atlanta Kai AACI kind 39 in a 3-5 carrier battle", () => {
+  it("places Atlanta Kai AACI under Stage 2 on the real 3-5 D/H encounters", () => {
     const atlanta = store.createShip(696);
-    const gfcsGun = store.createSlotItem(363);
     const concentratedGun = store.createSlotItem(362);
+    const gfcsRadar = store.createSlotItem(308);
+    const gfcsGun = store.createSlotItem(363);
+    const fillers = Array.from({ length: 4 }, () => store.createShip(1));
     store.clearDeckFollowerShips(1);
-    store.changeDeckShip(1, 0, atlanta.id);
-    store.equipSlotItem(atlanta.id, 0, gfcsGun.id);
-    store.equipSlotItem(atlanta.id, 1, concentratedGun.id);
+    fillers.forEach((ship, index) => store.changeDeckShip(1, index, ship.id));
+    store.changeDeckShip(1, 4, atlanta.id);
+    store.equipSlotItem(atlanta.id, 0, concentratedGun.id);
+    store.equipSlotItem(atlanta.id, 1, gfcsRadar.id);
+    store.equipSlotItem(atlanta.id, 2, gfcsGun.id);
     store.startSortie(1, 3, 5);
     const session = store.getSave().sortieSession!;
-    const node = sortieNodes().find((item) => item.mapId === 35 && item.point === "B")!;
-    const originalEncounters = node.encounters.map((encounter) => ({
-      shipIds: [...encounter.shipIds],
-      formation: encounter.formation,
-      weight: encounter.weight
-    }));
-    try {
-      for (const encounter of node.encounters) {
-        Object.assign(encounter as any, { shipIds: [1510], formation: 1, weight: 1 });
-      }
-      let activated: ReturnType<typeof createSortieBattle> | undefined;
-      let activatedSeed = -1;
+    const nodes = new Map(sortieNodes()
+      .filter((item) => item.mapId === 35)
+      .map((item) => [item.point, item] as const));
+    const battleAt = (
+      point: "B" | "D" | "H",
+      seed: number,
+      endpoint: "sortieDay" | "sortieAir" = "sortieDay"
+    ) => {
+      const node = nodes.get(point)!;
+      store.db.prepare("UPDATE sortie_sessions SET node = ?, seed = ?, state_json = ? WHERE id = 1")
+        .run(node.node, seed, JSON.stringify({
+          ...session.state,
+          point,
+          routeStep: node.node,
+          visited: ["Start", point],
+          battles: 0
+        }));
+      return createSortieBattle(store.getSave(), { formation: 1, endpoint });
+    };
+    const activatedAt = (point: "D" | "H") => {
       for (let seed = 0; seed < 128; seed += 1) {
-        store.db.prepare("UPDATE sortie_sessions SET node = 1, seed = ?, state_json = ? WHERE id = 1")
-          .run(seed, JSON.stringify({ ...session.state, point: "B", routeStep: 1, visited: ["Start", "B"], battles: 0 }));
-        const candidate = createSortieBattle(store.getSave(), { formation: 1 });
-        if (candidate.payload.api_kouku?.api_air_fire?.api_kind === 39) {
-          activated = candidate;
-          activatedSeed = seed;
-          break;
+        const candidate = battleAt(point, seed);
+        if (candidate.payload.api_kouku?.api_stage2?.api_air_fire?.api_kind === 39) {
+          return candidate;
         }
       }
-      expect(activatedSeed).toBeGreaterThanOrEqual(0);
-      expect(activated?.payload.api_kouku?.api_air_fire).toEqual({
-        api_idx: 0,
+      return undefined;
+    };
+
+    // The real B-point formations have no opening-attack aircraft, so Stage 2
+    // must not fabricate an AACI opportunity there.
+    expect(battleAt("B", 0).payload.api_kouku?.api_stage2?.api_air_fire).toBeUndefined();
+
+    for (const point of ["D", "H"] as const) {
+      const activated = activatedAt(point);
+      expect(activated, `Atlanta AACI did not activate at real 3-5 ${point}`).toBeDefined();
+      expect(activated?.payload.api_kouku?.api_stage2?.api_air_fire).toEqual({
+        api_idx: 4,
         api_kind: 39,
         api_use_items: [363, 362]
       });
       expect(activated?.payload.api_kouku?.api_stage2?.api_e_lostcount).toBeGreaterThan(0);
-
-      store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(activatedSeed);
-      expect(createSortieBattle(store.getSave(), { formation: 1 }).payload.api_kouku?.api_air_fire?.api_kind).toBe(39);
-    } finally {
-      node.encounters.forEach((encounter, index) => Object.assign(encounter, originalEncounters[index]));
+      expect(activated?.payload.api_kouku).not.toHaveProperty("api_air_fire");
     }
+
+    let secondWave: ReturnType<typeof createSortieBattle> | undefined;
+    for (let seed = 0; seed < 256; seed += 1) {
+      const candidate = battleAt("H", seed, "sortieAir");
+      if (candidate.payload.api_kouku2?.api_stage2?.api_air_fire) {
+        secondWave = candidate;
+        break;
+      }
+    }
+    expect(secondWave?.payload.api_kouku2?.api_stage2?.api_air_fire?.api_idx).toBe(4);
+    expect(secondWave?.payload.api_kouku2).not.toHaveProperty("api_air_fire");
   });
 
   it("encodes the saved 3-5 Nachi observation and three carrier cut-ins without null equipment", () => {
@@ -814,11 +844,60 @@ describe("sortie battle simulation", () => {
       formation: 1
     });
 
-    expect(battle.payload.api_kouku?.api_air_fire).toMatchObject({
+    expect(battle.payload.api_kouku?.api_stage2?.api_air_fire).toMatchObject({
       api_idx: 0,
       api_kind: 5,
       api_use_items: [3, 10, 30]
     });
+    expect(battle.payload.api_kouku).not.toHaveProperty("api_air_fire");
+  });
+
+  it("normalizes legacy BattleRecord AACI fields when the saved battle is read", () => {
+    const defender = store.createShip(1);
+    const radar = store.createSlotItem(30);
+    const highAngleA = store.createSlotItem(3);
+    const highAngleB = store.createSlotItem(10);
+    store.equipSlotItem(defender.id, 0, highAngleA.id);
+    store.equipSlotItem(defender.id, 1, highAngleB.id);
+    store.equipSlotItem(defender.id, 2, radar.id);
+    store.changeDeckShip(1, 0, defender.id);
+    const rival = {
+      id: 1,
+      name: "Legacy AACI",
+      level: 120,
+      rank: "元帥",
+      comment: "legacy protocol",
+      flag: 1,
+      medals: 4,
+      ships: [{
+        id: 101,
+        masterId: 277,
+        level: 120,
+        star: 5,
+        slotMasterIds: [23],
+        onSlot: [18, 0, 0, 0, 0]
+      }]
+    };
+    const battle = createPracticeBattle(store.getSave(), {
+      practiceEnemyId: 1,
+      practiceRivals: [rival],
+      formation: 1
+    });
+    const current = battle.record.phases.kouku!;
+    const airFire = current.api_stage2?.api_air_fire;
+    expect(airFire).toBeDefined();
+    const legacyKouku = {
+      ...current,
+      api_stage2: current.api_stage2 ? { ...current.api_stage2, api_air_fire: undefined } : null,
+      api_air_fire: airFire
+    };
+    const read = createNightBattle({
+      ...battle.record,
+      phases: { ...battle.record.phases, kouku: legacyKouku as any }
+    }).record.phases.kouku as any;
+
+    expect(read.api_stage2.api_air_fire).toEqual(airFire);
+    expect(read).not.toHaveProperty("api_air_fire");
   });
 
   it("emits complete two-hit arrays for daytime double attacks after the first hit sinks", () => {
@@ -2166,6 +2245,13 @@ describe("sortie battle simulation", () => {
       expect(battle.payload.api_kouku?.api_plane_from[1]).toEqual([1]);
       expect(battle.payload.api_kouku?.api_stage1.api_e_count).toBeGreaterThan(0);
       expect(battle.payload.api_kouku?.api_stage3?.api_fdam).toHaveLength(6);
+      const enemySnapshot = battle.record.units?.enemy[0];
+      const survivingAttackAircraft = enemySnapshot?.equippedSlots
+        .filter((slot) => slot.slotMasterId === 52 || slot.slotMasterId === 23)
+        .reduce((sum, slot) => sum + (enemySnapshot.onSlot[slot.index] ?? 0), 0) ?? 0;
+      const stage2 = battle.payload.api_kouku?.api_stage2;
+      expect(stage2?.api_e_count).toBe(survivingAttackAircraft + (stage2?.api_e_lostcount ?? 0));
+      expect(stage2?.api_e_count).toBeLessThan(battle.payload.api_kouku!.api_stage1.api_e_count);
     });
 
     it("acceptance: combined fleet aerial battle exposes escort HP and combined stage3 arrays", () => {
@@ -2219,6 +2305,111 @@ describe("sortie battle simulation", () => {
       const battle = createCombinedBattle(store.getSave(), { formation: 1, endpoint: "combinedAir" });
 
       expect(battle.payload.api_kouku?.api_plane_from[0]).toEqual([1]);
+    });
+
+    it("lets an escort-fleet Atlanta activate AACI with a non-conflicting protocol index", () => {
+      const atlanta = store.createShip(696);
+      const concentratedGun = store.createSlotItem(362);
+      const gfcsGun = store.createSlotItem(363);
+      store.equipSlotItem(atlanta.id, 0, concentratedGun.id);
+      store.equipSlotItem(atlanta.id, 1, gfcsGun.id);
+      store.changeDeckShip(2, 0, atlanta.id);
+      store.clearDeckFollowerShips(2);
+      store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+
+      withPatchedNodeEncounters(11, 1, { shipIds: [1510], formation: 1, weight: 1 }, () => {
+        let activated: ReturnType<typeof createCombinedBattle> | undefined;
+        for (let seed = 0; seed < 128; seed += 1) {
+          store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+          const candidate = createCombinedBattle(store.getSave(), { formation: 1, endpoint: "combinedAir" });
+          if (candidate.payload.api_kouku?.api_stage2?.api_air_fire?.api_kind === 39) {
+            activated = candidate;
+            break;
+          }
+        }
+
+        expect(activated?.payload.api_kouku?.api_stage2?.api_air_fire).toEqual({
+          api_idx: 6,
+          api_kind: 39,
+          api_use_items: [363, 362]
+        });
+        expect(activated?.payload.api_kouku).not.toHaveProperty("api_air_fire");
+      });
+    });
+
+    it("routes enemy opening-airstrike damage to the combined Stage 3 arrays", () => {
+      const escort = store.createShip(119);
+      store.changeDeckShip(2, 0, escort.id);
+      store.clearDeckFollowerShips(2);
+      store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+
+      withPatchedNodeEncounters(11, 1, { shipIds: [1510], formation: 1, weight: 1 }, () => {
+        let routed: ReturnType<typeof createCombinedBattle> | undefined;
+        for (let seed = 0; seed < 128; seed += 1) {
+          store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+          const candidate = createCombinedBattle(store.getSave(), { formation: 1, endpoint: "combinedAir" });
+          if (candidate.payload.api_kouku?.api_stage3_combined?.api_fdam.some((damage) => damage > 0)) {
+            routed = candidate;
+            break;
+          }
+        }
+
+        expect(routed).toBeDefined();
+        expect(routed?.payload.api_kouku?.api_stage3_combined?.api_fdam).toHaveLength(6);
+        expect(routed?.payload.api_kouku?.api_stage3_combined?.api_fdam[0]).toBeGreaterThan(0);
+      });
+    });
+
+    it("launches escort aircraft only when the opposing fleet is also combined", () => {
+      const escortCarrier = store.createShip(277);
+      const escortBomber = store.createSlotItem(23);
+      store.equipSlotItem(escortCarrier.id, 0, escortBomber.id);
+      store.changeDeckShip(2, 0, escortCarrier.id);
+      store.clearDeckFollowerShips(2);
+      store.db.prepare("UPDATE players SET combined_fleet = 1 WHERE id = 1").run();
+      const node = sortieNodes().find((item) => item.mapId === 11 && item.node === 1)!;
+      const originals = node.encounters.map((encounter) => ({
+        shipIds: [...encounter.shipIds],
+        enemyCombinedShipIds: [...(encounter.enemyCombinedShipIds ?? [])],
+        formation: encounter.formation,
+        weight: encounter.weight
+      }));
+      try {
+        for (const encounter of node.encounters) {
+          Object.assign(encounter as any, {
+            shipIds: [1501],
+            enemyCombinedShipIds: [1510],
+            formation: 1,
+            weight: 1
+          });
+        }
+        const versusNormal = createCombinedBattle(store.getSave(), {
+          formation: 1,
+          endpoint: "combinedDay"
+        });
+        const versusCombined = createCombinedBattle(store.getSave(), {
+          formation: 1,
+          endpoint: "combinedEcBattle"
+        });
+
+        expect(versusNormal.payload.api_kouku).toBeNull();
+        expect(versusCombined.payload.api_kouku?.api_stage1.api_f_count).toBeGreaterThan(0);
+        expect(versusCombined.payload.api_kouku?.api_stage1.api_e_count).toBeGreaterThan(0);
+        expect(versusCombined.payload.api_kouku?.api_plane_from).toEqual([[1], [1]]);
+      } finally {
+        node.encounters.forEach((encounter, index) => {
+          Object.assign(encounter as any, {
+            shipIds: originals[index].shipIds,
+            formation: originals[index].formation,
+            weight: originals[index].weight
+          });
+          if (originals[index].enemyCombinedShipIds.length > 0) {
+            (encounter as any).enemyCombinedShipIds = originals[index].enemyCombinedShipIds;
+          } else {
+            delete (encounter as any).enemyCombinedShipIds;
+          }
+        });
+      }
     });
 
     it("acceptance: night torpedo cut-in keeps torpedo snapshots and two-hit damage", () => {
@@ -2288,7 +2479,7 @@ describe("sortie battle simulation", () => {
       });
       const kouku = battle.payload.api_kouku;
 
-      expect(kouku?.api_air_fire).toMatchObject({
+      expect(kouku?.api_stage2?.api_air_fire).toMatchObject({
         api_idx: 0,
         api_kind: 5,
         api_use_items: [3, 10, 30]

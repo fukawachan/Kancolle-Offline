@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MARRIED_SHIP_LEVEL_CAP, shipTotalExpForLevel } from "../src/kcsapi/experience.js";
+import { createSortieBattle } from "../src/kcsapi/battle.js";
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createResourceManifest } from "../src/resources/manifest.js";
 import { buildApp } from "../src/server/app.js";
@@ -3324,6 +3325,56 @@ describe("local kcsapi endpoints", () => {
     expect(suppliedAkagi.api_onslot).toEqual([20, 20, 0, 0, 0]);
     expect(store.getSave().materials.bauxite).toBe(beforeSupply.materials.bauxite - missingAircraft * 5);
     expect(chargeData.api_use_bou).toBe(1);
+  });
+
+  it("serializes Atlanta AACI at api_kouku.api_stage2.api_air_fire", async () => {
+    const atlanta = store.createShip(696);
+    const concentratedGun = store.createSlotItem(362);
+    const gfcsRadar = store.createSlotItem(308);
+    const gfcsGun = store.createSlotItem(363);
+    await post("api_req_kaisou/slotset", { api_id: atlanta.id, api_slot_idx: 0, api_item_id: concentratedGun.id });
+    await post("api_req_kaisou/slotset", { api_id: atlanta.id, api_slot_idx: 1, api_item_id: gfcsRadar.id });
+    await post("api_req_kaisou/slotset", { api_id: atlanta.id, api_slot_idx: 2, api_item_id: gfcsGun.id });
+    await post("api_req_hensei/change", { api_id: 1, api_ship_idx: 0, api_ship_id: atlanta.id });
+    await post("api_req_map/start", { api_maparea_id: 1, api_mapinfo_no: 1, api_deck_id: 1 });
+    await post("api_req_map/next");
+
+    const session = store.getSave().sortieSession!;
+    const node = sortieNodes().find((item) => item.mapId === 11 && item.node === session.node)!;
+    const originals = node.encounters.map((encounter) => ({
+      shipIds: [...encounter.shipIds],
+      formation: encounter.formation,
+      weight: encounter.weight
+    }));
+    try {
+      for (const encounter of node.encounters) {
+        Object.assign(encounter as any, { shipIds: [1510], formation: 1, weight: 1 });
+      }
+      let activatedSeed = -1;
+      for (let seed = 0; seed < 128; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+        const candidate = createSortieBattle(store.getSave(), { formation: 1 });
+        if (candidate.payload.api_kouku?.api_stage2?.api_air_fire?.api_kind === 39) {
+          activatedSeed = seed;
+          break;
+        }
+      }
+      expect(activatedSeed).toBeGreaterThanOrEqual(0);
+      store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(activatedSeed);
+
+      const response = await post("api_req_sortie/battle", { api_formation: 1 });
+      const kouku = response.json().api_data.api_kouku;
+
+      expect(response.statusCode).toBe(200);
+      expect(kouku.api_stage2.api_air_fire).toEqual({
+        api_idx: 0,
+        api_kind: 39,
+        api_use_items: [363, 362]
+      });
+      expect(kouku).not.toHaveProperty("api_air_fire");
+    } finally {
+      node.encounters.forEach((encounter, index) => Object.assign(encounter as any, originals[index]));
+    }
   });
 
   it("exposes official 1-1 boss enemy fleet through battle payload and start2 master data", async () => {

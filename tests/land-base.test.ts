@@ -63,16 +63,22 @@ describe("land-base dispatch protocol", () => {
     expect(publishedLandBaseRange(74, "P")).toMatchObject({ requiredDistance: 2 });
     expect(publishedLandBaseRange(75, "T")).toBeNull();
 
-    expect(landBaseWavePayload(1, [{ masterId: 168, count: 18 }], {
+    const wave = landBaseWavePayload(1, [{ masterId: 168, count: 18 }], {
       api_plane_from: [[1], [2]],
       api_stage1: { airState: 1 },
-      api_stage2: null,
-      api_stage3: null
-    })).toEqual(expect.objectContaining({
+      api_stage2: { api_air_fire: { api_idx: 0, api_kind: 39, api_use_items: [363, 362] } },
+      api_stage3: null,
+      // Legacy callers once forwarded this invalid root field. The adapter
+      // must discard it and preserve only the nested Stage 2 payload.
+      api_air_fire: { api_idx: 0, api_kind: 39, api_use_items: [363, 362] }
+    } as any);
+    expect(wave).toEqual(expect.objectContaining({
       api_base_id: 1,
-      api_stage_flag: [1, 0, 0],
+      api_stage_flag: [1, 1, 0],
       api_plane_from: [null, [2]],
-      api_squadron_plane: [{ api_mst_id: 168, api_count: 18 }]
+      api_squadron_plane: [{ api_mst_id: 168, api_count: 18 }],
+      api_stage2: { api_air_fire: { api_idx: 0, api_kind: 39, api_use_items: [363, 362] } }
     }));
+    expect(wave).not.toHaveProperty("api_air_fire");
   });
 });

@@ -62,6 +62,7 @@ import {
   supportAttackKind
 } from "./battle/support.js";
 import type {
+  AirFirePayload,
   AirSlot,
   AirBaseAircraftLossRecord,
   BattleEndpointKind,
@@ -431,11 +432,11 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
         airBase = airBaseAttackPhase(save, sortie, enemy, formations, rng);
         break;
       case "kouku":
-        kouku = airPhase(friendly, enemy, formations, rng);
+        kouku = airPhase(standardAirPhaseParticipants(friendly, enemy), formations, rng);
         dayAirControl = dayShellingAirControl(kouku);
         break;
       case "kouku2":
-        kouku2 = airPhase(friendly, enemy, formations, rng);
+        kouku2 = airPhase(standardAirPhaseParticipants(friendly, enemy), formations, rng);
         break;
       case "openingTaisen":
         openingTaisen = openingAswPhase(friendly, enemy, formation[0], rng);
@@ -561,7 +562,7 @@ export function createPracticeBattle(save: SaveState, input: BattleInput = {}) {
   const beforeF = fixedHp(friendly);
   const beforeE = fixedHp(enemy);
 
-  const kouku = airPhase(friendly, enemy, formations, rng);
+  const kouku = airPhase(standardAirPhaseParticipants(friendly, enemy), formations, rng);
   const dayAirControl = dayShellingAirControl(kouku);
   const openingTaisen = openingAswPhase(friendly, enemy, formation[0], rng);
   const openingAtack = openingTorpedoPhase(friendly, enemy, formations, rng, formation[2]);
@@ -654,8 +655,12 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const formulaContext = combinedFormulaContext(combinedType, enemyCombinedActive);
   const escortTargets = enemyCombinedActive ? enemyCombined : enemy;
   const torpedoTargets = enemyCombinedActive ? [...enemy, ...enemyCombined] : enemy;
-  const airFriendly = enemyCombinedActive ? [...friendly, ...escort] : friendly;
-  const airEnemy = enemyCombinedActive ? [...enemy, ...enemyCombined] : enemy;
+  const airParticipants = combinedAirPhaseParticipants(
+    friendly,
+    escort,
+    enemy,
+    enemyCombinedActive ? enemyCombined : []
+  );
   const roles = combinedShellingFriendlySequence(combinedType, enemyCombinedActive);
   const combinedShellingRound = (round: 0 | 1 | 2) => {
     const role = roles[round];
@@ -708,11 +713,11 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
         airBase = airBaseAttackPhase(save, sortie, enemy, formations, rng);
         break;
       case "kouku":
-        kouku = airPhase(airFriendly, airEnemy, formations, rng, formulaContext);
+        kouku = airPhase(airParticipants, formations, rng, formulaContext);
         dayAirControl = dayShellingAirControl(kouku);
         break;
       case "kouku2":
-        kouku2 = airPhase(airFriendly, airEnemy, formations, rng, formulaContext);
+        kouku2 = airPhase(airParticipants, formations, rng, formulaContext);
         break;
       case "openingTaisen":
         openingTaisen = openingAswPhase(escort, escortTargets, formation[0], rng, formulaContext);
@@ -803,7 +808,10 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
     },
     sortie,
     result,
-    aircraftLosses: aircraftLosses([...friendly, ...escort], airEnemy),
+    aircraftLosses: aircraftLosses(
+      [...friendly, ...escort],
+      enemyCombinedActive ? [...enemy, ...enemyCombined] : enemy
+    ),
     support,
     airBaseAircraftLosses: airBase.losses,
     damageControlActivations: collectDamageControlActivations([...friendly, ...escort]),
@@ -822,6 +830,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
 }
 
 export function createNightBattle(record: BattleRecord): { payload: Record<string, unknown>; record: BattleRecord } {
+  record = normalizeBattleRecordAirPhases(record);
   const mainFriendly = recordUnitsFrom(record, 0);
   const friendly = record.mode === "combined" ? recordEscortUnitsFrom(record) : mainFriendly;
   const mainEnemy = recordUnitsFrom(record, 1);
@@ -1043,7 +1052,7 @@ function airBaseAttackPhase(
     const slots = slotsByBase.get(airBaseKey(wave.areaId, wave.baseId)) ?? [];
     const countsBefore = new Map(slots.map((slot) => [slot.squadronId, slot.count] as const));
     const unit = airBaseBattleUnit(wave.baseId, slots);
-    const kouku = airPhase([unit], enemy, formations, rng);
+    const kouku = airPhase(standardAirPhaseParticipants([unit], enemy), formations, rng);
     payload.push(landBaseWavePayload(
       wave.baseId,
       slots.map((slot) => ({ masterId: slot.slotMasterId, count: countsBefore.get(slot.squadronId) ?? 0 })),
@@ -1206,7 +1215,7 @@ function normalizeSettlement(settlement: FleetSettlementSlot[]) {
 function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: BattleUnit[]): BattlePayload {
   const fMaxHps = fixedMaxHp(friendly);
   const eMaxHps = fixedMaxHp(enemy);
-  const kouku = record.phases.kouku ?? null;
+  const kouku = normalizeKoukuPayload(record.phases.kouku);
   const stageFlag: [number, number, number] = kouku
     ? [1, kouku.api_stage2 ? 1 : 0, kouku.api_stage3 ? 1 : 0]
     : [0, 0, 0];
@@ -1231,7 +1240,7 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_stage_flag: stageFlag,
     api_air_base_attack: record.phases.airBaseAttack ?? null,
     api_kouku: kouku,
-    api_kouku2: record.phases.kouku2 ?? null,
+    api_kouku2: normalizeKoukuPayload(record.phases.kouku2),
     api_support_flag: record.support?.arrived ? record.support.flag : 0,
     api_support_info: record.support?.arrived ? record.support.info : null,
     api_opening_taisen: record.phases.openingTaisen ?? null,
@@ -1246,8 +1255,50 @@ function battlePayload(record: BattleRecord, friendly: BattleUnit[], enemy: Batt
     api_hougeki3: record.phases.hougeki3,
     api_raigeki: record.phases.raigeki,
     api_friendly_info: null,
-    api_friendly_kouku: record.phases.friendlyKouku ?? null,
+    api_friendly_kouku: normalizeKoukuPayload(record.phases.friendlyKouku),
     api_friendly_battle: record.phases.friendlyBattle ?? null
+  };
+}
+
+/**
+ * Battle records are persisted as JSON and older records used the invalid
+ * `api_kouku.api_air_fire` layout. Keep the database shape migration-free and
+ * repair that legacy payload only when it crosses the KCSAPI response boundary.
+ */
+function normalizeKoukuPayload(kouku: KoukuPayload | null | undefined): KoukuPayload | null {
+  if (!kouku) return null;
+  const legacy = kouku as KoukuPayload & { api_air_fire?: AirFirePayload };
+  if (!Object.prototype.hasOwnProperty.call(legacy, "api_air_fire")) return kouku;
+  const { api_air_fire: airFire, ...payload } = legacy;
+  if (!airFire || !payload.api_stage2 || payload.api_stage2.api_air_fire) return payload;
+  return {
+    ...payload,
+    api_stage2: {
+      ...payload.api_stage2,
+      api_air_fire: airFire
+    }
+  };
+}
+
+function normalizeBattleRecordAirPhases(record: BattleRecord): BattleRecord {
+  const kouku = normalizeKoukuPayload(record.phases.kouku);
+  const kouku2 = normalizeKoukuPayload(record.phases.kouku2);
+  const friendlyKouku = normalizeKoukuPayload(record.phases.friendlyKouku);
+  if (
+    kouku === record.phases.kouku &&
+    kouku2 === record.phases.kouku2 &&
+    friendlyKouku === (record.phases.friendlyKouku ?? null)
+  ) {
+    return record;
+  }
+  return {
+    ...record,
+    phases: {
+      ...record.phases,
+      kouku,
+      kouku2,
+      ...(record.phases.friendlyKouku !== undefined ? { friendlyKouku } : {})
+    }
   };
 }
 
@@ -1337,15 +1388,68 @@ function fixedParamsFromMasters(masterIds: number[]) {
   });
 }
 
+type AirPhaseSideParticipants = {
+  /** Units whose aircraft enter Stage 1 and may perform the opening strike. */
+  aviationUnits: BattleUnit[];
+  /** Units that contribute fleet AA and may supply an AACI candidate. */
+  defenseUnits: BattleUnit[];
+  /** Units that may be selected as Stage 3 airstrike targets. */
+  strikeTargets: BattleUnit[];
+};
+
+type AirPhaseParticipants = {
+  friendly: AirPhaseSideParticipants;
+  enemy: AirPhaseSideParticipants;
+};
+
+function standardAirPhaseParticipants(friendly: BattleUnit[], enemy: BattleUnit[]): AirPhaseParticipants {
+  return {
+    friendly: { aviationUnits: friendly, defenseUnits: friendly, strikeTargets: friendly },
+    enemy: { aviationUnits: enemy, defenseUnits: enemy, strikeTargets: enemy }
+  };
+}
+
+/**
+ * Combined-fleet aerial roles are deliberately separate. Against a normal
+ * enemy fleet the escort's planes do not launch, but its ships still provide
+ * fleet AA, may activate AACI, and may be selected by an enemy airstrike. When
+ * the enemy is also combined, both fleets' main and escort aircraft launch.
+ *
+ * Published rule tables:
+ * https://wikiwiki.jp/kancolle/%E9%80%A3%E5%90%88%E8%89%A6%E9%9A%8A
+ * https://wikiwiki.jp/kancolle/%E5%AF%BE%E7%A9%BA%E7%A0%B2%E7%81%AB
+ */
+function combinedAirPhaseParticipants(
+  friendlyMain: BattleUnit[],
+  friendlyEscort: BattleUnit[],
+  enemyMain: BattleUnit[],
+  enemyEscort: BattleUnit[]
+): AirPhaseParticipants {
+  const friendlyCombined = [...friendlyMain, ...friendlyEscort];
+  const enemyCombined = [...enemyMain, ...enemyEscort];
+  const versusCombined = enemyEscort.length > 0;
+  return {
+    friendly: {
+      aviationUnits: versusCombined ? friendlyCombined : friendlyMain,
+      defenseUnits: friendlyCombined,
+      strikeTargets: friendlyCombined
+    },
+    enemy: {
+      aviationUnits: versusCombined ? enemyCombined : enemyMain,
+      defenseUnits: enemyCombined,
+      strikeTargets: enemyCombined
+    }
+  };
+}
+
 function airPhase(
-  friendly: BattleUnit[],
-  enemy: BattleUnit[],
+  participants: AirPhaseParticipants,
   formations: SideFormations,
   rng: BattleRng,
   formulaContext: BattleFormulaContext = NO_BATTLE_FORMULA_CONTEXT
 ): KoukuPayload | null {
-  const friendlyAir = activeAirSlots(friendly);
-  const enemyAir = activeAirSlots(enemy);
+  const friendlyAir = activeAirSlots(participants.friendly.aviationUnits);
+  const enemyAir = activeAirSlots(participants.enemy.aviationUnits);
   const friendlyCombatAir = combatAirSlots(friendlyAir);
   const enemyCombatAir = combatAirSlots(enemyAir);
   if (friendlyCombatAir.length === 0 && enemyCombatAir.length === 0) return null;
@@ -1356,20 +1460,38 @@ function airPhase(
   const contact = contactPlanes(friendlyAir, enemyAir, state.code, rng);
   const fStage1Lost = applyStage1Loss(friendlyCombatAir, state.code, "friendly", rng);
   const eStage1Lost = applyStage1Loss(enemyCombatAir, state.code, "enemy", rng);
-  const fAfterStage1 = airCount(friendlyCombatAir);
-  const eAfterStage1 = airCount(enemyCombatAir);
-  const friendlyInterception = hasOpeningAirstrikeSlots(friendlyCombatAir) && enemy.some(isOperable);
-  const enemyInterception = hasOpeningAirstrikeSlots(enemyCombatAir) && friendly.some(isOperable);
+  const fAfterStage1 = attackAircraftCount(friendlyCombatAir);
+  const eAfterStage1 = attackAircraftCount(enemyCombatAir);
+  const friendlyInterception = fAfterStage1 > 0 && participants.enemy.strikeTargets.some(isOperable);
+  const enemyInterception = eAfterStage1 > 0 && participants.friendly.strikeTargets.some(isOperable);
   const hasStage2 = friendlyInterception || enemyInterception;
-  const airFire = enemyInterception ? antiAirCutIn(friendly, rng) : undefined;
-  const fStage2Lost = friendlyInterception ? applyStage2Loss(friendlyCombatAir, enemy, formations.enemy, undefined, rng, NO_BATTLE_FORMULA_CONTEXT) : 0;
-  const eStage2Lost = enemyInterception ? applyStage2Loss(enemyCombatAir, friendly, formations.friendly, airFire, rng, formulaContext) : 0;
+  const airFire = enemyInterception ? antiAirCutIn(participants.friendly.defenseUnits, rng) : undefined;
+  const fStage2Lost = friendlyInterception
+    ? applyStage2Loss(
+      friendlyCombatAir,
+      participants.enemy.defenseUnits,
+      formations.enemy,
+      undefined,
+      rng,
+      NO_BATTLE_FORMULA_CONTEXT
+    )
+    : 0;
+  const eStage2Lost = enemyInterception
+    ? applyStage2Loss(
+      enemyCombatAir,
+      participants.friendly.defenseUnits,
+      formations.friendly,
+      airFire,
+      rng,
+      formulaContext
+    )
+    : 0;
   const hasStage3 =
-    (hasOpeningAirstrikeSlots(friendlyCombatAir) && enemy.some(isOperable)) ||
-    (hasOpeningAirstrikeSlots(enemyCombatAir) && friendly.some(isOperable));
-  const stage3 = hasStage3 ? openingAirstrike(friendly, enemy, contact[0], contact[1], rng) : null;
-  syncOnSlotFromAirSlots(friendly);
-  syncOnSlotFromAirSlots(enemy);
+    (hasOpeningAirstrikeSlots(friendlyCombatAir) && participants.enemy.strikeTargets.some(isOperable)) ||
+    (hasOpeningAirstrikeSlots(enemyCombatAir) && participants.friendly.strikeTargets.some(isOperable));
+  const stage3 = hasStage3 ? openingAirstrike(participants, contact[0], contact[1], rng) : null;
+  syncOnSlotFromAirSlots(participants.friendly.aviationUnits);
+  syncOnSlotFromAirSlots(participants.enemy.aviationUnits);
   return {
     api_plane_from: [airShipPositions(friendlyCombatAir), airShipPositions(enemyCombatAir)],
     api_stage1: {
@@ -1385,12 +1507,12 @@ function airPhase(
           api_f_count: fAfterStage1,
           api_f_lostcount: fStage2Lost,
           api_e_count: eAfterStage1,
-          api_e_lostcount: eStage2Lost
+          api_e_lostcount: eStage2Lost,
+          ...(airFire ? { api_air_fire: airFire } : {})
         }
       : null,
     api_stage3: stage3?.main ?? null,
-    ...(stage3?.combined ? { api_stage3_combined: stage3.combined } : {}),
-    ...(airFire ? { api_air_fire: airFire } : {})
+    ...(stage3?.combined ? { api_stage3_combined: stage3.combined } : {})
   };
 }
 
@@ -1427,6 +1549,10 @@ function hasOpeningAirstrikeSlots(slots: AirSlot[]) {
 
 function airCount(slots: AirSlot[]) {
   return slots.reduce((sum, slot) => sum + slot.count, 0);
+}
+
+function attackAircraftCount(slots: AirSlot[]) {
+  return airCount(slots.filter((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId)));
 }
 
 function airShipPositions(slots: AirSlot[]) {
@@ -1491,7 +1617,7 @@ function antiAirCutIn(defenders: BattleUnit[], rng: BattleRng) {
   const candidates = defenders
     .filter(isOperable)
     .flatMap((unit) => selectAaciCandidates(
-      unit.position - 1,
+      protocolFleetIndex(unit),
       aaciEquipmentSummary(unit),
       aaciShipProfile(unit)
     ))
@@ -1584,7 +1710,7 @@ function applyStage2Loss(
   attackingSlots: AirSlot[],
   defenders: BattleUnit[],
   formation: number,
-  airFire: KoukuPayload["api_air_fire"] | undefined,
+  airFire: AirFirePayload | undefined,
   rng: BattleRng,
   formulaContext: BattleFormulaContext = NO_BATTLE_FORMULA_CONTEXT
 ) {
@@ -1635,21 +1761,29 @@ function antiAirEquipment(unit: BattleUnit) {
   }));
 }
 
-function antiAirCutInEffect(airFire: KoukuPayload["api_air_fire"] | undefined) {
+function antiAirCutInEffect(airFire: AirFirePayload | undefined) {
   const pattern = airFire ? aaciPattern(airFire.api_kind) : null;
   return pattern ? { fixedBonus: pattern.fixedBonus, modifier: pattern.modifier } : { fixedBonus: 0, modifier: 1 };
 }
 
-function openingAirstrike(friendly: BattleUnit[], enemy: BattleUnit[], friendlyTouchPlane: number, enemyTouchPlane: number, rng: BattleRng) {
+function openingAirstrike(
+  participants: AirPhaseParticipants,
+  friendlyTouchPlane: number,
+  enemyTouchPlane: number,
+  rng: BattleRng
+) {
   const main = emptyKoukuStage3Payload();
-  const combined = [...friendly, ...enemy].some(isEscortFleetUnit)
+  const combined = [
+    ...participants.friendly.strikeTargets,
+    ...participants.enemy.strikeTargets
+  ].some(isEscortFleetUnit)
     ? emptyKoukuStage3Payload()
     : undefined;
-  for (const attacker of friendly) {
-    appendAirstrikes(main, combined, attacker, enemy, friendlyTouchPlane, rng);
+  for (const attacker of participants.friendly.aviationUnits) {
+    appendAirstrikes(main, combined, attacker, participants.enemy.strikeTargets, friendlyTouchPlane, rng);
   }
-  for (const attacker of enemy) {
-    appendAirstrikes(main, combined, attacker, friendly, enemyTouchPlane, rng);
+  for (const attacker of participants.enemy.aviationUnits) {
+    appendAirstrikes(main, combined, attacker, participants.friendly.strikeTargets, enemyTouchPlane, rng);
   }
   return { main, combined };
 }
