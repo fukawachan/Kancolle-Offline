@@ -49,16 +49,14 @@ function shipDisplayResourceIds(resourceManifest: ResourceManifest) {
   ]);
 }
 
-export function buildSlotMasters(resourceManifest: ResourceManifest): SlotMaster[] {
+export function buildSlotMasters(_resourceManifest: ResourceManifest): SlotMaster[] {
   const baseById = new Map(masterData.api_mst_slotitem.map((slot) => [slot.api_id, slot] as const));
   const deepSeaById = new Map(DEEP_SEA_SLOT_MASTERS.map((slot) => [slot.api_id, slot] as const));
-  const displayIds = slotDisplayResourceIds(resourceManifest);
-  const ids = displayIds.size > 0
-    ? new Set<number>([
-        ...[...baseById.keys()].filter((id) => displayIds.has(id)),
-        ...deepSeaById.keys()
-      ])
-    : new Set<number>([...baseById.keys(), ...deepSeaById.keys()]);
+  // Unlike ship artwork, slot artwork has a type/category-aware fallback in
+  // resolveMappedResource(). Keep every known master visible so an existing
+  // save never references an item omitted from api_mst_slotitem merely because
+  // its exact card image post-dates the cached client.
+  const ids = new Set<number>([...baseById.keys(), ...deepSeaById.keys()]);
 
   return [...ids]
     .sort((a, b) => a - b)
@@ -77,7 +75,8 @@ export type MasterAssetClosureReport = {
 
 /**
  * Reports version drift without manufacturing gameplay data to cover it up.
- * Only the exposed id sets are safe to serialize to this cached client.
+ * Equipment without exact artwork remains safe to expose because the resource
+ * resolver supplies a cached fallback for the same type/category.
  */
 export function masterAssetClosureReport(resourceManifest: ResourceManifest): MasterAssetClosureReport {
   const baseShipIds = new Set(masterData.api_mst_ship.map((ship) => ship.api_id));

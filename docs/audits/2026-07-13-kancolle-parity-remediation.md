@@ -54,7 +54,7 @@
 | MAP-01 | 实装/边界化 | 带路条件生成时编译为类型化 AST；未知术语抛错而非静默 false；规则标注 exact/statistical/fallback；速力按版本化组和舰级例外 | `routing.test.ts`、`routing-data.test.ts`、`ship-speed.test.ts` |
 | MAP-02 | 实装/边界化 | 编成保留节点、难度、HQ、阵型和联合维度；掉落检查 rank、容量、持有限制并保留社区统计证据 | `sortie-data.test.ts`、`battle-result.test.ts` |
 | MAP-03 | 实装/版本化 | 普通图与活动进度由 schema 驱动；5-6 完整实现 TP、R/N/Z 阶段、奖励、月重置与 5-5 前置；旧客户端默认隐藏 5-6；合成活动包默认拒绝、仅测试显式启用 | `map-progress.test.ts`、`event-data.test.ts`、`debug-events.test.ts` |
-| DATA-01 | 实装/版本化 | 启动时建立 master—资源—改造目标—玩家实例闭包；按 profile 裁剪不可渲染 master，存档越界直接拒绝 | `resource-manifest.test.ts`、`gameplay-profile.test.ts` |
+| DATA-01 | 实装/版本化 | 启动时建立 master—资源—改造目标—玩家实例闭包；舰船按 profile 裁剪；已知装备即使缺少专属卡图也保留 master，并使用同类型缓存图，只有真正未知的玩家实例才拒绝 | `resource-manifest.test.ts`、`gameplay-profile.test.ts` |
 | DATA-02 | 实装 | 九类生成物使用冻结原始响应、commit/revision、SHA-256、HTTP、license、参数和逐行 evidence；CI 离线逐字节重建 | `verify-generated-data.mjs`、`.github/workflows/ci.yml` |
 | TEST-01 | 实装 | 测试按协议 fixture、公开公式向量、状态/事务不变量和统计边界拆分；旧的自洽错误 oracle 已替换 | `tests/` 全套回归与 CI |
 

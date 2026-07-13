@@ -29,15 +29,21 @@ describe("gameplay profile closure", () => {
     });
   });
 
-  it("rejects player instances whose masters cannot be rendered by the profile", async () => {
+  it("accepts known equipment with typed artwork fallbacks but rejects unknown masters", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
     const closure = validateGameplayClosure(DEFAULT_GAMEPLAY_PROFILE, manifest, {
       ships: [{ id: 41, masterId: 743 }] as never,
-      slotItems: [{ id: 51, masterId: 547 }] as never
+      slotItems: [
+        { id: 122, masterId: 547 },
+        { id: 150, masterId: 1990 },
+        { id: 170, masterId: 570 },
+        { id: 999, masterId: 999999 }
+      ] as never
     });
 
     expect(closure.unsupportedPlayerShipInstanceIds).toEqual([41]);
-    expect(closure.unsupportedPlayerSlotInstanceIds).toEqual([51]);
+    expect(closure.unsupportedPlayerSlotInstanceIds).toEqual([999]);
     expect(() => assertPlayableSaveClosure(closure)).toThrow(/unsupported ship instances \[41\]/);
+    expect(() => assertPlayableSaveClosure(closure)).toThrow(/unsupported equipment instances \[999\]/);
   });
 });

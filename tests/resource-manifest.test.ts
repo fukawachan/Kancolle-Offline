@@ -12,14 +12,14 @@ import { normalRoutingMaps } from "../src/master/routing-data.js";
 import { createResourceManifest, resolveMappedResource } from "../src/resources/manifest.js";
 
 describe("cached resource manifest", () => {
-  it("exposes only cache-backed, known masters and reports snapshot drift", async () => {
+  it("exposes known masters, using typed equipment-art fallbacks, and reports snapshot drift", async () => {
     const manifest = await createResourceManifest(path.resolve("cache"));
     const ships = buildShipMasters(manifest);
     const slots = buildSlotMasters(manifest);
     const report = masterAssetClosureReport(manifest);
 
     expect(ships).toHaveLength(961);
-    expect(slots).toHaveLength(630);
+    expect(slots).toHaveLength(643);
     expect(ships.some((ship) => String(ship.api_name).startsWith("Ship "))).toBe(false);
     expect(slots.some((slot) => String(slot.api_name).startsWith("Equipment "))).toBe(false);
     expect(report.shipMastersWithoutDisplayResources).toEqual([
@@ -30,6 +30,9 @@ describe("cached resource manifest", () => {
     ]);
     expect(report.shipResourcesWithoutMasters).toHaveLength(711);
     expect(report.slotResourcesWithoutMasters).toEqual([]);
+    expect(report.exposedSlotIds).toEqual(expect.arrayContaining([
+      547, 548, 569, 570, 571, 572, 573, 574, 575, 576, 577, 578, 1990
+    ]));
     expect(new Set(report.exposedShipIds).size).toBe(report.exposedShipIds.length);
     expect(new Set(report.exposedSlotIds).size).toBe(report.exposedSlotIds.length);
   });
@@ -243,6 +246,23 @@ describe("cached resource manifest", () => {
         extension: "png",
         pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/remodel\/\d{4}_\d{4}\.png$/)
       });
+    }
+  });
+
+  it("resolves every display kind needed by persisted missing-art equipment", async () => {
+    const manifest = await createResourceManifest(path.resolve("cache"));
+
+    for (const id of [547, 570, 1990]) {
+      for (const kind of ["card", "card_t", "item_on", "item_up", "remodel"]) {
+        const resource = resolveMappedResource(
+          `/kcs2/resources/slot/${kind}/${String(id).padStart(4, "0")}_0000.png`,
+          manifest
+        );
+        expect(resource, `${id} ${kind}`).toMatchObject({
+          extension: "png",
+          pathname: expect.stringMatching(/^\/kcs2\/resources\/slot\/.+\/\d{4}_\d{4}\.png$/)
+        });
+      }
     }
   });
 
