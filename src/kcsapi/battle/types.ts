@@ -346,6 +346,12 @@ export type BattleRecord = {
   };
   airBaseAircraftLosses?: AirBaseAircraftLossRecord[];
   damageControlActivations?: DamageControlActivation[];
+  specialAttacks?: BattleSpecialAttackRecord[];
+  specialAttackUsage?: Array<{ type: number; count: number }>;
+  specialAttackResources?: {
+    useItem95Available: number;
+    useItem95Consumed: number;
+  };
   support?: {
     deckId: number;
     missionId: number;
@@ -355,6 +361,16 @@ export type BattleRecord = {
   };
   settlement?: BattleSettlementRecord;
   resultClaimed?: boolean;
+};
+
+export type BattleSpecialAttackRecord = {
+  type: number;
+  phase: "day" | "night";
+  participantShipIds: number[];
+  participantMasterIds: number[];
+  useItemId?: number;
+  useItemAmount?: number;
+  extraAmmoFraction: number;
 };
 
 export type BattleResultRecord = {
@@ -403,9 +419,28 @@ export type ShellingAttackProfile = {
   fallbackSlotIds?: number[];
   ptEquipmentModifier?: number;
   forceScratch?: boolean;
+  dayCutInCandidates?: CutInCandidate[];
   nightCutInCandidates?: Array<{
     spType: number;
     hits: number;
     modifier: number;
+    slotIds?: number[];
+    typeCoefficient?: number;
   }>;
+};
+
+export type CutInCandidate = {
+  atType: number;
+  hits: number;
+  modifier: number;
+  slotIds: number[];
+  activationRate: number;
+};
+
+export type ShellingProtocolSpec = {
+  phase: "day" | "night";
+  type: number;
+  animation: "double" | "spotting" | "carrier" | "destroyer" | "zuiun" | "fleet-special";
+  requiredSlotIds: number;
+  hitCounts: readonly number[] | null;
 };

@@ -67,9 +67,14 @@ const CAPABILITY_MANIFEST = Object.freeze({
     source: "published rank thresholds and configurable loss baseline",
     note: "Visible ranks and wipe-out reset are fixed; non-wipe loss is explicitly configurable."
   },
-  jetAssault: disabled("Jet aircraft are excluded from conventional air phases until a jet phase is implemented."),
+  jetAssault: disabled("The dedicated jet assault phase is excluded; daytime api_at_type 7 is carrier FBA/BBA/BA and is implemented separately."),
   friendlyFleet: disabled("Friendly-fleet response fields remain null; no synthetic fleet is generated."),
-  shipSpecialAttack: disabled("Ship-specific special attacks require a dedicated activation and damage model."),
+  shipSpecialAttack: {
+    state: "enabled",
+    evidence: "published-formula",
+    source: "cached client protocol fixtures plus wikiwiki public battle/ship formula tables",
+    note: "Types 100-106, 300-302 and 400/401 use a dedicated activation, participant, damage and sortie-usage model."
+  },
   smokeScreen: disabled("Smoke activation and accuracy modifiers are not evidenced in this build."),
   barrageBalloon: disabled("Barrage-balloon event modifiers are not evidenced in this build."),
   fitGun: disabled("Gun-fit accuracy tables are not evidenced in this build.")

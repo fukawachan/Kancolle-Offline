@@ -72,10 +72,14 @@ describe("night battle target-specific mechanics", () => {
     const starShell = store.createSlotItem(101);
     expect(store.equipSlotItem(1, 2, starShell.id)).toBeTruthy();
     const day = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...day.record,
+      after: { ...day.record.after, fNowHps: [...day.record.before.fNowHps] }
+    };
     const trials = 512;
     let activations = 0;
     for (let deckId = 1; deckId <= trials; deckId += 1) {
-      const payload = createNightBattlePayload({ ...day.record, deckId });
+      const payload = createNightBattlePayload({ ...record, deckId });
       if ((payload.api_flare_pos as number[])[0] === 0) activations += 1;
     }
 

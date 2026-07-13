@@ -8,7 +8,8 @@ import {
   createNightBattle,
   createPracticeBattle,
   createSortieBattle,
-  createNightBattlePayload
+  createNightBattlePayload,
+  validateHougekiProtocolPayload
 } from "../src/kcsapi/battle.js";
 import { ENEMY_UNIT_TEMPLATES, sortieNodes } from "../src/master/sortie-data.js";
 import { createStateStore, type StateStore } from "../src/state/store.js";
@@ -75,6 +76,7 @@ describe("sortie battle simulation", () => {
     expect(payload.api_nowhps).toHaveLength(13);
     expect(payload.api_maxhps).toHaveLength(13);
     expect(payload.api_hougeki1.api_at_list.length).toBeGreaterThan(0);
+    expect(validateHougekiProtocolPayload(payload.api_hougeki1, "day")).toEqual([]);
     expect(payload.api_hougeki1.api_at_eflag).toHaveLength(payload.api_hougeki1.api_at_list.length);
     const activeFriendCount = payload.api_f_nowhps.filter((hp: number) => hp > 0).length;
     const activeEnemyCount = payload.api_ship_ke.filter((id: number) => id > 0).length;
@@ -301,6 +303,116 @@ describe("sortie battle simulation", () => {
         Object.assign(encounter as any, originalEncounters[index]);
       });
       Object.assign(ENEMY_UNIT_TEMPLATES[1501], originalEnemy);
+    }
+  });
+
+  it("plays Atlanta Kai AACI kind 39 in a 3-5 carrier battle", () => {
+    const atlanta = store.createShip(696);
+    const gfcsGun = store.createSlotItem(363);
+    const concentratedGun = store.createSlotItem(362);
+    store.clearDeckFollowerShips(1);
+    store.changeDeckShip(1, 0, atlanta.id);
+    store.equipSlotItem(atlanta.id, 0, gfcsGun.id);
+    store.equipSlotItem(atlanta.id, 1, concentratedGun.id);
+    store.startSortie(1, 3, 5);
+    const session = store.getSave().sortieSession!;
+    const node = sortieNodes().find((item) => item.mapId === 35 && item.point === "B")!;
+    const originalEncounters = node.encounters.map((encounter) => ({
+      shipIds: [...encounter.shipIds],
+      formation: encounter.formation,
+      weight: encounter.weight
+    }));
+    try {
+      for (const encounter of node.encounters) {
+        Object.assign(encounter as any, { shipIds: [1510], formation: 1, weight: 1 });
+      }
+      let activated: ReturnType<typeof createSortieBattle> | undefined;
+      let activatedSeed = -1;
+      for (let seed = 0; seed < 128; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET node = 1, seed = ?, state_json = ? WHERE id = 1")
+          .run(seed, JSON.stringify({ ...session.state, point: "B", routeStep: 1, visited: ["Start", "B"], battles: 0 }));
+        const candidate = createSortieBattle(store.getSave(), { formation: 1 });
+        if (candidate.payload.api_kouku?.api_air_fire?.api_kind === 39) {
+          activated = candidate;
+          activatedSeed = seed;
+          break;
+        }
+      }
+      expect(activatedSeed).toBeGreaterThanOrEqual(0);
+      expect(activated?.payload.api_kouku?.api_air_fire).toEqual({
+        api_idx: 0,
+        api_kind: 39,
+        api_use_items: [363, 362]
+      });
+      expect(activated?.payload.api_kouku?.api_stage2?.api_e_lostcount).toBeGreaterThan(0);
+
+      store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(activatedSeed);
+      expect(createSortieBattle(store.getSave(), { formation: 1 }).payload.api_kouku?.api_air_fire?.api_kind).toBe(39);
+    } finally {
+      node.encounters.forEach((encounter, index) => Object.assign(encounter, originalEncounters[index]));
+    }
+  });
+
+  it("encodes the saved 3-5 Nachi observation and three carrier cut-ins without null equipment", () => {
+    const nachi = store.createShip(192);
+    const carriers = [466, 550, 704].map((masterId) => store.createShip(masterId));
+    store.clearDeckFollowerShips(1);
+    store.changeDeckShip(1, 0, nachi.id);
+    carriers.forEach((carrier, index) => store.changeDeckShip(1, index + 1, carrier.id));
+    [90, 90, 25, 240].forEach((masterId, slot) => {
+      const item = store.createSlotItem(masterId);
+      store.equipSlotItem(nachi.id, slot, item.id);
+    });
+    for (const carrier of carriers) {
+      [20, 23, 16].forEach((masterId, slot) => {
+        const item = store.createSlotItem(masterId);
+        store.equipSlotItem(carrier.id, slot, item.id);
+      });
+    }
+    store.startSortie(1, 3, 5);
+    const session = store.getSave().sortieSession!;
+    const node = sortieNodes().find((item) => item.mapId === 35 && item.point === "B")!;
+    const originalEncounters = node.encounters.map((encounter) => ({
+      shipIds: [...encounter.shipIds], formation: encounter.formation, weight: encounter.weight
+    }));
+    const enemy = ENEMY_UNIT_TEMPLATES[1501];
+    const originalEnemy = { hp: enemy.hp, armor: enemy.armor, aa: enemy.aa };
+    try {
+      node.encounters.forEach((encounter) => Object.assign(encounter as any, {
+        shipIds: [1501], formation: 1, weight: 1
+      }));
+      Object.assign(enemy, { hp: 999, armor: 999, aa: 0 });
+      let activated: ReturnType<typeof createSortieBattle> | undefined;
+      for (let seed = 0; seed < 256; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET node = 1, seed = ?, state_json = ? WHERE id = 1")
+          .run(seed, JSON.stringify({ ...session.state, point: "B", routeStep: 1, visited: ["Start", "B"], battles: 0 }));
+        const candidate = createSortieBattle(store.getSave(), { formation: 1 });
+        const hougeki = candidate.payload.api_hougeki1;
+        const friendlyTypes = new Map<number, number>();
+        hougeki.api_at_list.forEach((attacker: number, index: number) => {
+          if (hougeki.api_at_eflag[index] === 0) friendlyTypes.set(attacker, hougeki.api_at_type[index]);
+        });
+        if (friendlyTypes.get(0) === 4 && carriers.every((_carrier, index) => friendlyTypes.get(index + 1) === 7)) {
+          activated = candidate;
+          break;
+        }
+      }
+      expect(activated).toBeDefined();
+      const hougeki = activated!.payload.api_hougeki1;
+      const nachiAttack = hougeki.api_at_list.findIndex((attacker: number, index: number) =>
+        attacker === 0 && hougeki.api_at_eflag[index] === 0 && hougeki.api_at_type[index] === 4
+      );
+      expect(hougeki.api_si_list[nachiAttack]).toEqual([25, 240, 90]);
+      carriers.forEach((_carrier, position) => {
+        const attack = hougeki.api_at_list.findIndex((attacker: number, index: number) =>
+          attacker === position + 1 && hougeki.api_at_eflag[index] === 0
+        );
+        expect(hougeki.api_at_type[attack]).toBe(7);
+        expect(hougeki.api_si_list[attack]).toHaveLength(3);
+      });
+    } finally {
+      node.encounters.forEach((encounter, index) => Object.assign(encounter, originalEncounters[index]));
+      Object.assign(enemy, originalEnemy);
     }
   });
 
@@ -738,6 +850,49 @@ describe("sortie battle simulation", () => {
     expect(hougeki.api_si_list[attackIndex]).toEqual([7, 8]);
   });
 
+  it.each([
+    ["main-secondary", 3, 80, [7, 12, 25], true, [25, 7, 12]],
+    ["main-radar", 4, 80, [7, 30, 25], true, [25, 30, 7]],
+    ["main-secondary-AP", 5, 80, [7, 12, 36, 25], true, [25, 36, 7]],
+    ["main-main-AP", 6, 80, [7, 8, 36, 25], true, [25, 7, 8]],
+    ["carrier FBA", 7, 277, [20, 23, 16], false, [20, 23, 16]],
+    ["Ise Zuiun stereoscopic", 200, 553, [7, 26, 26], false, [7, 26, 26]],
+    ["Ise sea-air stereoscopic", 201, 553, [7, 26, 291], false, [7, 26, 291]]
+  ] as const)("emits daytime %s protocol type %i", (_name, atType, masterId, equipmentIds, needsFighter, snapshot) => {
+    const attacker = store.createShip(masterId);
+    store.clearDeckFollowerShips(1);
+    store.changeDeckShip(1, 0, attacker.id);
+    equipmentIds.forEach((itemMasterId, slot) => {
+      const item = store.createSlotItem(itemMasterId);
+      store.equipSlotItem(attacker.id, slot, item.id);
+    });
+    if (needsFighter) {
+      const carrier = store.createShip(277);
+      const fighter = store.createSlotItem(20);
+      store.equipSlotItem(carrier.id, 0, fighter.id);
+      store.changeDeckShip(1, 1, carrier.id);
+    }
+    const enemies = [1501, 1502, 1503].map((id) => ENEMY_UNIT_TEMPLATES[id]);
+    const originals = enemies.map((enemy) => ({ hp: enemy.hp, armor: enemy.armor }));
+    enemies.forEach((enemy) => Object.assign(enemy, { hp: 999, armor: 999 }));
+    try {
+      let hougeki: any;
+      let attackIndex = -1;
+      for (let seed = 0; seed < 128 && attackIndex < 0; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+        hougeki = createSortieBattle(store.getSave(), { formation: 1 }).payload.api_hougeki1;
+        attackIndex = hougeki.api_at_type.findIndex((type: number, index: number) =>
+          type === atType && hougeki.api_at_eflag[index] === 0
+        );
+      }
+      expect(attackIndex).toBeGreaterThanOrEqual(0);
+      expect(hougeki.api_si_list[attackIndex]).toEqual(snapshot);
+      expect(hougeki.api_damage[attackIndex]).toHaveLength(1);
+    } finally {
+      enemies.forEach((enemy, index) => Object.assign(enemy, originals[index]));
+    }
+  });
+
   it("runs a second daytime shelling round when a battleship is present", () => {
     const nagato = store.createShip(80);
     store.changeDeckShip(1, 0, nagato.id);
@@ -760,6 +915,112 @@ describe("sortie battle simulation", () => {
         enemy.armor = originals[index].armor;
       });
     }
+  });
+
+  it("emits and persists Nagato special attack type 101 once per sortie", () => {
+    const nagato = store.createShip(541);
+    const mutsu = store.createShip(573);
+    store.clearDeckFollowerShips(1);
+    store.changeDeckShip(1, 0, nagato.id);
+    store.changeDeckShip(1, 1, mutsu.id);
+    const enemy = ENEMY_UNIT_TEMPLATES[1501];
+    const original = { hp: enemy.hp, armor: enemy.armor };
+    Object.assign(enemy, { hp: 999, armor: 999 });
+    try {
+      let activated: ReturnType<typeof createSortieBattle> | undefined;
+      for (let seed = 0; seed < 64; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+        const candidate = createSortieBattle(store.getSave(), { formation: 5 });
+        if (candidate.payload.api_hougeki1.api_at_type.includes(101)) {
+          activated = candidate;
+          break;
+        }
+      }
+      expect(activated).toBeDefined();
+      const index = activated!.payload.api_hougeki1.api_at_type.indexOf(101);
+      expect(activated!.payload.api_hougeki1.api_damage[index]).toHaveLength(3);
+      expect(activated!.record.specialAttacks?.[0]).toMatchObject({
+        type: 101,
+        phase: "day",
+        participantShipIds: [nagato.id, mutsu.id, nagato.id]
+      });
+
+      store.recordSortieBattle(activated!.record as unknown as Record<string, unknown>);
+      expect((store.getSave().sortieSession?.state.specialAttackUsage as any)?.[0]).toEqual({ type: 101, count: 1 });
+      const repeat = createSortieBattle(store.getSave(), { formation: 5 });
+      expect(repeat.payload.api_hougeki1.api_at_type).not.toContain(101);
+    } finally {
+      Object.assign(enemy, original);
+    }
+  });
+
+  it("emits one grouped submarine fleet attack entry for the selected pair", () => {
+    const tender = store.createShip(639);
+    const submarines = [398, 399, 400].map((masterId) => store.createShip(masterId));
+    store.clearDeckFollowerShips(1);
+    store.changeDeckShip(1, 0, tender.id);
+    submarines.forEach((ship, index) => store.changeDeckShip(1, index + 1, ship.id));
+    store.db.prepare("UPDATE ships SET level = 99 WHERE id IN (?, ?, ?, ?)")
+      .run(tender.id, ...submarines.map((ship) => ship.id));
+    for (const submarine of submarines) {
+      const radar = store.createSlotItem(210);
+      store.equipSlotItem(submarine.id, 0, radar.id);
+    }
+    expect(store.setUseItemCount(95, 1)).toMatchObject({ ok: true });
+    store.startSortie(1, 1, 1);
+
+    withEnemyTemplatePatch({ hp: 999, armor: 999, firepower: 0, torpedo: 0 }, () => {
+      let activated: ReturnType<typeof createSortieBattle> | undefined;
+      for (let seed = 0; seed < 128; seed += 1) {
+        store.db.prepare("UPDATE sortie_sessions SET seed = ? WHERE id = 1").run(seed);
+        const candidate = createSortieBattle(store.getSave(), { formation: 5 });
+        if (candidate.payload.api_hougeki1.api_at_type.includes(302)) {
+          activated = candidate;
+          break;
+        }
+      }
+      expect(activated).toBeDefined();
+      const hougeki = activated!.payload.api_hougeki1;
+      const specialIndexes = hougeki.api_at_type
+        .map((type: number, index: number) => type === 302 ? index : -1)
+        .filter((index: number) => index >= 0);
+      expect(specialIndexes).toHaveLength(1);
+      const index = specialIndexes[0];
+      expect(hougeki.api_at_list[index]).toBe(0);
+      expect(hougeki.api_damage[index]).toHaveLength(4);
+      expect(hougeki.api_df_list[index]).toHaveLength(4);
+      expect(hougeki.api_cl_list[index]).toHaveLength(4);
+      expect(activated!.record.specialAttacks).toEqual([
+        expect.objectContaining({ type: 302, useItemId: 95, useItemAmount: 1 })
+      ]);
+      expect(activated!.record.specialAttackResources?.useItem95Consumed).toBe(1);
+
+      let night: ReturnType<typeof createNightBattle> | undefined;
+      for (let deckId = 1; deckId < 128; deckId += 1) {
+        const record = {
+          ...activated!.record,
+          deckId,
+          after: {
+            ...activated!.record.after,
+            fNowHps: [...activated!.record.before.fNowHps],
+            eNowHps: [999, 0, 0, 0, 0, 0]
+          },
+          units: {
+            ...activated!.record.units!,
+            friendly: activated!.record.units!.friendly.map((unit) => ({ ...unit, luck: 500 })),
+            enemy: activated!.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+          }
+        };
+        const candidate = createNightBattle(record);
+        if ((candidate.payload.api_hougeki as any).api_sp_list.includes(302)) {
+          night = candidate;
+          break;
+        }
+      }
+      expect(night).toBeDefined();
+      expect(night!.record.specialAttacks?.filter((attack) => attack.useItemId === 95)).toHaveLength(1);
+      expect(night!.record.specialAttackResources?.useItem95Consumed).toBe(1);
+    });
   });
 
   it("applies engagement modifiers to daytime shelling damage", () => {
@@ -1459,7 +1720,7 @@ describe("sortie battle simulation", () => {
     expect(cutInIndex).toBeGreaterThanOrEqual(0);
     expect(hougeki.api_at_eflag[cutInIndex]).toBe(0);
     expect(hougeki.api_n_mother_list[cutInIndex]).toBe(1);
-    expect(hougeki.api_si_list[cutInIndex]).toEqual([254, 257]);
+    expect(hougeki.api_si_list[cutInIndex]).toEqual([254, 254, 257]);
   });
 
   it("encodes night double attacks with api_sp_list type 1", () => {
@@ -1517,7 +1778,7 @@ describe("sortie battle simulation", () => {
     };
     const night = createNightBattlePayload(record);
     const hougeki = night.api_hougeki as any;
-    const cutInIndex = hougeki.api_sp_list.indexOf(5);
+    const cutInIndex = hougeki.api_sp_list.indexOf(3);
 
     expect(cutInIndex).toBeGreaterThanOrEqual(0);
     expect(hougeki.api_si_list[cutInIndex]).toEqual(expect.arrayContaining([13, 14]));
@@ -1555,11 +1816,49 @@ describe("sortie battle simulation", () => {
     };
     const night = createNightBattlePayload(record);
     const hougeki = night.api_hougeki as any;
-    const cutInIndex = hougeki.api_sp_list.indexOf(4);
+    const cutInIndex = hougeki.api_sp_list.indexOf(2);
 
     expect(cutInIndex).toBeGreaterThanOrEqual(0);
     expect(hougeki.api_si_list[cutInIndex]).toEqual(expect.arrayContaining([7, 13]));
     expect(hougeki.api_damage[cutInIndex]).toHaveLength(2);
+  });
+
+  it.each([
+    ["two main guns plus secondary", 4, [7, 8, 12]],
+    ["three main guns", 5, [7, 8, 4]]
+  ] as const)("encodes %s as night protocol type %i", (_name, spType, equipmentIds) => {
+    const nagato = store.createShip(80);
+    store.clearDeckFollowerShips(1);
+    store.changeDeckShip(1, 0, nagato.id);
+    equipmentIds.forEach((itemMasterId, slot) => {
+      const item = store.createSlotItem(itemMasterId);
+      store.equipSlotItem(nagato.id, slot, item.id);
+    });
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    const record = {
+      ...battle.record,
+      deckId: 2,
+      after: {
+        ...battle.record.after,
+        fNowHps: [999, 0, 0, 0, 0, 0],
+        eNowHps: [999, 0, 0, 0, 0, 0]
+      },
+      units: {
+        ...battle.record.units!,
+        friendly: battle.record.units!.friendly.map((unit, index) => ({
+          ...unit,
+          maxHp: 999,
+          armor: 999,
+          luck: index === 0 ? 500 : unit.luck
+        })),
+        enemy: battle.record.units!.enemy.map((unit) => ({ ...unit, maxHp: 999, armor: 999 }))
+      }
+    };
+    const hougeki = createNightBattlePayload(record).api_hougeki as any;
+    const cutInIndex = hougeki.api_sp_list.indexOf(spType);
+    expect(cutInIndex).toBeGreaterThanOrEqual(0);
+    expect(hougeki.api_si_list[cutInIndex]).toEqual(equipmentIds);
+    expect(hougeki.api_damage[cutInIndex]).toHaveLength(1);
   });
 
   it("falls back to a normal night attack when cut-in activation fails", () => {
@@ -1640,8 +1939,8 @@ describe("sortie battle simulation", () => {
         }
       });
       const withSearchlight = createNightBattlePayload({ ...record, deckId });
-      if (!(withoutSearchlight.api_hougeki as any).api_sp_list.includes(5) &&
-          (withSearchlight.api_hougeki as any).api_sp_list.includes(5)) {
+      if (!(withoutSearchlight.api_hougeki as any).api_sp_list.includes(3) &&
+          (withSearchlight.api_hougeki as any).api_sp_list.includes(3)) {
         differentiatingRoll = { withoutSearchlight, withSearchlight };
         break;
       }
@@ -1795,7 +2094,7 @@ describe("sortie battle simulation", () => {
 
     expect(friendlyAttackIndex).toBeGreaterThanOrEqual(0);
     expect(hougeki.api_at_list[friendlyAttackIndex]).toBe(6);
-    expect(hougeki.api_sp_list[friendlyAttackIndex]).toBe(5);
+    expect(hougeki.api_sp_list[friendlyAttackIndex]).toBe(3);
     expect(hougeki.api_si_list[friendlyAttackIndex]).toEqual(expect.arrayContaining([13, 14]));
   });
 
@@ -1946,7 +2245,7 @@ describe("sortie battle simulation", () => {
         }
       });
       const hougeki = night.api_hougeki as any;
-      const cutInIndex = hougeki.api_sp_list.indexOf(5);
+      const cutInIndex = hougeki.api_sp_list.indexOf(3);
 
       expect(cutInIndex).toBeGreaterThanOrEqual(0);
       expect(hougeki.api_si_list[cutInIndex]).toEqual(expect.arrayContaining([13, 14]));

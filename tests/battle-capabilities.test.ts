@@ -26,13 +26,13 @@ describe("advanced battle evidence boundary", () => {
     expect(manifest.landBaseWaves.state).toBe("enabled");
     expect(manifest.supportAttackTypes.state).toBe("enabled");
     expect(manifest.aircraftProficiency.state).toBe("enabled");
+    expect(manifest.shipSpecialAttack.state).toBe("enabled");
   });
 
   it("fails closed for mechanics without enough evidence", () => {
     for (const capability of [
       "jetAssault",
       "friendlyFleet",
-      "shipSpecialAttack",
       "smokeScreen",
       "barrageBalloon",
       "fitGun"

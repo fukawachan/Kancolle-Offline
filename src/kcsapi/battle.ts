@@ -18,6 +18,7 @@ import { normalizeDeckShipIds } from "../state/decks.js";
 import type { SaveState, Ship, SlotItem } from "../state/types.js";
 import {
   aaciPattern,
+  compareAaciPriority,
   selectAaciCandidates,
   selectActivatedAaci,
   type AaciEquipmentSummary,
@@ -48,6 +49,11 @@ import {
   resolveSimultaneousTorpedoIntents,
   type TorpedoIntent
 } from "./battle/phases/torpedo.js";
+import {
+  resolveFleetSpecialAttack,
+  type AttackSequence,
+  type SpecialAttackUsage
+} from "./battle/special-attacks.js";
 import { evaluateBattleRank } from "./battle/result.js";
 import {
   resolveSupportAttack,
@@ -65,9 +71,11 @@ import type {
   BattleRecord,
   BattleResultRecord,
   BattleSettlementRecord,
+  BattleSpecialAttackRecord,
   BattleSortieContext,
   BattleUnit,
   BattleUnitSnapshot,
+  CutInCandidate,
   EquippedSlot,
   FleetSettlementSlot,
   HougekiPayload,
@@ -76,6 +84,7 @@ import type {
   PracticeResultContext,
   RaigekiPayload,
   ShellingAttackProfile,
+  ShellingProtocolSpec,
   Side
 } from "./battle/types.js";
 import { isAircraftSlotItem } from "./serializers.js";
@@ -149,6 +158,8 @@ const FIGHTER_COMBAT_TYPES = new Set([6, 7, 8, 11, 45, 47, 48]);
 const OPENING_AIRSTRIKE_TYPES = new Set([7, 8, 11, 47]);
 const RECON_AIRCRAFT_TYPES = new Set([9, 10, 11, 41]);
 const TORPEDO_BOMBER_TYPES = new Set([8, 47]);
+const DAY_DIVE_BOMBER_TYPES = new Set([7, 57]);
+const DAY_FIGHTER_TYPES = new Set([6]);
 const CONTACT_TYPES = new Set([8, 9, 10]);
 const CARRIER_TYPES = new Set([7, 11, 18]);
 const CARRIER_NIGHT_AIR_ATTACK_NATIVE_SHIP_IDS = new Set([545, 599, 610, 883, 1008]);
@@ -177,12 +188,123 @@ const ASW_DAMAGE_EQUIP_TYPES = new Set([...SONAR_TYPES, ...DEPTH_CHARGE_TYPES, .
 const SEARCHLIGHT_TYPES = new Set([29, 42]);
 const STAR_SHELL_TYPES = new Set([33]);
 const AP_SHELL_TYPE = 19;
+const SKILLED_LOOKOUT_IDS = new Set([129]);
+const TORPEDO_SQUADRON_LOOKOUT_IDS = new Set([412]);
+const DRUM_CANISTER_IDS = new Set([75]);
+const LATE_MODEL_SUBMARINE_TORPEDO_IDS = new Set([213, 214, 383, 457, 461]);
+const SUBMARINE_RADAR_IDS = new Set([210, 211, 384]);
+const NIGHT_ZUIUN_IDS = new Set([490]);
+const ISE_KAI_NI_IDS = new Set([553, 554]);
+const ISE_SUISEI_IDS = new Set([291, 292]);
 const HIGH_ANGLE_GUN_TYPES = new Set([16]);
 const AA_GUN_TYPES = new Set([21]);
 const RADAR_TYPES = new Set([12, 13]);
 const SLOT_MASTER_BY_ID = new Map<number, (typeof masterData.api_mst_slotitem)[number]>(
   [...masterData.api_mst_slotitem, ...DEEP_SEA_SLOT_MASTERS].map((slot) => [slot.api_id, slot] as const)
 );
+
+const SHELLING_PROTOCOL_SPECS = new Map<string, ShellingProtocolSpec>([
+  ...([
+    { phase: "day", type: 2, animation: "double", requiredSlotIds: 2, hitCounts: [2] },
+    { phase: "day", type: 3, animation: "spotting", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "day", type: 4, animation: "spotting", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "day", type: 5, animation: "spotting", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "day", type: 6, animation: "spotting", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "day", type: 7, animation: "carrier", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "day", type: 200, animation: "zuiun", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "day", type: 201, animation: "zuiun", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "night", type: 1, animation: "double", requiredSlotIds: 2, hitCounts: [2] },
+    { phase: "night", type: 2, animation: "spotting", requiredSlotIds: 2, hitCounts: [2] },
+    { phase: "night", type: 3, animation: "spotting", requiredSlotIds: 2, hitCounts: [2] },
+    { phase: "night", type: 4, animation: "spotting", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "night", type: 5, animation: "spotting", requiredSlotIds: 3, hitCounts: [1] },
+    { phase: "night", type: 6, animation: "carrier", requiredSlotIds: 3, hitCounts: [1] },
+    ...Array.from({ length: 4 }, (_value, index) => ({
+      phase: "night" as const,
+      type: 7 + index,
+      animation: "destroyer" as const,
+      requiredSlotIds: 3,
+      hitCounts: [1]
+    })),
+    ...Array.from({ length: 4 }, (_value, index) => ({
+      phase: "night" as const,
+      type: 11 + index,
+      animation: "destroyer" as const,
+      requiredSlotIds: 3,
+      hitCounts: [2]
+    })),
+    { phase: "night", type: 200, animation: "zuiun", requiredSlotIds: 3, hitCounts: [2] },
+    ...["day", "night"].flatMap((phase) =>
+      [100, 101, 102, 103, 104, 105, 106, 300, 301, 302, 400, 401].map((type) => ({
+        phase: phase as "day" | "night",
+        type,
+        animation: "fleet-special" as const,
+        requiredSlotIds: 0,
+        hitCounts: null
+      }))
+    )
+  ] satisfies ShellingProtocolSpec[]).map((spec) => [`${spec.phase}:${spec.type}`, spec] as const)
+]);
+
+export function shellingProtocolSpec(phase: "day" | "night", type: number) {
+  return SHELLING_PROTOCOL_SPECS.get(`${phase}:${type}`);
+}
+
+function protocolSnapshotValid(
+  phase: "day" | "night",
+  type: number,
+  hits: number,
+  slotIds: readonly number[]
+) {
+  if (type === 0) return true;
+  const spec = shellingProtocolSpec(phase, type);
+  if (!spec || slotIds.length < spec.requiredSlotIds) return false;
+  if (spec.hitCounts && !spec.hitCounts.includes(hits)) return false;
+  return slotIds.slice(0, spec.requiredSlotIds).every((id) => id > 0 && SLOT_MASTER_BY_ID.has(id));
+}
+
+export function validateHougekiProtocolPayload(payload: HougekiPayload, phase: "day" | "night") {
+  const issues: string[] = [];
+  const entryCount = payload.api_at_list.length;
+  const parallel = [
+    ["api_at_eflag", payload.api_at_eflag],
+    ["api_at_type", payload.api_at_type],
+    ["api_df_list", payload.api_df_list],
+    ["api_si_list", payload.api_si_list],
+    ["api_cl_list", payload.api_cl_list],
+    ["api_damage", payload.api_damage],
+    ...(phase === "night"
+      ? [
+          ["api_sp_list", payload.api_sp_list ?? []],
+          ["api_n_mother_list", payload.api_n_mother_list ?? []]
+        ] as Array<[string, unknown[]]>
+      : [])
+  ] as Array<[string, unknown[]]>;
+  for (const [name, values] of parallel) {
+    if (values.length !== entryCount) issues.push(`${name} length ${values.length} != ${entryCount}`);
+  }
+  for (let index = 0; index < entryCount; index += 1) {
+    const targets = payload.api_df_list[index] ?? [];
+    const criticals = payload.api_cl_list[index] ?? [];
+    const damages = payload.api_damage[index] ?? [];
+    if (targets.length !== damages.length || criticals.length !== damages.length) {
+      issues.push(`entry ${index} target/critical/damage lengths differ`);
+    }
+    const type = phase === "day"
+      ? payload.api_at_type[index] ?? 0
+      : payload.api_sp_list?.[index] ?? 0;
+    if (!protocolSnapshotValid(phase, type, damages.length, payload.api_si_list[index] ?? [])) {
+      issues.push(`entry ${index} violates ${phase} protocol type ${type}`);
+    }
+  }
+  return issues;
+}
+
+function validatedHougekiPayload(payload: HougekiPayload, phase: "day" | "night") {
+  const issues = validateHougekiProtocolPayload(payload, phase);
+  if (issues.length > 0) throw new Error(`Invalid hougeki payload: ${issues.join("; ")}`);
+  return payload;
+}
 
 type NightEquipmentState = {
   searchlight: boolean;
@@ -225,13 +347,54 @@ type BattleFormulaContext = {
   defenderCombined?: boolean;
 };
 
+type SpecialAttackBattleState = {
+  mode: BattleMode;
+  usage: SpecialAttackUsage[];
+  records: BattleSpecialAttackRecord[];
+  useItem95Available: number;
+  useItem95Consumed: number;
+};
+
 const NO_BATTLE_FORMULA_CONTEXT: BattleFormulaContext = {};
+
+function normalizeSpecialAttackUsage(value: unknown): SpecialAttackUsage[] {
+  if (!Array.isArray(value)) return [];
+  const usage = new Map<number, number>();
+  for (const entry of value) {
+    if (entry == null || typeof entry !== "object") continue;
+    const type = Math.trunc(safeNum((entry as { type?: unknown }).type));
+    const count = Math.max(0, Math.trunc(safeNum((entry as { count?: unknown }).count)));
+    if (type > 0 && count > 0) usage.set(type, Math.max(count, usage.get(type) ?? 0));
+  }
+  return [...usage].map(([type, count]) => ({ type, count }));
+}
+
+function specialAttackStateForSave(save: SaveState, mode: BattleMode): SpecialAttackBattleState {
+  return {
+    mode,
+    usage: normalizeSpecialAttackUsage(save.sortieSession?.state.specialAttackUsage),
+    records: [],
+    useItem95Available: Math.max(0, save.useItems.find((item) => item.id === 95)?.count ?? 0),
+    useItem95Consumed: 0
+  };
+}
+
+function specialAttackStateForRecord(record: BattleRecord): SpecialAttackBattleState {
+  return {
+    mode: record.mode,
+    usage: normalizeSpecialAttackUsage(record.specialAttackUsage),
+    records: [...(record.specialAttacks ?? [])],
+    useItem95Available: Math.max(0, record.specialAttackResources?.useItem95Available ?? 0),
+    useItem95Consumed: Math.max(0, record.specialAttackResources?.useItem95Consumed ?? 0)
+  };
+}
 
 export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
   const deck = sortieDeck(save);
   const friendlyFormation = battleFormation(input);
   const seed = (save.sortieSession?.seed ?? 1) + safeNum(save.sortieSession?.state.battles, 0) * 9973 + friendlyFormation * 101;
   const rng = new BattleRng(seed);
+  const specialAttackState = specialAttackStateForSave(save, "sortie");
   const endpoint = input.endpoint ?? "sortieDay";
   const phaseSequence = battlePhaseSequence(endpoint);
   const friendly = friendlyUnits(save, deck.shipIds);
@@ -280,7 +443,10 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
         openingAtack = openingTorpedoPhase(friendly, enemy, formations, rng, formation[2]);
         break;
       case "hougeki1":
-        hougeki1 = shellingPhase(friendly, enemy, formations, rng, "day", formation[2], dayAirControl);
+        hougeki1 = shellingPhase(
+          friendly, enemy, formations, rng, "day", formation[2], dayAirControl,
+          undefined, NO_BATTLE_FORMULA_CONTEXT, 1, specialAttackState
+        );
         break;
       case "hougeki2":
         hougeki2 = hasSecondShellingRound(friendly, enemy)
@@ -316,7 +482,10 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
           "night",
           formation[2],
           NO_DAY_SHELLING_AIR_CONTROL,
-          nightEquipment
+          nightEquipment,
+          NO_BATTLE_FORMULA_CONTEXT,
+          1,
+          specialAttackState
         );
         break;
       default:
@@ -362,7 +531,13 @@ export function createSortieBattle(save: SaveState, input: BattleInput = {}) {
     aircraftLosses: aircraftLosses(friendly, enemy),
     support,
     airBaseAircraftLosses: airBase.losses,
-    damageControlActivations: collectDamageControlActivations(friendly)
+    damageControlActivations: collectDamageControlActivations(friendly),
+    specialAttacks: specialAttackState.records,
+    specialAttackUsage: specialAttackState.usage,
+    specialAttackResources: {
+      useItem95Available: specialAttackState.useItem95Available,
+      useItem95Consumed: specialAttackState.useItem95Consumed
+    }
   };
 
   return {
@@ -461,6 +636,7 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
   const friendlyFormation = normalizeCombinedFormation(battleFormation(input), escort.length);
   const seed = (save.sortieSession?.seed ?? 1) + 424242 + friendlyFormation * 101;
   const rng = new BattleRng(seed);
+  const specialAttackState = specialAttackStateForSave(save, "combined");
   const endpoint = input.endpoint ?? "combinedDay";
   const phaseSequence = battlePhaseSequence(endpoint);
   const sortie = sortieBattleContext(save, seed);
@@ -494,7 +670,8 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
       dayAirControl,
       undefined,
       formulaContext,
-      round === 0 ? 1 : 2
+      round === 0 ? 1 : 2,
+      role === "main" && roles.indexOf("main") === round ? specialAttackState : undefined
     );
   };
   let secondCombinedShellingRound: boolean | undefined;
@@ -561,7 +738,10 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
           friendly: nightEquipmentState(escort, rng, true),
           enemy: nightEquipmentState(targets, rng, true)
         };
-        night = shellingPhase(escort, targets, formations, rng, "night", formation[2], NO_DAY_SHELLING_AIR_CONTROL, nightEquipment, formulaContext);
+        night = shellingPhase(
+          escort, targets, formations, rng, "night", formation[2],
+          NO_DAY_SHELLING_AIR_CONTROL, nightEquipment, formulaContext, 1, specialAttackState
+        );
         break;
       }
       default:
@@ -625,7 +805,13 @@ export function createCombinedBattle(save: SaveState, input: BattleInput = {}) {
     aircraftLosses: aircraftLosses([...friendly, ...escort], airEnemy),
     support,
     airBaseAircraftLosses: airBase.losses,
-    damageControlActivations: collectDamageControlActivations([...friendly, ...escort])
+    damageControlActivations: collectDamageControlActivations([...friendly, ...escort]),
+    specialAttacks: specialAttackState.records,
+    specialAttackUsage: specialAttackState.usage,
+    specialAttackResources: {
+      useItem95Available: specialAttackState.useItem95Available,
+      useItem95Consumed: specialAttackState.useItem95Consumed
+    }
   };
 
   return {
@@ -645,6 +831,7 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
   const fMaxHps = fixedMaxHp(record.mode === "combined" ? mainFriendly : friendly);
   const eMaxHps = fixedMaxHp(mainEnemy);
   const rng = new BattleRng(record.deckId * 8191 + record.before.fNowHps.reduce((sum, hp) => sum + hp, 0));
+  const specialAttackState = specialAttackStateForRecord(record);
   const formulaContext = record.mode === "combined"
     ? combinedFormulaContext(combinedFleetTypeForBattle(record.combinedType ?? 1), enemyCombined.length > 0)
     : NO_BATTLE_FORMULA_CONTEXT;
@@ -652,7 +839,10 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
     friendly: nightEquipmentState(friendly, rng, nightContactAllowed(record)),
     enemy: nightEquipmentState(nightTarget, rng, nightContactAllowed(record))
   };
-  const hougeki = shellingPhase(friendly, nightTarget, sideFormations(record.formation), rng, "night", record.formation[2], NO_DAY_SHELLING_AIR_CONTROL, nightEquipment, formulaContext);
+  const hougeki = shellingPhase(
+    friendly, nightTarget, sideFormations(record.formation), rng, "night", record.formation[2],
+    NO_DAY_SHELLING_AIR_CONTROL, nightEquipment, formulaContext, 1, specialAttackState
+  );
   const nextResult = battleResult(
     record.mode === "combined" ? mainFriendly : friendly,
     mainEnemy,
@@ -686,6 +876,12 @@ export function createNightBattle(record: BattleRecord): { payload: Record<strin
     damageControlActivations: collectDamageControlActivations(
       record.mode === "combined" ? [...mainFriendly, ...friendly] : friendly
     ),
+    specialAttacks: specialAttackState.records,
+    specialAttackUsage: specialAttackState.usage,
+    specialAttackResources: {
+      useItem95Available: specialAttackState.useItem95Available,
+      useItem95Consumed: specialAttackState.useItem95Consumed
+    },
     result: {
       ...nextResult,
       mvpCombined: record.mode === "combined"
@@ -1210,7 +1406,7 @@ function daySpottingEligible(
   phase: "day" | "night",
   airControl: DayShellingAirControl
 ) {
-  if (phase !== "day") return false;
+  if (phase !== "day" || damageState(attacker) >= 2) return false;
   return attacker.side === 0 ? airControl.friendlySpotting : airControl.enemySpotting;
 }
 
@@ -1298,12 +1494,7 @@ function antiAirCutIn(defenders: BattleUnit[], rng: BattleRng) {
       aaciEquipmentSummary(unit),
       aaciShipProfile(unit)
     ))
-    .sort((a, b) =>
-      b.fixedBonus - a.fixedBonus ||
-      b.modifier - a.modifier ||
-      a.unitIndex - b.unitIndex ||
-      a.kind - b.kind
-    );
+    .sort(compareAaciPriority);
   if (candidates.length === 0) return undefined;
   const selected = selectActivatedAaci(candidates, (probability) => rng.chance(probability));
   if (!selected) return undefined;
@@ -1316,40 +1507,76 @@ function antiAirCutIn(defenders: BattleUnit[], rng: BattleRng) {
 
 function aaciEquipmentSummary(unit: BattleUnit): AaciEquipmentSummary {
   const summary: AaciEquipmentSummary = {
+    battleship: BATTLESHIP_TYPES.has(unit.shipType),
+    allItems: [],
     highAngleGuns: [],
+    specialHighAngleGuns: [],
     aaGuns: [],
+    aaGunsAtLeast3: [],
+    aaGunsAtLeast4: [],
+    aaGunsAtLeast5: [],
+    aaGunsAtLeast6: [],
     radars: [],
     airRadars: [],
     specialAaGuns: [],
-    aaDirectors: []
+    aaDirectors: [],
+    largeMainGuns: [],
+    type3Shells: []
   };
   for (const slot of unit.equippedSlots) {
     const type2 = safeNum(slot.slotMaster.api_type?.[2]);
     const type3 = safeNum(slot.slotMaster.api_type?.[3]);
-    if (HIGH_ANGLE_GUN_TYPES.has(type3)) summary.highAngleGuns.push(slot.slotMaster.api_id);
+    const id = slot.slotMaster.api_id;
+    const antiAir = safeNum(slot.slotMaster.api_tyku);
+    summary.allItems!.push(id);
+    if (HIGH_ANGLE_GUN_TYPES.has(type3)) {
+      summary.highAngleGuns.push(id);
+      if (antiAir >= 8) summary.specialHighAngleGuns!.push(id);
+    }
     if (AA_GUN_TYPES.has(type2)) {
-      summary.aaGuns.push(slot.slotMaster.api_id);
-      if (safeNum(slot.slotMaster.api_tyku) >= 9) summary.specialAaGuns!.push(slot.slotMaster.api_id);
+      summary.aaGuns.push(id);
+      if (antiAir >= 3) summary.aaGunsAtLeast3!.push(id);
+      if (antiAir >= 4) summary.aaGunsAtLeast4!.push(id);
+      if (antiAir >= 5) summary.aaGunsAtLeast5!.push(id);
+      if (antiAir >= 6) summary.aaGunsAtLeast6!.push(id);
+      if (new Set([131, 173, 191]).has(id)) summary.specialAaGuns!.push(id);
     }
-    if (RADAR_TYPES.has(type2)) summary.radars.push(slot.slotMaster.api_id);
-    if (RADAR_TYPES.has(type2) && safeNum(slot.slotMaster.api_tyku) >= 2) {
-      summary.airRadars!.push(slot.slotMaster.api_id);
+    if (RADAR_TYPES.has(type2)) summary.radars.push(id);
+    if (RADAR_TYPES.has(type2) && antiAir >= 2) {
+      summary.airRadars!.push(id);
     }
-    if (type2 === 36) summary.aaDirectors!.push(slot.slotMaster.api_id);
+    if (type2 === 36) summary.aaDirectors!.push(id);
+    if (type2 === 3) summary.largeMainGuns!.push(id);
+    if (type2 === 18) summary.type3Shells!.push(id);
   }
   return summary;
 }
 
 function aaciShipProfile(unit: BattleUnit): AaciShipProfile {
   const master = masterData.api_mst_ship.find((ship) => ship.api_id === unit.masterId);
-  if (safeNum(master?.api_ctype) === 54) return "akizukiClass";
+  const ctype = safeNum(master?.api_ctype);
+  if (ctype === 54) return "akizukiClass";
   if (unit.masterId === 428) return "mayaKaiNi";
   if (unit.masterId === 141) return "isuzuKaiNi";
-  if (unit.masterId === 470) return "kasumiKaiNiB";
+  if (unit.masterId === 488) return "yuraKaiNi";
+  if (unit.masterId === 487) return "kinuKaiNi";
+  if (unit.masterId === 477) return "tenryuKaiNi";
+  if (unit.masterId === 478) return "tenryuClassKaiNi";
+  if (unit.masterId === 321) return "oyodoKai";
+  if (new Set([579, 630]).has(unit.masterId)) return "gotland";
+  if (new Set([470, 622, 623, 624]).has(unit.masterId)) return "kasumiYubari";
   if (unit.masterId === 418) return "satsukiKaiNi";
   if (unit.masterId === 548) return "fumizukiKaiNi";
-  if (unit.masterId === 487) return "kinuKaiNi";
-  return "generic";
+  if (new Set([557, 558]).has(unit.masterId)) return "isokazeHamakaze";
+  if (new Set([530, 539]).has(unit.masterId)) return "submarineSpecial";
+  if (new Set([77, 82, 87, 88, 553, 554]).has(unit.masterId)) return "iseClass";
+  if (new Set([911, 916, 546]).has(unit.masterId)) return "yamatoKaiNi";
+  if (ctype === 91) return "fletcherClass";
+  if (ctype === 99) return "atlantaClass";
+  if (new Set([593, 954]).has(unit.masterId)) return "harunaKaiNiSpecial";
+  if (new Set([497, 145, 961, 498, 975]).has(unit.masterId)) return "shiratsuyuSpecial";
+  if (ctype === 6 || ctype === 67) return "britishKongo";
+  return BATTLESHIP_TYPES.has(unit.shipType) ? "battleship" : "generic";
 }
 
 function applyStage2Loss(
@@ -1609,7 +1836,8 @@ function shellingProfile(
   daySpottingEligible = false,
   nightEquipment?: NightEquipmentState,
   formulaContext: BattleFormulaContext = NO_BATTLE_FORMULA_CONTEXT,
-  attackerFleetSize = 6
+  attackerFleetSize = 6,
+  attackerFleet: readonly BattleUnit[] = [attacker]
 ): ShellingAttackProfile {
   if (phase === "day" && target.targetKind === "submarine" && canAswShell(attacker)) {
     return {
@@ -1682,6 +1910,20 @@ function shellingProfile(
       torpedoes,
       nightAircraft: 0
     });
+    const genericSlotIds = nightAttackSlotIds(attacker, attack.spType, slotIds);
+    const candidates = [
+      ...nightZuiunCutInCandidates(attacker),
+      ...destroyerNightCutInCandidates(attacker),
+      ...submarineNightCutInCandidates(attacker),
+      ...(attack.spType > 1
+        ? [{
+            spType: attack.spType,
+            hits: attack.hits,
+            modifier: attack.modifier,
+            slotIds: genericSlotIds
+          }]
+        : [])
+    ];
     return {
       preCapPower: nightBattlePower({
         firepower: attacker.firepower + (nightEquipment?.nightContactBonus ?? 0),
@@ -1691,23 +1933,17 @@ function shellingProfile(
       }) * formationModifier(formation, "night", formulaContext, attacker, attackerFleetSize),
       cap: 360,
       atType: 0,
-      spType: attack.spType,
-      hits: attack.hits,
-      postCapModifier: attack.modifier,
-      slotIds: nightAttackSlotIds(attacker, attack.spType, slotIds),
+      spType: candidates[0]?.spType ?? attack.spType,
+      hits: candidates[0]?.hits ?? attack.hits,
+      postCapModifier: candidates[0]?.modifier ?? attack.modifier,
+      slotIds: candidates[0]?.slotIds ?? genericSlotIds,
+      ...(candidates.length > 0 ? { nightCutInCandidates: candidates } : {}),
       ...(target.targetKind === "pt"
         ? { ptEquipmentModifier: ptEquipmentModifier(attacker) }
         : {})
     };
   }
 
-  const apShell = attacker.equippedSlots.some((slot) => safeNum(slot.slotMaster.api_type?.[2]) === AP_SHELL_TYPE);
-  const seaplane = countEquipTypes(attacker, SEAPLANE_TYPES) > 0;
-  const mainGunCount = countEquipTypes(attacker, MAIN_GUN_TYPES);
-  const mainGun = mainGunCount > 0;
-  const spotting = daySpottingEligible && seaplane;
-  const apCutIn = spotting && apShell && mainGun;
-  const doubleAttack = spotting && !apShell && mainGunCount >= 2;
   const isCarrierShelling = CARRIER_TYPES.has(attacker.shipType) && attacker.airSlots.some((slot) => slot.count > 0 && OPENING_AIRSTRIKE_TYPES.has(slot.equipTypeId));
   const combinedPowerBonus = combinedBattlePowerBonus(formulaContext, attacker, target, "shelling");
   const carrierAircraftStats = carrierShellingAircraftStats(attacker);
@@ -1719,22 +1955,206 @@ function shellingProfile(
       combinedPowerBonus
     })
     : attacker.firepower + 5 + combinedPowerBonus;
-  const postCapModifier = apCutIn ? 1.3 : doubleAttack ? 1.2 : 1;
+  const candidates = dayCutInCandidates(attacker, daySpottingEligible, isCarrierShelling, attackerFleet);
   return {
     preCapPower: base *
       formationModifier(formation, "shelling", formulaContext, attacker, attackerFleetSize) *
       engagementModifierFor(engagement) *
       damageStateModifier(attacker),
     cap: 220,
-    atType: apCutIn ? 3 : doubleAttack ? 2 : 0,
+    atType: 0,
     spType: 0,
-    hits: doubleAttack ? 2 : 1,
-    postCapModifier,
-    slotIds: doubleAttack ? equippedSlotMasterIds(attacker, MAIN_GUN_TYPES, 2) : slotIds,
+    hits: 1,
+    postCapModifier: 1,
+    slotIds,
+    ...(candidates.length > 0 ? { dayCutInCandidates: candidates } : {}),
     ...(target.targetKind === "pt"
       ? { ptEquipmentModifier: ptEquipmentModifier(attacker) }
       : {})
   };
+}
+
+/**
+ * Day observation fire uses protocol types 2-6/200/201.  Each matching form
+ * remains a candidate: a failed stronger form may therefore fall through to
+ * the next client-supported animation instead of suppressing observation fire.
+ * Public condition/multiplier table: https://wikiwiki.jp/kancolle/戦闘について
+ */
+export function dayCutInCandidates(
+  attacker: BattleUnit,
+  airControlEligible: boolean,
+  isCarrierShelling: boolean,
+  fleet: readonly BattleUnit[]
+): CutInCandidate[] {
+  if (!airControlEligible || damageState(attacker) >= 2) return [];
+  const rate = dayCutInActivationRate(attacker, fleet);
+  const candidate = (
+    atType: number,
+    hits: number,
+    modifier: number,
+    slots: readonly (EquippedSlot | AirSlot | undefined)[]
+  ): CutInCandidate | null => {
+    const slotIds = slots
+      .map((slot) => slot?.slotMaster.api_id ?? -1)
+      .filter((id) => id > 0);
+    return protocolSnapshotValid("day", atType, hits, slotIds)
+      ? { atType, hits, modifier, slotIds, activationRate: rate }
+      : null;
+  };
+  const candidates: CutInCandidate[] = [];
+  const addCandidate = (...args: Parameters<typeof candidate>) => {
+    const value = candidate(...args);
+    if (value) candidates.push(value);
+  };
+  const mainGuns = equippedSlotsOfTypes(attacker, MAIN_GUN_TYPES);
+  const secondaries = equippedSlotsOfTypes(attacker, SECONDARY_GUN_TYPES);
+  const apShells = equippedSlotsOfTypes(attacker, new Set([AP_SHELL_TYPE]));
+  const radars = equippedSlotsOfTypes(attacker, RADAR_TYPES);
+  const liveRecon = attacker.airSlots.filter((slot) =>
+    slot.count > 0 && SEAPLANE_TYPES.has(slot.equipTypeId)
+  );
+
+  if (ISE_KAI_NI_IDS.has(attacker.masterId) && mainGuns.length > 0) {
+    const zuiun = liveRecon.filter((slot) => slot.equipTypeId === 11);
+    const iseSuisei = attacker.airSlots.filter((slot) =>
+      slot.count > 0 && ISE_SUISEI_IDS.has(slot.slotMaster.api_id)
+    );
+    // 瑞云立体攻击 / 海空立体攻击 (cached client api_at_type 200/201).
+    if (zuiun.length >= 2) addCandidate(200, 1, 1.35, [mainGuns[0], zuiun[0], zuiun[1]]);
+    if (zuiun.length >= 1 && iseSuisei.length >= 1) {
+      addCandidate(201, 1, 1.3, [mainGuns[0], zuiun[0], iseSuisei[0]]);
+    }
+  }
+
+  if (isCarrierShelling) {
+    const fighters = attacker.airSlots.filter((slot) => slot.count > 0 && DAY_FIGHTER_TYPES.has(slot.equipTypeId));
+    const bombers = attacker.airSlots.filter((slot) => slot.count > 0 && DAY_DIVE_BOMBER_TYPES.has(slot.equipTypeId));
+    const torpedoBombers = attacker.airSlots.filter((slot) => slot.count > 0 && TORPEDO_BOMBER_TYPES.has(slot.equipTypeId));
+    if (fighters.length >= 1 && bombers.length >= 1 && torpedoBombers.length >= 1) {
+      addCandidate(7, 1, 1.25, [fighters[0], bombers[0], torpedoBombers[0]]);
+    }
+    if (bombers.length >= 2 && torpedoBombers.length >= 1) {
+      addCandidate(7, 1, 1.2, [bombers[0], bombers[1], torpedoBombers[0]]);
+    }
+    if (bombers.length >= 1 && torpedoBombers.length >= 1) {
+      addCandidate(7, 1, 1.15, [bombers[0], bombers[0], torpedoBombers[0]]);
+    }
+    return candidates;
+  }
+
+  // Ordinary observation fire additionally requires a surviving recon or
+  // seaplane-bomber slot. Wiped aircraft may not trigger a cut-in.
+  if (liveRecon.length === 0) return candidates;
+  if (mainGuns.length >= 2 && apShells.length >= 1) {
+    addCandidate(6, 1, 1.5, [liveRecon[0], mainGuns[0], mainGuns[1]]);
+  }
+  if (mainGuns.length >= 1 && secondaries.length >= 1 && apShells.length >= 1) {
+    addCandidate(5, 1, 1.3, [liveRecon[0], apShells[0], mainGuns[0]]);
+  }
+  if (mainGuns.length >= 1 && radars.length >= 1) {
+    addCandidate(4, 1, 1.2, [liveRecon[0], radars[0], mainGuns[0]]);
+  }
+  if (mainGuns.length >= 1 && secondaries.length >= 1) {
+    addCandidate(3, 1, 1.1, [liveRecon[0], mainGuns[0], secondaries[0]]);
+  }
+  if (mainGuns.length >= 2) {
+    addCandidate(2, 2, 1.2, [mainGuns[0], mainGuns[1]]);
+  }
+  return candidates;
+}
+
+function dayCutInActivationRate(attacker: BattleUnit, fleet: readonly BattleUnit[]) {
+  const equipmentLos = (unit: BattleUnit) => unit.equippedSlots.reduce(
+    (sum, slot) => sum + Math.max(0, safeNum(slot.slotMaster.api_saku)),
+    0
+  );
+  const shipLos = equipmentLos(attacker);
+  const fleetLos = fleet.filter(isOperable).reduce((sum, unit) => sum + equipmentLos(unit), 0);
+  return Math.min(0.98, Math.max(0.05,
+    0.55 +
+    Math.sqrt(Math.max(0, attacker.luck)) / 80 +
+    (attacker.position === 1 ? 0.1 : 0) +
+    Math.min(0.18, shipLos / 100) +
+    Math.min(0.12, fleetLos / 400)
+  ));
+}
+
+function equippedSlotsOfTypes(unit: BattleUnit, typeIds: ReadonlySet<number>) {
+  return unit.equippedSlots.filter((slot) => typeIds.has(safeNum(slot.slotMaster.api_type?.[2])));
+}
+
+function equippedSlotsOfIds(unit: BattleUnit, ids: ReadonlySet<number>) {
+  return unit.equippedSlots.filter((slot) => ids.has(slot.slotMaster.api_id));
+}
+
+export function destroyerNightCutInCandidates(attacker: BattleUnit): NonNullable<ShellingAttackProfile["nightCutInCandidates"]> {
+  if (attacker.shipType !== 2) return [];
+  const mainGuns = equippedSlotsOfTypes(attacker, MAIN_GUN_TYPES);
+  const torpedoes = equippedSlotsOfTypes(attacker, TORPEDO_TYPES);
+  const radars = equippedSlotsOfTypes(attacker, RADAR_TYPES).filter((slot) => safeNum(slot.slotMaster.api_saku) >= 5);
+  const lookouts = equippedSlotsOfIds(attacker, SKILLED_LOOKOUT_IDS);
+  const torpedoLookouts = equippedSlotsOfIds(attacker, TORPEDO_SQUADRON_LOOKOUT_IDS);
+  const drums = equippedSlotsOfIds(attacker, DRUM_CANISTER_IDS);
+  const pairs: Array<{ single: number; double: number; modifier: number; coefficient: number; slots: EquippedSlot[] }> = [];
+  if (torpedoes.length >= 2 && torpedoLookouts.length >= 1) {
+    pairs.push({ single: 9, double: 13, modifier: 1.5, coefficient: 126, slots: [torpedoes[0], torpedoes[1], torpedoLookouts[0]] });
+  }
+  if (torpedoes.length >= 1 && lookouts.length >= 1 && radars.length >= 1) {
+    pairs.push({ single: 8, double: 12, modifier: 1.2, coefficient: 140, slots: [torpedoes[0], lookouts[0], radars[0]] });
+  }
+  if (mainGuns.length >= 1 && torpedoes.length >= 1 && radars.length >= 1) {
+    pairs.push({ single: 7, double: 11, modifier: 1.3, coefficient: 115, slots: [mainGuns[0], torpedoes[0], radars[0]] });
+  }
+  if (torpedoes.length >= 1 && drums.length >= 1 && torpedoLookouts.length >= 1) {
+    pairs.push({ single: 10, double: 14, modifier: 1.3, coefficient: 122, slots: [torpedoes[0], drums[0], torpedoLookouts[0]] });
+  }
+  return pairs.flatMap((entry) => {
+    const slotIds = entry.slots.map((slot) => slot.slotMaster.api_id);
+    return [
+      { spType: entry.double, hits: 2, modifier: entry.modifier, slotIds, typeCoefficient: entry.coefficient },
+      { spType: entry.single, hits: 1, modifier: entry.modifier, slotIds, typeCoefficient: entry.coefficient }
+    ];
+  });
+}
+
+export function nightZuiunCutInCandidates(attacker: BattleUnit): NonNullable<ShellingAttackProfile["nightCutInCandidates"]> {
+  const mainGuns = equippedSlotsOfTypes(attacker, MAIN_GUN_TYPES);
+  const nightZuiun = attacker.equippedSlots.filter((slot) =>
+    slot.count > 0 && NIGHT_ZUIUN_IDS.has(slot.slotMaster.api_id)
+  );
+  if (mainGuns.length < 2 || nightZuiun.length < 1) return [];
+  return [{
+    spType: 200,
+    hits: 2,
+    modifier: 1.24,
+    slotIds: [mainGuns[0].slotMaster.api_id, mainGuns[1].slotMaster.api_id, nightZuiun[0].slotMaster.api_id],
+    typeCoefficient: 122
+  }];
+}
+
+export function submarineNightCutInCandidates(attacker: BattleUnit): NonNullable<ShellingAttackProfile["nightCutInCandidates"]> {
+  if (!SUBMARINE_TYPES.has(attacker.shipType)) return [];
+  const lateTorpedoes = equippedSlotsOfIds(attacker, LATE_MODEL_SUBMARINE_TORPEDO_IDS);
+  const radars = equippedSlotsOfIds(attacker, SUBMARINE_RADAR_IDS);
+  if (lateTorpedoes.length >= 2 && radars.length >= 1) {
+    return [{
+      spType: 3,
+      hits: 2,
+      modifier: 1.75,
+      slotIds: [lateTorpedoes[0].slotMaster.api_id, lateTorpedoes[1].slotMaster.api_id, radars[0].slotMaster.api_id],
+      typeCoefficient: 122
+    }];
+  }
+  if (lateTorpedoes.length >= 1 && radars.length >= 1) {
+    return [{
+      spType: 3,
+      hits: 2,
+      modifier: 1.4,
+      slotIds: [lateTorpedoes[0].slotMaster.api_id, radars[0].slotMaster.api_id],
+      typeCoefficient: 122
+    }];
+  }
+  return [];
 }
 
 function ptEquipmentModifier(unit: BattleUnit) {
@@ -1836,15 +2256,34 @@ function canAswShell(unit: BattleUnit) {
 }
 
 function nightAttackSlotIds(unit: BattleUnit, spType: number, fallback: number[]) {
-  if (spType === 5) {
+  if (spType === 1) {
+    const mainGuns = equippedSlotMasterIds(unit, MAIN_GUN_TYPES, 2);
+    const secondaries = equippedSlotMasterIds(unit, SECONDARY_GUN_TYPES, 2);
+    if (mainGuns.length >= 2) return mainGuns;
+    if (mainGuns.length >= 1 && secondaries.length >= 1) return [mainGuns[0], secondaries[0]];
+    if (secondaries.length >= 2) return secondaries;
+    return fallback;
+  }
+  if (spType === 3) {
     const ids = equippedSlotMasterIds(unit, TORPEDO_TYPES, 2);
     return ids.length > 0 ? ids : fallback;
   }
-  if (spType === 4) {
+  if (spType === 2) {
     const ids = [
       ...equippedSlotMasterIds(unit, MAIN_GUN_TYPES, 1),
       ...equippedSlotMasterIds(unit, TORPEDO_TYPES, 1)
     ];
+    return ids.length > 0 ? ids : fallback;
+  }
+  if (spType === 4) {
+    const ids = [
+      ...equippedSlotMasterIds(unit, MAIN_GUN_TYPES, 2),
+      ...equippedSlotMasterIds(unit, SECONDARY_GUN_TYPES, 1)
+    ];
+    return ids.length > 0 ? ids : fallback;
+  }
+  if (spType === 5) {
+    const ids = equippedSlotMasterIds(unit, MAIN_GUN_TYPES, 3);
     return ids.length > 0 ? ids : fallback;
   }
   return fallback;
@@ -1853,9 +2292,10 @@ function nightAttackSlotIds(unit: BattleUnit, spType: number, fallback: number[]
 function carrierNightAirAttackProfile(attacker: BattleUnit, nightEquipment?: NightEquipmentState): ShellingAttackProfile | null {
   if (!canCarrierNightAirAttack(attacker)) return null;
   const aircraft = carrierNightAircraftSlots(attacker);
-  const cutInCandidates = carrierNightCutInCandidates(carrierNightCutInCounts(aircraft));
-  const cutIn = cutInCandidates[0] ?? null;
   const normalSlotIds = carrierNightNormalSlotIds(attacker, aircraft);
+  const cutInCandidates = carrierNightCutInCandidates(carrierNightCutInCounts(aircraft));
+  const cutInSlotCandidates = carrierNightCutInSlotIdCandidates(aircraft, normalSlotIds);
+  const cutIn = cutInCandidates[0] ?? null;
   const cutInSlotIds = cutIn ? carrierNightCutInSlotIds(aircraft, normalSlotIds) : normalSlotIds;
   return {
     preCapPower: carrierNightAirAttackPower({
@@ -1881,7 +2321,10 @@ function carrierNightAirAttackProfile(attacker: BattleUnit, nightEquipment?: Nig
     slotIds: cutIn ? cutInSlotIds : normalSlotIds,
     nightCarrierAttack: true,
     fallbackSlotIds: normalSlotIds,
-    nightCutInCandidates: cutInCandidates
+    nightCutInCandidates: cutInCandidates.map((candidate, index) => ({
+      ...candidate,
+      slotIds: cutInSlotCandidates[index] ?? normalSlotIds
+    }))
   };
 }
 
@@ -1902,22 +2345,27 @@ function carrierNightNormalSlotIds(attacker: BattleUnit, aircraft: EquippedSlot[
 }
 
 function carrierNightCutInSlotIds(aircraft: EquippedSlot[], fallback: number[]) {
+  return carrierNightCutInSlotIdCandidates(aircraft, fallback)[0] ?? fallback;
+}
+
+function carrierNightCutInSlotIdCandidates(aircraft: EquippedSlot[], fallback: number[]) {
   const nightFighters = aircraft.filter(isNightFighterSlot);
   const nightTorpedoBombers = aircraft.filter(isNightTorpedoBomberSlot);
   const nightDiveBombers = aircraft.filter(isNightDiveBomberSlot);
+  const candidates: number[][] = [];
   if (nightFighters.length >= 2 && nightTorpedoBombers.length >= 1) {
-    return slotMasterIdsOrFallback([nightFighters[0], nightFighters[1], nightTorpedoBombers[0]], fallback);
+    candidates.push(slotMasterIdsOrFallback([nightFighters[0], nightFighters[1], nightTorpedoBombers[0]], fallback));
   }
   if (nightFighters.length >= 1 && nightTorpedoBombers.length >= 1) {
-    return slotMasterIdsOrFallback([nightFighters[0], nightTorpedoBombers[0]], fallback);
+    candidates.push(slotMasterIdsOrFallback([nightFighters[0], nightFighters[0], nightTorpedoBombers[0]], fallback));
   }
   if (nightDiveBombers.length >= 1 && aircraft.length >= 3) {
-    return slotMasterIdsOrFallback([nightDiveBombers[0], ...aircraft.filter((slot) => slot !== nightDiveBombers[0]).slice(0, 2)], fallback);
+    candidates.push(slotMasterIdsOrFallback([nightDiveBombers[0], ...aircraft.filter((slot) => slot !== nightDiveBombers[0]).slice(0, 2)], fallback));
   }
   if (nightFighters.length >= 1 && aircraft.length >= 4) {
-    return slotMasterIdsOrFallback([nightFighters[0], ...aircraft.filter((slot) => slot !== nightFighters[0]).slice(0, 3)], fallback);
+    candidates.push(slotMasterIdsOrFallback([nightFighters[0], ...aircraft.filter((slot) => slot !== nightFighters[0]).slice(0, 2)], fallback));
   }
-  return fallback;
+  return candidates;
 }
 
 function slotMasterIdsOrFallback(slots: (EquippedSlot | undefined)[], fallback: number[]) {
@@ -1987,7 +2435,17 @@ function swordfishNightAttackProfile(attacker: BattleUnit, nightEquipment?: Nigh
     postCapModifier: attack.modifier,
     slotIds: nightAttackSlotIds(attacker, attack.spType, fallbackSlotIds),
     nightCarrierAttack: true,
-    fallbackSlotIds
+    fallbackSlotIds,
+    ...(attack.spType > 1
+      ? {
+          nightCutInCandidates: [{
+            spType: attack.spType,
+            hits: attack.hits,
+            modifier: attack.modifier,
+            slotIds: nightAttackSlotIds(attacker, attack.spType, fallbackSlotIds)
+          }]
+        }
+      : {})
   };
 }
 
@@ -2149,7 +2607,8 @@ function shellingPhase(
   dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL,
   nightEquipment?: NightEquipmentPair,
   formulaContext: BattleFormulaContext = NO_BATTLE_FORMULA_CONTEXT,
-  dayRound: 1 | 2 = 1
+  dayRound: 1 | 2 = 1,
+  specialAttackState?: SpecialAttackBattleState
 ): HougekiPayload {
   const payload = emptyHougeki(phase === "night");
   if (phase === "night") {
@@ -2160,10 +2619,10 @@ function shellingPhase(
     for (let turn = 0; turn < 6; turn += 1) {
       const friendlyAttacker = friendlyByPosition[turn];
       const enemyAttacker = enemyByPosition[turn];
-      if (friendlyAttacker) appendShellingAttack(payload, friendlyAttacker, enemy, formationForSide(formations, friendlyAttacker.side), rng, phase, engagement, friendlyNightEquipment, NO_DAY_SHELLING_AIR_CONTROL, formulaContext, friendly.length);
-      if (enemyAttacker) appendShellingAttack(payload, enemyAttacker, friendly, formationForSide(formations, enemyAttacker.side), rng, phase, engagement, enemyNightEquipment, NO_DAY_SHELLING_AIR_CONTROL, formulaContext, enemy.length);
+      if (friendlyAttacker) appendShellingAttack(payload, friendlyAttacker, enemy, formationForSide(formations, friendlyAttacker.side), rng, phase, engagement, friendlyNightEquipment, NO_DAY_SHELLING_AIR_CONTROL, formulaContext, friendly.length, friendly, specialAttackState);
+      if (enemyAttacker) appendShellingAttack(payload, enemyAttacker, friendly, formationForSide(formations, enemyAttacker.side), rng, phase, engagement, enemyNightEquipment, NO_DAY_SHELLING_AIR_CONTROL, formulaContext, enemy.length, enemy);
     }
-    return payload;
+    return validatedHougekiPayload(payload, phase);
   }
 
   const friendlyOrder = daytimeShellingOrder(
@@ -2178,10 +2637,10 @@ function shellingPhase(
   );
   const turns = Math.max(friendlyOrder.length, enemyOrder.length);
   for (let turn = 0; turn < turns; turn += 1) {
-    if (friendlyOrder[turn]) appendShellingAttack(payload, friendlyOrder[turn], enemy, formationForSide(formations, friendlyOrder[turn].side), rng, phase, engagement, undefined, dayAirControl, formulaContext, friendly.length);
-    if (enemyOrder[turn]) appendShellingAttack(payload, enemyOrder[turn], friendly, formationForSide(formations, enemyOrder[turn].side), rng, phase, engagement, undefined, dayAirControl, formulaContext, enemy.length);
+    if (friendlyOrder[turn]) appendShellingAttack(payload, friendlyOrder[turn], enemy, formationForSide(formations, friendlyOrder[turn].side), rng, phase, engagement, undefined, dayAirControl, formulaContext, friendly.length, friendly, specialAttackState);
+    if (enemyOrder[turn]) appendShellingAttack(payload, enemyOrder[turn], friendly, formationForSide(formations, enemyOrder[turn].side), rng, phase, engagement, undefined, dayAirControl, formulaContext, enemy.length, enemy);
   }
-  return payload;
+  return validatedHougekiPayload(payload, phase);
 }
 
 function unitsByPosition(units: BattleUnit[]) {
@@ -2199,9 +2658,32 @@ function appendShellingAttack(
   nightEquipment?: NightEquipmentState,
   dayAirControl: DayShellingAirControl = NO_DAY_SHELLING_AIR_CONTROL,
   formulaContext: BattleFormulaContext = NO_BATTLE_FORMULA_CONTEXT,
-  attackerFleetSize = 6
+  attackerFleetSize = 6,
+  attackerFleet: readonly BattleUnit[] = [attacker],
+  specialAttackState?: SpecialAttackBattleState
 ) {
   if (!canShell(attacker, phase)) return;
+  if (attacker.side === 0 && specialAttackState) {
+    const special = resolveFleetSpecialAttack({
+      mode: specialAttackState.mode,
+      phase,
+      formation,
+      combined: formulaContext.combinedType != null,
+      attacker,
+      fleet: attackerFleet,
+      usage: specialAttackState.usage,
+      useItem95Count: Math.max(0, specialAttackState.useItem95Available - specialAttackState.useItem95Consumed),
+      useItem95CommittedThisBattle: specialAttackState.records.some((record) =>
+        record.useItemId === 95 && (record.type === 300 || record.type === 301 || record.type === 302)
+      ),
+      chance: (probability) => rng.chance(probability)
+    });
+    if (special) {
+      appendFleetSpecialAttack(payload, special, targets, formation, rng, phase, engagement, formulaContext, attackerFleetSize);
+      recordFleetSpecialAttack(specialAttackState, special, phase);
+      return;
+    }
+  }
   const target = shellingTarget(attacker, targets, phase, rng);
   if (!target) return;
 
@@ -2215,7 +2697,8 @@ function appendShellingAttack(
       daySpottingEligible(attacker, phase, dayAirControl),
       nightEquipment,
       formulaContext,
-      attackerFleetSize
+      attackerFleetSize,
+      attackerFleet
     ),
     attacker,
     phase,
@@ -2223,6 +2706,10 @@ function appendShellingAttack(
     nightEquipment
   );
   if ((!profile.forceScratch && profile.preCapPower <= 0) || profile.hits <= 0) return;
+  const protocolType = phase === "day" ? profile.atType : profile.spType;
+  if (!protocolSnapshotValid(phase, protocolType, profile.hits, profile.slotIds)) {
+    throw new Error(`Invalid ${phase} shelling protocol type ${protocolType}`);
+  }
   const damages: number[] = [];
   const cls: number[] = [];
   for (let hit = 0; hit < profile.hits; hit += 1) {
@@ -2284,6 +2771,175 @@ function appendShellingAttack(
   if (payload.api_n_mother_list) payload.api_n_mother_list.push(profile.nightCarrierAttack ? 1 : 0);
 }
 
+function appendFleetSpecialAttack(
+  payload: HougekiPayload,
+  sequence: AttackSequence,
+  targets: BattleUnit[],
+  formation: number,
+  rng: BattleRng,
+  phase: "day" | "night",
+  engagement: number,
+  formulaContext: BattleFormulaContext,
+  attackerFleetSize: number
+) {
+  const spec = shellingProtocolSpec(phase, sequence.type);
+  if (!spec || spec.animation !== "fleet-special") {
+    throw new Error(`Unsupported ${phase} fleet special protocol type ${sequence.type}`);
+  }
+  if (!sequence.grouped) {
+    for (const strike of sequence.strikes) {
+      const result = resolveFleetSpecialStrike(
+        strike.participant, strike.modifier, targets, formation, rng, phase,
+        engagement, formulaContext, attackerFleetSize
+      );
+      if (!result) continue;
+      appendFleetSpecialPayloadEntry(payload, {
+        attacker: strike.participant,
+        atType: phase === "day" ? strike.protocolType : 0,
+        spType: phase === "night" ? strike.protocolType : 0,
+        slotIds: specialAttackSlotIds(strike.participant),
+        targetIndexes: [protocolFleetIndex(result.target)],
+        damages: [result.damage],
+        criticals: [result.critical]
+      });
+    }
+    return;
+  }
+
+  const targetsHit: number[] = [];
+  const damages: number[] = [];
+  const criticals: number[] = [];
+  const participants: BattleUnit[] = [];
+  for (const strike of sequence.strikes) {
+    const result = resolveFleetSpecialStrike(
+      strike.participant, strike.modifier, targets, formation, rng, phase,
+      engagement, formulaContext, attackerFleetSize
+    );
+    if (!result) continue;
+    participants.push(strike.participant);
+    targetsHit.push(protocolFleetIndex(result.target));
+    damages.push(result.damage);
+    criticals.push(result.critical);
+  }
+  if (damages.length === 0) return;
+  appendFleetSpecialPayloadEntry(payload, {
+    attacker: sequence.initiator,
+    atType: phase === "day" ? sequence.type : 0,
+    spType: phase === "night" ? sequence.type : 0,
+    slotIds: participants.map(primarySlotId),
+    targetIndexes: targetsHit,
+    damages,
+    criticals
+  });
+}
+
+function resolveFleetSpecialStrike(
+  attacker: BattleUnit,
+  modifier: number,
+  targets: BattleUnit[],
+  formation: number,
+  rng: BattleRng,
+  phase: "day" | "night",
+  engagement: number,
+  formulaContext: BattleFormulaContext,
+  attackerFleetSize: number
+) {
+  const target = shellingTarget(attacker, targets, phase, rng);
+  if (!target) return null;
+  const formationModifierValue = phase === "night"
+    ? 1
+    : formationModifier(formation, "shelling", formulaContext, attacker, attackerFleetSize);
+  const preCapPower = phase === "night"
+    ? nightBattlePower({
+        firepower: attacker.firepower,
+        torpedo: attacker.torpedo,
+        damageModifier: damageStateModifier(attacker),
+        targetKind: target.targetKind === "installation" ? "installation" : "surface"
+      })
+    : (attacker.firepower + 5 + combinedBattlePowerBonus(formulaContext, attacker, target, "shelling")) *
+      formationModifierValue * engagementModifierFor(engagement) * damageStateModifier(attacker);
+  const landed = rng.chance(accuracyChance({
+    attackerLevel: attacker.level,
+    attackerLuck: attacker.luck,
+    attackerAccuracy: attacker.accuracy,
+    targetEvasion: target.evasion,
+    formationModifier: formationModifierValue,
+    engagementModifier: phase === "night" ? 1 : engagementModifierFor(engagement),
+    attackAccuracyModifier: 1.2 * combinedBattleAccuracyModifier(
+      formulaContext, attacker, target, phase === "night" ? "night" : "shelling", formation
+    )
+  }));
+  const critical = landed && rng.chance(criticalChance({
+    attackerLuck: attacker.luck,
+    attackerAccuracy: attacker.accuracy,
+    targetEvasion: target.evasion,
+    cutInModifier: 1.2
+  }));
+  const damage = landed
+    ? applyDamage(
+        target,
+        preCapPower,
+        phase === "night" ? 360 : 220,
+        attacker.ammoModifier,
+        rng,
+        attacker.side === 0 ? 1 : 0,
+        critical,
+        modifier,
+        target.targetKind === "pt" ? ptEquipmentModifier(attacker) : undefined
+      )
+    : 0;
+  if (damage > 0) attacker.damageDealt += damage;
+  return { target, damage, critical: critical ? 2 : landed ? 1 : 0 };
+}
+
+function appendFleetSpecialPayloadEntry(
+  payload: HougekiPayload,
+  entry: {
+    attacker: BattleUnit;
+    atType: number;
+    spType: number;
+    slotIds: number[];
+    targetIndexes: number[];
+    damages: number[];
+    criticals: number[];
+  }
+) {
+  if (
+    entry.targetIndexes.length !== entry.damages.length ||
+    entry.criticals.length !== entry.damages.length
+  ) {
+    throw new Error("Fleet special attack payload arrays must have equal lengths");
+  }
+  payload.api_at_eflag.push(entry.attacker.side);
+  payload.api_at_list.push(protocolFleetIndex(entry.attacker));
+  payload.api_at_type.push(entry.atType);
+  payload.api_df_list.push(entry.targetIndexes);
+  payload.api_si_list.push(entry.slotIds);
+  payload.api_cl_list.push(entry.criticals);
+  payload.api_damage.push(entry.damages);
+  if (payload.api_sp_list) payload.api_sp_list.push(entry.spType);
+  if (payload.api_n_mother_list) payload.api_n_mother_list.push(0);
+}
+
+function recordFleetSpecialAttack(
+  state: SpecialAttackBattleState,
+  sequence: AttackSequence,
+  phase: "day" | "night"
+) {
+  const usage = state.usage.find((entry) => entry.type === sequence.type);
+  if (usage) usage.count += 1;
+  else state.usage.push({ type: sequence.type, count: 1 });
+  if (sequence.useItemId === 95) state.useItem95Consumed += 1;
+  state.records.push({
+    type: sequence.type,
+    phase,
+    participantShipIds: sequence.strikes.map((strike) => strike.participant.shipId),
+    participantMasterIds: sequence.strikes.map((strike) => strike.participant.masterId),
+    ...(sequence.useItemId ? { useItemId: sequence.useItemId, useItemAmount: 1 } : {}),
+    extraAmmoFraction: sequence.extraAmmoFraction
+  });
+}
+
 function shellingTarget(attacker: BattleUnit, targets: BattleUnit[], phase: "day" | "night", rng: BattleRng) {
   if (phase !== "day") {
     const living = targets.filter(isOperable);
@@ -2321,14 +2977,33 @@ function activateShellingProfile(
   rng: BattleRng,
   nightEquipment?: NightEquipmentState
 ) {
-  if (phase !== "night") return profile;
+  if (phase === "day") {
+    for (const candidate of profile.dayCutInCandidates ?? []) {
+      if (!protocolSnapshotValid("day", candidate.atType, candidate.hits, candidate.slotIds)) continue;
+      if (!rng.chance(candidate.activationRate)) continue;
+      return {
+        ...profile,
+        atType: candidate.atType,
+        hits: candidate.hits,
+        postCapModifier: candidate.modifier,
+        slotIds: candidate.slotIds
+      };
+    }
+    return { ...profile, dayCutInCandidates: undefined };
+  }
   const candidates = profile.nightCutInCandidates?.length
     ? profile.nightCutInCandidates
     : profile.spType > 1
       ? [{ spType: profile.spType, hits: profile.hits, modifier: profile.postCapModifier }]
       : [];
-  if (candidates.length === 0) return profile;
+  if (candidates.length === 0) {
+    return protocolSnapshotValid("night", profile.spType, profile.hits, profile.slotIds)
+      ? profile
+      : normalNightAttackProfile(profile, attacker);
+  }
   for (const candidate of candidates) {
+    const candidateSlotIds = candidate.slotIds ?? profile.slotIds;
+    if (!protocolSnapshotValid("night", candidate.spType, candidate.hits, candidateSlotIds)) continue;
     const chance = nightCutInActivationChance({
       level: attacker.level,
       luck: attacker.luck,
@@ -2340,14 +3015,16 @@ function activateShellingProfile(
       skilledLookout: attacker.equippedSlots.some((slot) => slot.slotMaster.api_id === 129),
       torpedoSquadronLookout:
         (attacker.shipType === 2 || attacker.shipType === 3 || attacker.shipType === 4) &&
-        attacker.equippedSlots.some((slot) => slot.slotMaster.api_id === 412)
+        attacker.equippedSlots.some((slot) => TORPEDO_SQUADRON_LOOKOUT_IDS.has(slot.slotMaster.api_id)),
+      typeCoefficient: candidate.typeCoefficient
     });
     if (rng.chance(chance)) {
       return {
         ...profile,
         spType: candidate.spType,
         hits: candidate.hits,
-        postCapModifier: candidate.modifier
+        postCapModifier: candidate.modifier,
+        slotIds: candidateSlotIds
       };
     }
   }
@@ -2360,22 +3037,17 @@ function activateShellingProfile(
       slotIds: profile.fallbackSlotIds ?? profile.slotIds
     };
   }
-  return normalNightShellingProfile(attacker, nightEquipment);
+  return normalNightAttackProfile(profile, attacker);
 }
 
-function normalNightShellingProfile(attacker: BattleUnit, nightEquipment?: NightEquipmentState): ShellingAttackProfile {
+function normalNightAttackProfile(profile: ShellingAttackProfile, attacker: BattleUnit): ShellingAttackProfile {
   return {
-    preCapPower: nightBattlePower({
-      firepower: attacker.firepower + (nightEquipment?.nightContactBonus ?? 0),
-      torpedo: attacker.torpedo,
-      damageModifier: damageStateModifier(attacker)
-    }),
-    cap: 360,
-    atType: 0,
+    ...profile,
     spType: 0,
     hits: 1,
     postCapModifier: 1,
-    slotIds: [primarySlotId(attacker)]
+    slotIds: [primarySlotId(attacker)],
+    nightCutInCandidates: undefined
   };
 }
 

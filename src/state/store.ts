@@ -1306,6 +1306,9 @@ export function createStateStore(options: StateStoreOptions) {
       const state = {
         ...session.state,
         battles: safeNum(session.state.battles) + 1,
+        ...(Array.isArray(record.specialAttackUsage)
+          ? { specialAttackUsage: record.specialAttackUsage }
+          : {}),
         lastBattle: { ...record, resultClaimed: false }
       };
       db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(state), session.id);
@@ -1316,6 +1319,9 @@ export function createStateStore(options: StateStoreOptions) {
       if (!session) return null;
       const state = {
         ...session.state,
+        ...(Array.isArray(record.specialAttackUsage)
+          ? { specialAttackUsage: record.specialAttackUsage }
+          : {}),
         lastBattle: record
       };
       db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(JSON.stringify(state), session.id);
@@ -1334,8 +1340,8 @@ export function createStateStore(options: StateStoreOptions) {
     practiceStates: () => practiceStates(db),
     practiceMatchingKind: () => practiceMatchingKind(db),
     setPracticeMatchingKind: (kind: number) => setPracticeMatchingKind(db, kind),
-    recordCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
-    updateCombinedBattle: (record: JsonObject) => recordBattleSession(db, "combined", record),
+    recordCombinedBattle: (record: JsonObject) => recordCombinedBattleAndUsage(db, record),
+    updateCombinedBattle: (record: JsonObject) => recordCombinedBattleAndUsage(db, record),
     lastCombinedBattle: () => lastBattleSession(db, "combined"),
     applyCombinedBattleResult: () => applyBattleResult(db, "combined"),
     previewSortieRoute: () => previewSortieRoute(db),
@@ -2557,6 +2563,7 @@ function applyBattleResult(db: Database.Database, mode: BattleMode) {
     const pursuedNightBattle = record.phases.night != null;
     consumeBattleSupply(db, record.shipIds, pursuedNightBattle);
     consumeBattleSupply(db, record.escortShipIds, pursuedNightBattle);
+    if (mode !== "practice") applySpecialAttackCosts(db, record);
     applyDamageControlActivations(db, record);
     if (mode !== "practice") {
       sunkShipIds.push(...applyFleetHp(db, record.shipIds, record.after?.fNowHps));
@@ -2717,6 +2724,40 @@ function revalidateCombinedFleet(db: Database.Database) {
   }
 }
 
+function applySpecialAttackCosts(db: Database.Database, record: BattleRecord) {
+  const attacks = Array.isArray(record.specialAttacks) ? record.specialAttacks : [];
+  if (attacks.length === 0) return;
+
+  const useItemCosts = new Map<number, number>();
+  for (const attack of attacks) {
+    const itemId = Math.max(0, Math.trunc(safeNum(attack.useItemId)));
+    const amount = Math.max(0, Math.trunc(safeNum(attack.useItemAmount)));
+    if (itemId > 0 && amount > 0) {
+      useItemCosts.set(itemId, (useItemCosts.get(itemId) ?? 0) + amount);
+    }
+  }
+  for (const [itemId, amount] of useItemCosts) {
+    const consumed = db.prepare(
+      "UPDATE use_items SET count = count - ? WHERE id = ? AND count >= ?"
+    ).run(amount, itemId, amount);
+    if (consumed.changes !== 1) {
+      throw new StateDatabaseIntegrityError(`Special attack use item ${itemId} could not be consumed`);
+    }
+  }
+
+  const save = getSave(db);
+  const consumeAmmo = db.prepare("UPDATE ships SET ammo = max(0, ammo - ?) WHERE id = ?");
+  for (const attack of attacks) {
+    const fraction = Math.max(0, Math.min(1, safeNum(attack.extraAmmoFraction)));
+    if (fraction <= 0) continue;
+    for (const shipId of new Set(attack.participantShipIds)) {
+      const ship = save.ships.find((candidate) => candidate.id === shipId);
+      if (!ship) continue;
+      consumeAmmo.run(Math.ceil(ship.maxAmmo * fraction), shipId);
+    }
+  }
+}
+
 function applyMapProgress(db: Database.Database, record: BattleRecord) {
   const sortie = record.sortie;
   if (!sortie) return;
@@ -2852,6 +2893,18 @@ function loadBattleRecord(save: SaveState, db: Database.Database, mode: BattleMo
 function recordBattleSession(db: Database.Database, id: BattleMode, record: JsonObject) {
   const nextRecord = { ...record, resultClaimed: Boolean(record.resultClaimed) };
   writeBattleSession(db, id, nextRecord);
+  return nextRecord;
+}
+
+function recordCombinedBattleAndUsage(db: Database.Database, record: JsonObject) {
+  const nextRecord = recordBattleSession(db, "combined", record);
+  const session = getSave(db).sortieSession;
+  if (session && Array.isArray(record.specialAttackUsage)) {
+    db.prepare("UPDATE sortie_sessions SET state_json = ? WHERE id = ?").run(
+      JSON.stringify({ ...session.state, specialAttackUsage: record.specialAttackUsage }),
+      session.id
+    );
+  }
   return nextRecord;
 }
 

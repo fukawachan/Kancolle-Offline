@@ -423,12 +423,12 @@ describe("battle formula helpers", () => {
 
   it("classifies generic night battle attacks by equipment mix", () => {
     expect(classifyNightAttack({ mainGuns: 0, secondaryGuns: 0, torpedoes: 2, nightAircraft: 0 })).toEqual({
-      spType: 5,
+      spType: 3,
       hits: 2,
       modifier: 1.5
     });
     expect(classifyNightAttack({ mainGuns: 1, secondaryGuns: 0, torpedoes: 1, nightAircraft: 0 })).toEqual({
-      spType: 4,
+      spType: 2,
       hits: 2,
       modifier: 1.3
     });
@@ -436,6 +436,16 @@ describe("battle formula helpers", () => {
       spType: 1,
       hits: 2,
       modifier: 1.2
+    });
+    expect(classifyNightAttack({ mainGuns: 2, secondaryGuns: 1, torpedoes: 0, nightAircraft: 0 })).toEqual({
+      spType: 4,
+      hits: 1,
+      modifier: 1.75
+    });
+    expect(classifyNightAttack({ mainGuns: 3, secondaryGuns: 0, torpedoes: 0, nightAircraft: 0 })).toEqual({
+      spType: 5,
+      hits: 1,
+      modifier: 2
     });
     expect(classifyNightAttack({ mainGuns: 1, secondaryGuns: 0, torpedoes: 0, nightAircraft: 0 })).toEqual({
       spType: 0,
@@ -512,7 +522,7 @@ describe("battle formula helpers", () => {
       flagship: true,
       damageState: 0,
       cutInKind: 5
-    })).toBeCloseTo(37 / 122, 6);
+    })).toBeCloseTo(37 / 140, 6);
     expect(nightCutInActivationChance({
       level: 99,
       luck: 40,
@@ -521,7 +531,7 @@ describe("battle formula helpers", () => {
       cutInKind: 5,
       searchlight: true,
       starShell: true
-    })).toBeCloseTo(106 / 122, 6);
+    })).toBeCloseTo(106 / 140, 6);
     expect(nightCutInActivationChance({
       level: 188,
       luck: 60,
@@ -530,6 +540,6 @@ describe("battle formula helpers", () => {
       cutInKind: 4,
       skilledLookout: true,
       torpedoSquadronLookout: true
-    })).toBeCloseTo(91 / 115, 6);
+    })).toBeCloseTo(91 / 130, 6);
   });
 });

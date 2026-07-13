@@ -82,6 +82,42 @@ describe("transaction crash points", () => {
     expect(store.applySortieBattleResult()).toMatchObject({ applied: true });
   });
 
+  it("consumes submarine-attack item 95 and extra ammo in the battle transaction", () => {
+    expect(store.startSortie(1, 1, 1)).not.toBeNull();
+    expect(store.setUseItemCount(95, 1)).toMatchObject({ ok: true });
+    const battle = createSortieBattle(store.getSave(), { formation: 1 });
+    battle.record.specialAttacks = [{
+      type: 300,
+      phase: "day",
+      participantShipIds: [1],
+      participantMasterIds: [1],
+      useItemId: 95,
+      useItemAmount: 1,
+      extraAmmoFraction: 0.1
+    }, {
+      type: 300,
+      phase: "night",
+      participantShipIds: [1],
+      participantMasterIds: [1],
+      extraAmmoFraction: 0
+    }];
+    store.recordSortieBattle(battle.record as unknown as Record<string, unknown>);
+
+    expect(store.applySortieBattleResult()).toMatchObject({ applied: true });
+    const save = store.getSave();
+    expect(save.useItems.find((item) => item.id === 95)?.count ?? 0).toBe(0);
+    expect(save.ships.find((ship) => ship.id === 1)?.ammo).toBe(14);
+  });
+
+  it("mirrors combined-fleet special usage into the active sortie state", () => {
+    expect(store.startSortie(1, 1, 1)).not.toBeNull();
+    store.recordCombinedBattle({
+      mode: "combined",
+      specialAttackUsage: [{ type: 400, count: 1 }]
+    });
+    expect(store.getSave().sortieSession?.state.specialAttackUsage).toEqual([{ type: 400, count: 1 }]);
+  });
+
   it("keeps expedition rewards and their quest event in one transaction", () => {
     const first = store.createShip(9);
     const second = store.createShip(10);

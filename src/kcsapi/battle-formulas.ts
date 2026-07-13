@@ -473,8 +473,14 @@ export function classifyNightAttack(input: {
   torpedoes: number;
   nightAircraft: number;
 }): NightAttackKind {
-  if (input.torpedoes >= 2) return { spType: 5, hits: 2, modifier: 1.5 };
-  if (input.mainGuns >= 1 && input.torpedoes >= 1) return { spType: 4, hits: 2, modifier: 1.3 };
+  // Public condition/multiplier table: https://wikiwiki.jp/kancolle/夜戦
+  // api_sp_list is a client protocol number, not a strength ordering:
+  // 2 = main+torpedo, 3 = torpedo+torpedo, 4 = main+main+secondary,
+  // 5 = main+main+main.  Older code accidentally exchanged 2/3 with 4/5.
+  if (input.torpedoes >= 2) return { spType: 3, hits: 2, modifier: 1.5 };
+  if (input.mainGuns >= 1 && input.torpedoes >= 1) return { spType: 2, hits: 2, modifier: 1.3 };
+  if (input.mainGuns >= 3) return { spType: 5, hits: 1, modifier: 2 };
+  if (input.mainGuns >= 2 && input.secondaryGuns >= 1) return { spType: 4, hits: 1, modifier: 1.75 };
   if (input.mainGuns >= 2 || (input.mainGuns >= 1 && input.secondaryGuns >= 1) || input.secondaryGuns >= 2) {
     return { spType: 1, hits: 2, modifier: 1.2 };
   }
@@ -553,10 +559,10 @@ export function nightCutInActivationChance(input: NightCutInActivationInput) {
     (input.enemySearchlight ? 5 : 0) -
     (input.enemyStarShell ? 10 : 0);
   const coefficients: Record<number, number> = {
-    2: 140,
-    3: 130,
-    4: 115,
-    5: 122,
+    2: 115,
+    3: 122,
+    4: 130,
+    5: 140,
     6: 122
   };
   const coefficient = Math.max(
